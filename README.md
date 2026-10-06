@@ -217,6 +217,11 @@ pnpm check:pack  # publint + are-the-types-wrong
 
 Publishing is blocked by a `prepublishOnly` guard until the npm scope is secured.
 
+**Windows and Node 24.** With Node 24.15.0 (libuv 1.51.0) on Windows, the HTTP test file
+occasionally crashed its Vitest worker with exit code `3221226505` (a libuv
+`UV_HANDLE_CLOSING` assertion around `fetch`). We saw it in 4 of 70 runs on 24.15.0 and in none of
+60 runs on Node 24.21.0 (libuv 1.52.1) or 30 runs on Node 22. Use Node 24.21 or newer on Windows.
+
 ## License
 
 MIT
