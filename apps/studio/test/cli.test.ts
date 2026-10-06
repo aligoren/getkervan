@@ -101,13 +101,16 @@ describe("starting Studio", () => {
   }
 
   /** Starts Studio on a fixed port, creates the admin, and waits for the move to `host`. */
-  async function setupThenMove(host: string, env: NodeJS.ProcessEnv = {}) {
+  async function setupThenMove(
+    host: string,
+    env: (port: number) => NodeJS.ProcessEnv = () => ({}),
+  ) {
     const port = await freePort()
     const { running, lines } = await start({
       KERVAN_STUDIO_DATA_DIR: dataDir(),
       KERVAN_STUDIO_PORT: String(port),
       KERVAN_STUDIO_HOST: host,
-      ...env,
+      ...env(port),
     })
     expect(running.boundHost).toBe("127.0.0.1")
     const origin = `http://127.0.0.1:${port}`
@@ -139,9 +142,9 @@ describe("starting Studio", () => {
   it.runIf(process.platform !== "win32")(
     "moves to all interfaces, which overlap the loopback listener",
     async () => {
-      const port = await setupThenMove("0.0.0.0", {
-        KERVAN_STUDIO_PUBLIC_URL: "http://127.0.0.1",
-      })
+      const port = await setupThenMove("0.0.0.0", (port) => ({
+        KERVAN_STUDIO_PUBLIC_URL: `http://127.0.0.1:${port}`,
+      }))
       const after = await fetch(`http://127.0.0.1:${port}/api/setup`)
       expect(await after.json()).toEqual({ needed: false })
     },
