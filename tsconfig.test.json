@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "lib": ["es2023", "dom"],
+    "types": ["node"]
+  },
+  "include": [
+    "packages/*/test",
+    "packages/*/src",
+    "examples/*/test",
+    "examples/*/src",
+    "vitest.config.ts"
+  ]
+}

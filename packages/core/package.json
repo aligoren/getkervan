@@ -1,0 +1,49 @@
+{
+  "name": "@kervan/core",
+  "version": "0.1.0",
+  "description": "A thin, typed layer over the official MCP TypeScript SDK for writing MCP servers.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "!**/*.tsbuildinfo"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "framework",
+    "ai",
+    "llm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aligoren/kervan.git",
+    "directory": "packages/core"
+  },
+  "scripts": {
+    "check:pack": "publint && attw --pack . --profile esm-only",
+    "prepublishOnly": "node ../../scripts/guard-publish.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1"
+  }
+}
