@@ -12,6 +12,8 @@
   "include": [
     "packages/*/test",
     "packages/*/src",
+    "apps/*/test",
+    "apps/*/src",
     "examples/*/test",
     "examples/*/src",
     "vitest.config.ts"

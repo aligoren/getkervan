@@ -38,5 +38,37 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/studio/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@kervan/**",
+                      "!@kervan/core",
+                      "!@kervan/transport",
+                      "!@kervan/transport/node",
+                      "!@kervan/spec-runtime"
+                    ],
+                    "message": "Studio uses only the public entry points of @kervan/* packages (see docs/API.md)."
+                  },
+                  {
+                    "group": ["**/packages/**"],
+                    "message": "Studio must not import framework sources directly; use the package's public API."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

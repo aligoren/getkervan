@@ -1,7 +1,12 @@
 packages:
   - packages/*
+  - apps/*
   - examples/*
 minimumReleaseAgeExclude:
   - '@modelcontextprotocol/core@2.3.1'
   - '@modelcontextprotocol/server@2.3.1'
   - '@modelcontextprotocol/client@2.3.1'
+allowBuilds:
+  better-sqlite3: true
+  # drizzle-kit (development only) works without esbuild's install check.
+  esbuild: false

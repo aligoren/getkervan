@@ -13,6 +13,7 @@ export default defineConfig({
           include: ["test/**/*.test.ts"],
         },
       },
+      { test: { name: "studio", root: "apps/studio", include: ["test/**/*.test.ts"] } },
       {
         test: { name: "example-weather", root: "examples/weather", include: ["test/**/*.test.ts"] },
       },

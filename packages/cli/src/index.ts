@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { parseArgs } from "node:util"
 import { CreateError, cliVersion, createProject, type PackageManager } from "./create.js"
 import { defaultDevOptions, runDev } from "./dev/index.js"
@@ -30,6 +33,7 @@ Commands:
     --env-file <path>    Load environment variables (repeatable; set variables win)
     --allow-private-network  Specs only: let tools reach private and loopback addresses
     --deny-network <cidr>    Specs only: an address or range tools may never reach (repeatable)
+  studio <cmd>   Run a Kervan Studio command (start, reset-admin) if Studio is installed
   run <spec>     Serve a kervan.yaml spec
     --http               Serve Streamable HTTP instead of stdio
     --port <port>        HTTP port (default 3000)
@@ -48,6 +52,8 @@ Options:
 export interface RunIo {
   out: (line: string) => void
   err: (line: string) => void
+  /** Working directory for commands that look things up in the project. Default: the process's. */
+  cwd?: string
   /** The Node.js runtime to check. Default: the current process. */
   runtime?: RuntimeInfo
 }
@@ -71,6 +77,7 @@ export async function run(argv: string[], io: RunIo = defaultIo): Promise<number
   try {
     if (command === "dev") return await runDevCommand(rest, io)
     if (command === "run") return await runSpecCommand(rest)
+    if (command === "studio") return await runStudioCommand(rest, io)
     if (command === "create") {
       // Checked before parsing, so old Node.js versions get this message, not a parse error.
       const problem = typeStrippingProblem(io.runtime ?? currentRuntime())
@@ -158,6 +165,60 @@ async function runSpecCommand(argv: string[]): Promise<number> {
     stdin: process.stdin,
     stdout: process.stdout,
     stderr: process.stderr,
+  })
+}
+
+/**
+ * Finds `@kervan/studio`'s CLI module in `dir` or a parent: in a `node_modules` folder, or the
+ * Studio package itself. Global folders (`NODE_PATH`) are not searched.
+ */
+function findStudioCli(dir: string): string | undefined {
+  for (let current = path.resolve(dir); ; current = path.dirname(current)) {
+    for (const root of [path.join(current, "node_modules", "@kervan", "studio"), current]) {
+      try {
+        const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"))
+        const target = manifest.name === "@kervan/studio" && manifest.exports?.["./cli"]?.default
+        if (typeof target === "string") return path.join(root, target)
+      } catch {
+        // No package here.
+      }
+    }
+    if (path.dirname(current) === current) return undefined
+  }
+}
+
+/**
+ * Forwards to Kervan Studio's own command line when `@kervan/studio` is installed in the current
+ * project. The CLI does not depend on Studio; it only looks for it.
+ */
+async function runStudioCommand(argv: string[], io: RunIo): Promise<number> {
+  const cwd = io.cwd ?? process.cwd()
+  const entry = findStudioCli(cwd)
+  if (!entry) {
+    io.err(
+      "Error: Kervan Studio is not installed in this project. Install @kervan/studio, or run its " +
+        "kervan-studio command directly.",
+    )
+    return 1
+  }
+  const studio = (await import(pathToFileURL(entry).href)) as {
+    runStudioCli: (
+      argv: string[],
+      io: {
+        out: (line: string) => void
+        err: (line: string) => void
+        env: NodeJS.ProcessEnv
+        cwd: string
+        readStdin: () => Promise<string>
+      },
+    ) => Promise<number>
+  }
+  return studio.runStudioCli(argv, {
+    out: io.out,
+    err: io.err,
+    env: process.env,
+    cwd,
+    readStdin: async () => readFileSync(0, "utf8"),
   })
 }
 

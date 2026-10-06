@@ -16,7 +16,8 @@ The runtime export lists are pinned by `test/api.test.ts` in each package.
 | `ToolContext`, `ToolLogger`, `ToolLogFn`, `ToolLogLevel` | types | Stable |
 | `ToolMiddleware`, `ToolCall`, `ToolCallInfo` | types | Stable |
 | `ToolRegistry`, `MutableToolRegistry`, `ToolEntry`, `InMemoryToolRegistry`, `InMemoryToolRegistryOptions` | types, class | Stable |
-| `ServerResolver`, `ResolveResult`, `FORBIDDEN` | types, constant | Stable |
+| `ServerInfo` (`ToolRegistry.serverInfo`: a registry's own server identity) | type | Stable |
+| `ServerResolver`, `ResolveContext` (`auth`, `params`), `ResolveResult`, `FORBIDDEN` | types, constant | Stable |
 | `ToolError`, `KervanDefinitionError`, `DefinitionErrorCode` | classes, type | Stable |
 | `Logger`, `LogLevel`, `createConsoleLogger`, `ConsoleLoggerOptions`, `silentLogger` | types, functions | Stable |
 | `DEFAULT_TOOL_TIMEOUT_MS`, `DEFAULT_MAX_TOOL_INPUT_ELEMENTS`, `TOOL_NAME_PATTERN` | constants | Stable |
@@ -28,7 +29,7 @@ The runtime export lists are pinned by `test/api.test.ts` in each package.
 
 | Entry | Export | Status |
 | --- | --- | --- |
-| `@kervan/transport` | `toFetchHandler`, `FetchHandlerOptions`, `KervanHttpHandler`, `Authenticate`, `AuthInfo` | Stable |
+| `@kervan/transport` | `toFetchHandler`, `FetchHandlerOptions` (`path` may have parameters, e.g. `/s/:serverId/mcp`; `rejectBatches`), `KervanHttpHandler`, `Authenticate` (receives `{ params }`), `AuthInfo` | Stable |
 | `@kervan/transport/node` | `serve`, `serveStdio`, `serveHttp`, `ServeOptions`, `StdioOptions`, `HttpOptions`, `HttpServerHandle`, `RateLimitOptions` | Stable |
 | `@kervan/transport/testing` | `createTestClient`, `TestClientOptions` | Stable |
 
@@ -36,13 +37,14 @@ The runtime export lists are pinned by `test/api.test.ts` in each package.
 
 | Export | Kind | Status |
 | --- | --- | --- |
-| `loadSpec`, `LoadOptions`, `LoadedSpec`, `CompiledTool`, `CompiledDefinition` | function, types | Stable |
+| `loadSpec`, `LoadOptions` (incl. `requireSecrets`), `LoadedSpec`, `CompiledTool`, `CompiledDefinition` | function, types | Stable |
 | `applySpec` | function | Stable |
 | `SpecLoadError`, `SpecIssue`, `formatIssue` | class, type, function | Stable |
-| `SecretSource`, `envSecrets`, `SecretVault`, `SecretError`, `REDACTED` | type, function, classes, constant | Stable |
+| `SecretSource` (`get(name, context?)`), `SecretContext`, `envSecrets`, `SecretVault`, `SecretError`, `REDACTED` | types, function, classes, constant | Stable |
+| `normalizeHost` | function | **Experimental** |
 | `NetworkPolicy` (`allowPrivate`, `denyList`), `NetworkPolicyError` | type, class | Stable |
 | `NetworkPolicy` (`resolve`, `localAddresses`, `lookupGate`), `Resolver`, `ResolvedAddress`, `LookupGate` | types, class | **Experimental** |
-| `Spec`, `SpecTool`, `specJsonSchema` | types, function | Stable (the `kervan.yaml` format, `specVersion: 1`) |
+| `Spec`, `SpecTool`, `specJsonSchema` | types, function | Stable (the `kervan.yaml` format, `specVersion: 1`, including host-bound `secrets` entries) |
 | `HTTP_DEFAULTS`, `SPEC_LIMITS`, `SCHEMA_LIMITS` | constants | Stable names; values may be tuned in minor releases |
 | `httpTool` | function | **Experimental** |
 
@@ -63,3 +65,8 @@ The command line (`kervan create`, `kervan dev`, `kervan run`) and its flags are
 ## `create-kervan`
 
 A binary only (`npm create kervan`), no programmatic API.
+
+## `@kervan/studio`
+
+Private application (not published). It uses only the entry points above; a lint rule and a test
+enforce this.

@@ -131,8 +131,8 @@ ecosystem moves quickly.
 1. Core and transports.
 2. Runtime registry, `resolveServer`, middleware, `kervan create` and `kervan dev`.
 3. Specs and `kervan run`.
-4. **Next:** Kervan Studio, an optional web UI that builds specs on top of the framework. The
-   framework will never depend on it.
+4. **In progress:** Kervan Studio ([`apps/studio`](apps/studio)), an optional self-hosted app that
+   writes, publishes and serves specs on top of the framework. The framework never depends on it.
 
 ## Development
 
