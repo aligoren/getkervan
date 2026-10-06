@@ -39,6 +39,7 @@ await serve(app) // stdio by default; `--http` for Streamable HTTP
 | --- | --- |
 | [`@kervan/core`](packages/core) | `createApp`, `app.tool`, the tool context (`ctx.signal`, `ctx.progress`, `ctx.log`, `ctx.auth`), error mapping. No transport, database or UI code. |
 | [`@kervan/transport`](packages/transport) | `toFetchHandler` (web-standard), `serveStdio` / `serveHttp` / `serve` (Node), and `createTestClient` for tests. |
+| [`@kervan/spec-runtime`](packages/spec-runtime) | `kervan.yaml` specs: HTTP API tools with templates, JMESPath output selection and secret redaction (pre-release). |
 | [`kervan`](packages/cli) | The CLI: `kervan create` (and `npm create kervan`) and `kervan dev` (hot reload, terminal REPL). Generated projects run TypeScript directly on Node.js 22.18+. |
 | [`examples/weather`](examples/weather) | A runnable example server with tests. |
 | [`examples/dynamic`](examples/dynamic) | Tools that change at runtime, and a multi-tenant HTTP server. |

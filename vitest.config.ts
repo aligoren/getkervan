@@ -7,6 +7,13 @@ export default defineConfig({
       { test: { name: "transport", root: "packages/transport", include: ["test/**/*.test.ts"] } },
       { test: { name: "cli", root: "packages/cli", include: ["test/**/*.test.ts"] } },
       {
+        test: {
+          name: "spec-runtime",
+          root: "packages/spec-runtime",
+          include: ["test/**/*.test.ts"],
+        },
+      },
+      {
         test: { name: "example-weather", root: "examples/weather", include: ["test/**/*.test.ts"] },
       },
       {

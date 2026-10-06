@@ -8,6 +8,9 @@
       "path": "packages/transport"
     },
     {
+      "path": "packages/spec-runtime"
+    },
+    {
       "path": "packages/cli"
     },
     {

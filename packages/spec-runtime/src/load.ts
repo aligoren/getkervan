@@ -1,0 +1,174 @@
+import { LineCounter, parseDocument } from "yaml"
+import type * as z from "zod"
+import { type CompiledDefinition, compilePlan, type RuntimeOptions } from "./compile.js"
+import { type IssuePath, planTool, type SpecIssue, type ToolPlan } from "./plan.js"
+import { envSecrets, SecretError, type SecretSource, SecretVault } from "./secrets.js"
+import { SPEC_LIMITS, type Spec, type SpecTool, specSchema } from "./spec-schema.js"
+
+export interface CompiledTool {
+  name: string
+  definition: CompiledDefinition
+  /** Changes whenever the tool's spec changes; equal signatures mean an identical tool. */
+  signature: string
+}
+
+export interface LoadedSpec {
+  spec: Spec
+  tools: CompiledTool[]
+  warnings: SpecIssue[]
+  vault: SecretVault
+}
+
+export interface LoadOptions {
+  /** Shown in error messages, e.g. `kervan.yaml:12:5`. Default: `kervan.yaml`. */
+  fileName?: string
+  /** Default: environment variables. */
+  secrets?: SecretSource
+  /** Shared across reloads so earlier secret values stay redacted. Default: a new vault. */
+  vault?: SecretVault
+  lookup?: RuntimeOptions["lookup"]
+}
+
+export class SpecLoadError extends Error {
+  override name = "SpecLoadError"
+  readonly issues: SpecIssue[]
+
+  constructor(fileName: string, issues: SpecIssue[]) {
+    super(
+      `${fileName} is not a valid Kervan spec:\n${issues.map((issue) => `  ${formatIssue(fileName, issue)}`).join("\n")}`,
+    )
+    this.issues = issues
+  }
+}
+
+export function formatIssue(fileName: string, issue: SpecIssue): string {
+  const where = issue.line === undefined ? fileName : `${fileName}:${issue.line}:${issue.column}`
+  const path = formatPath(issue.path)
+  return `${where}${path ? ` ${path}` : ""}: ${issue.message}`
+}
+
+function formatPath(path: IssuePath): string {
+  return path
+    .map((key, i) => (typeof key === "number" ? `[${key}]` : i === 0 ? key : `.${key}`))
+    .join("")
+}
+
+/**
+ * Parses, validates and compiles a kervan.yaml spec. Throws `SpecLoadError` listing every problem
+ * with its line and column. Declared secrets are resolved once here, so short or missing values
+ * are reported before the server starts.
+ */
+export async function loadSpec(text: string, options: LoadOptions = {}): Promise<LoadedSpec> {
+  const fileName = options.fileName ?? "kervan.yaml"
+  if (Buffer.byteLength(text) > SPEC_LIMITS.maxSpecBytes) {
+    throw new SpecLoadError(fileName, [
+      {
+        path: [],
+        message: `The spec is larger than ${SPEC_LIMITS.maxSpecBytes} bytes.`,
+        severity: "error",
+      },
+    ])
+  }
+
+  const lineCounter = new LineCounter()
+  const doc = parseDocument(text, { lineCounter, uniqueKeys: true, prettyErrors: false })
+  const issues: SpecIssue[] = []
+  const at = (path: IssuePath, message: string, severity: "error" | "warning" = "error") => {
+    issues.push({ path, message, severity, ...position(doc, lineCounter, path) })
+  }
+  for (const problem of [...doc.errors, ...doc.warnings]) {
+    const pos = lineCounter.linePos(problem.pos[0])
+    issues.push({
+      path: [],
+      message: problem.message.split("\n")[0] ?? problem.message,
+      severity: "error",
+      line: pos.line,
+      column: pos.col,
+    })
+  }
+  if (issues.length > 0) throw new SpecLoadError(fileName, issues)
+
+  let data: unknown
+  try {
+    // Bounded alias expansion guards against "billion laughs" documents.
+    data = doc.toJS({ maxAliasCount: 50 })
+  } catch (error) {
+    throw new SpecLoadError(fileName, [
+      { path: [], message: (error as Error).message, severity: "error" },
+    ])
+  }
+
+  const parsed = specSchema.safeParse(data)
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) at(issue.path as IssuePath, zodMessage(issue))
+    throw new SpecLoadError(fileName, issues)
+  }
+  const spec = parsed.data
+
+  const declared = new Set(spec.secrets ?? [])
+  const used = new Set<string>()
+  const names = new Set<string>()
+  const plans: [SpecTool, ToolPlan][] = []
+  spec.tools.forEach((tool, index) => {
+    if (names.has(tool.name)) at(["tools", index, "name"], `Duplicate tool name "${tool.name}".`)
+    names.add(tool.name)
+    const plan = planTool(tool, spec.defaults?.http, declared, ["tools", index], at)
+    if (plan) {
+      for (const name of plan.secrets) used.add(name)
+      plans.push([tool, plan])
+    }
+  })
+  for (const name of declared) {
+    if (!used.has(name)) at(["secrets"], `Secret ${name} is declared but never used.`, "warning")
+  }
+
+  const source = options.secrets ?? envSecrets()
+  const vault = options.vault ?? new SecretVault()
+  for (const name of declared) {
+    const value = await source.get(name)
+    if (value === undefined || value === "") {
+      at(["secrets"], `Secret ${name} is not set; tools that use it fail until it is.`, "warning")
+      continue
+    }
+    try {
+      vault.add(name, value)
+    } catch (error) {
+      if (error instanceof SecretError) at(["secrets"], error.message)
+      else throw error
+    }
+  }
+
+  const errors = issues.filter((issue) => issue.severity === "error")
+  if (errors.length > 0) throw new SpecLoadError(fileName, errors)
+
+  const runtime: RuntimeOptions = {
+    secrets: source,
+    vault,
+    ...(options.lookup ? { lookup: options.lookup } : {}),
+  }
+  const tools = plans.map(([tool, plan]) => ({
+    name: plan.name,
+    definition: compilePlan(plan, runtime),
+    signature: JSON.stringify([tool, spec.defaults ?? null]),
+  }))
+  return { spec, tools, warnings: issues.filter((issue) => issue.severity === "warning"), vault }
+}
+
+/** The line and column of the YAML node at `path`, or of its nearest existing parent. */
+function position(doc: ReturnType<typeof parseDocument>, counter: LineCounter, path: IssuePath) {
+  for (let length = path.length; length >= 0; length--) {
+    const node = doc.getIn(path.slice(0, length), true) as
+      | { range?: [number, number, number] }
+      | undefined
+    if (node?.range) {
+      const { line, col } = counter.linePos(node.range[0])
+      return { line, column: col }
+    }
+  }
+  return {}
+}
+
+function zodMessage(issue: z.core.$ZodIssue): string {
+  if (issue.code === "unrecognized_keys") return `Unknown field(s): ${issue.keys.join(", ")}.`
+  return issue.message
+}
