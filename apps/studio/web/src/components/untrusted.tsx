@@ -110,3 +110,163 @@ export function ErrorText(props: { error: unknown }) {
   const message = props.error instanceof Error ? props.error.message : String(props.error)
   return <p className="error-text">{message}</p>
 }
+
+export interface DiffLine {
+  kind: "same" | "added" | "removed"
+  text: string
+}
+
+/** A line diff between two spec versions, as text. */
+export function DiffView(props: { lines: readonly DiffLine[] | null }) {
+  if (props.lines === null) return <p className="muted">These versions are too large to compare.</p>
+  return (
+    <pre className="diff">
+      {props.lines.map((line, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: lines can repeat
+        <span key={index} className={`diff-${line.kind}`}>
+          {`${line.kind === "added" ? "+" : line.kind === "removed" ? "-" : " "} ${line.text}\n`}
+        </span>
+      ))}
+    </pre>
+  )
+}
+
+export interface CallLogEntry {
+  id: number
+  at: number
+  tool: string
+  status: "ok" | "error"
+  durationMs: number
+  versionId: string | null
+  args?: string | undefined
+  result?: string | undefined
+}
+
+/** Recent tool calls. Arguments and results (opt-in, admins only) come from clients and upstreams. */
+export function CallLogTable(props: { calls: readonly CallLogEntry[] }) {
+  if (props.calls.length === 0) return <p className="muted">No calls yet.</p>
+  return (
+    <table className="calls">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Tool</th>
+          <th>Status</th>
+          <th>Duration</th>
+          <th>Payload</th>
+        </tr>
+      </thead>
+      <tbody>
+        {props.calls.map((call) => (
+          <tr key={call.id} className={call.status}>
+            <td>{new Date(call.at).toLocaleString()}</td>
+            <td>{call.tool}</td>
+            <td>{call.status}</td>
+            <td>{`${call.durationMs} ms`}</td>
+            <td>
+              {call.args !== undefined ? <pre>{`args: ${call.args}`}</pre> : null}
+              {call.result !== undefined ? <pre>{`result: ${call.result}`}</pre> : null}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+export interface AuditEntry {
+  id: number
+  at: number
+  actorType: string
+  actorId: string | null
+  action: string
+  targetType: string | null
+  targetId: string | null
+  ip: string | null
+  details: Record<string, unknown> | null
+}
+
+export function AuditTable(props: { events: readonly AuditEntry[] }) {
+  if (props.events.length === 0) return <p className="muted">No events.</p>
+  return (
+    <table className="audit">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Action</th>
+          <th>Actor</th>
+          <th>Target</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {props.events.map((event) => (
+          <tr key={event.id}>
+            <td>{new Date(event.at).toLocaleString()}</td>
+            <td>{event.action}</td>
+            <td>{`${event.actorType}${event.actorId ? ` ${event.actorId.slice(0, 8)}` : ""}${event.ip ? ` from ${event.ip}` : ""}`}</td>
+            <td>
+              {event.targetType ? `${event.targetType} ${event.targetId?.slice(0, 8) ?? ""}` : ""}
+            </td>
+            <td>
+              <code>{event.details ? JSON.stringify(event.details) : ""}</code>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+export interface SecretSummary {
+  name: string
+  allowedHosts: string[]
+  updatedAt: number
+  usedBy: { version: number; tools: string[] } | null
+}
+
+/** Secret names and bindings (never values), and which published tools use them. */
+export function SecretTable(props: {
+  secrets: readonly SecretSummary[]
+  onEdit?: (name: string) => void
+  onDelete?: (name: string) => void
+}) {
+  if (props.secrets.length === 0) return <p className="muted">No secrets.</p>
+  return (
+    <table className="secrets">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Allowed hosts</th>
+          <th>Used by</th>
+          <th>Updated</th>
+          <th />
+        </tr>
+      </thead>
+      <tbody>
+        {props.secrets.map((secret) => (
+          <tr key={secret.name}>
+            <td>
+              <code>{secret.name}</code>
+            </td>
+            <td>{secret.allowedHosts.join(", ")}</td>
+            <td>
+              {secret.usedBy
+                ? `v${secret.usedBy.version}: ${secret.usedBy.tools.join(", ")}`
+                : "not used by the published version"}
+            </td>
+            <td>{new Date(secret.updatedAt).toLocaleString()}</td>
+            <td>
+              <button type="button" onClick={() => props.onEdit?.(secret.name)}>
+                Edit
+              </button>
+              <button type="button" onClick={() => props.onDelete?.(secret.name)}>
+                Delete
+              </button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}

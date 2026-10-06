@@ -18,6 +18,7 @@ export interface Server {
   slug: string
   name: string
   publishedVersionId: string | null
+  logPayloads: boolean
   createdAt: number
   updatedAt: number
 }
@@ -49,7 +50,11 @@ export function setCsrfToken(token: string | undefined): void {
 }
 
 /** Calls the management API on Studio's own origin, with the session cookie and CSRF token. */
-export async function api<T>(method: "GET" | "POST" | "DELETE", path: string, body?: unknown) {
+export async function api<T>(
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  path: string,
+  body?: unknown,
+) {
   const headers: Record<string, string> = {}
   if (method !== "GET") {
     headers["content-type"] = "application/json"

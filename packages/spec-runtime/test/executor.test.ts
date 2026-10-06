@@ -325,7 +325,7 @@ tools:
     clients.push(client)
     const result = await client.callTool({ name: "t", arguments: {} })
     expect(text(result)).toBe(
-      `Secret OTHER_KEY is not set or not allowed for 127.0.0.1:${new URL(upstream.url).port}.`,
+      `Secret OTHER_KEY is not configured for 127.0.0.1:${new URL(upstream.url).port}.`,
     )
   })
 })

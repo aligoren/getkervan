@@ -4,29 +4,38 @@ import {
   type NetworkPolicy,
   SecretVault,
   SPEC_LIMITS,
+  type Spec,
   type SpecIssue,
   SpecLoadError,
 } from "@kervan/spec-runtime"
 import type { Db } from "./db/open.js"
 import { type ApiKeyInfo, createApiKey, revokeApiKey } from "./db/repos/api-keys.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
+import { listCalls } from "./db/repos/call-logs.js"
 import {
   createServer,
   deleteServer,
   getServer,
   type Server,
+  setLogPayloads,
   setPublishedVersion,
 } from "./db/repos/servers.js"
 import { getVersion, type SpecVersion, saveVersion } from "./db/repos/versions.js"
 import type { WorkspaceScope } from "./db/scope.js"
+import { diffLines } from "./diff.js"
 import { exportSpec } from "./export.js"
 import { Gateway } from "./gateway.js"
 import { PlaygroundTokens } from "./playground.js"
-import type { SecretStore } from "./secrets.js"
+import {
+  checkSecretName,
+  type SecretBinding,
+  type SecretWrite,
+  type WritableSecretStore,
+} from "./secrets.js"
 
 export interface StudioOptions {
   db: Db
-  secrets: SecretStore
+  secrets: WritableSecretStore
   network: NetworkPolicy
   allowedHosts: readonly string[]
   logger: Logger
@@ -43,12 +52,26 @@ export class StudioError extends Error {
   override name = "StudioError"
   readonly code: "not_found" | "invalid" | "conflict" | "forbidden"
   readonly issues: SpecIssue[]
+  /** Extra, non-secret fields for the API response (e.g. which tools use a secret). */
+  readonly details: Record<string, unknown>
 
-  constructor(code: StudioError["code"], message: string, issues: SpecIssue[] = []) {
+  constructor(
+    code: StudioError["code"],
+    message: string,
+    issues: SpecIssue[] = [],
+    details: Record<string, unknown> = {},
+  ) {
     super(message)
     this.code = code
     this.issues = issues
+    this.details = details
   }
+}
+
+export interface SecretUsage {
+  version: number
+  versionId: string
+  tools: string[]
 }
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
@@ -61,7 +84,7 @@ const MAX_NAME_LENGTH = 200
 export class Studio {
   readonly db: Db
   readonly gateway: Gateway
-  readonly secrets: SecretStore
+  readonly secrets: WritableSecretStore
   readonly playground = new PlaygroundTokens()
   readonly #options: StudioOptions
 
@@ -181,9 +204,13 @@ export class Studio {
     const published = this.db.transaction((tx) => {
       const server = getServer(tx, scope, serverId)
       if (!server) return false
+      const current =
+        server.publishedVersionId && getVersion(tx, scope, serverId, server.publishedVersionId)
+      // Publishing an older version than the one being served is a rollback.
+      const rollback = Boolean(current && current.number > version.number)
       setPublishedVersion(tx, scope, serverId, versionId)
       recordAudit(tx, scope, actor, {
-        action: "server.publish",
+        action: rollback ? "server.rollback" : "server.publish",
         target: { type: "server", id: serverId },
         details: {
           version: version.number,
@@ -196,6 +223,43 @@ export class Studio {
     if (!published) throw notFound()
     await this.gateway.reload(scope, serverId)
     return version
+  }
+
+  /** A line diff between two versions of a server; `undefined` when too large to compute. */
+  diffVersions(scope: WorkspaceScope, serverId: string, fromId: string, toId: string) {
+    const from = getVersion(this.db, scope, serverId, fromId)
+    const to = getVersion(this.db, scope, serverId, toId)
+    if (!from || !to) throw notFound()
+    return {
+      from: from.number,
+      to: to.number,
+      lines: diffLines(from.yamlText, to.yamlText),
+    }
+  }
+
+  /** Turns logging of (redacted, cut) call arguments and results on or off for a server. */
+  setLogPayloads(scope: WorkspaceScope, serverId: string, on: boolean, actor: Actor): void {
+    const changed = this.db.transaction((tx) => {
+      if (!setLogPayloads(tx, scope, serverId, on)) return false
+      recordAudit(tx, scope, actor, {
+        action: "server.settings",
+        target: { type: "server", id: serverId },
+        details: { logPayloads: on },
+      })
+      return true
+    })
+    if (!changed) throw notFound()
+  }
+
+  /**
+   * A server's recent calls. Arguments and results (when the server logs them) are for admins
+   * only; members see the metadata.
+   */
+  listCalls(scope: WorkspaceScope, serverId: string, options: { withPayloads: boolean }) {
+    if (!getServer(this.db, scope, serverId)) throw notFound()
+    return listCalls(this.db, scope, serverId).map((call) =>
+      options.withPayloads ? call : { ...call, args: undefined, result: undefined },
+    )
   }
 
   /** The version as a kervan.yaml for `kervan run`, with Studio's secret bindings, no values. */
@@ -217,6 +281,109 @@ export class Studio {
   ): { token: string; expiresAt: number } {
     if (!getVersion(this.db, scope, serverId, versionId)) throw notFound()
     return this.playground.issue({ workspaceId: scope.workspaceId, serverId, versionId, userId })
+  }
+
+  /** A server's secrets: names, bindings and which published tools use them. Never values. */
+  async listSecrets(
+    scope: WorkspaceScope,
+    serverId: string,
+  ): Promise<(SecretBinding & { usedBy: SecretUsage | null })[]> {
+    if (!getServer(this.db, scope, serverId)) throw notFound()
+    const bindings = await this.secrets.list(scope, serverId)
+    return Promise.all(
+      bindings.map(async (binding) => ({
+        ...binding,
+        usedBy: await this.secretUsage(scope, serverId, binding.name),
+      })),
+    )
+  }
+
+  /**
+   * Creates a secret, rotates its value or changes its hosts. A changed value is used from the
+   * next call on; the old value stays redacted wherever the server already saw it.
+   */
+  async putSecret(
+    scope: WorkspaceScope,
+    serverId: string,
+    input: SecretWrite,
+    actor: Actor,
+  ): Promise<SecretBinding> {
+    if (!getServer(this.db, scope, serverId)) throw notFound()
+    const result = await this.secrets.put(scope, serverId, input)
+    const action = result.created
+      ? "secret.create"
+      : result.rotated
+        ? "secret.rotate"
+        : "secret.hosts"
+    recordAudit(this.db, scope, actor, {
+      action,
+      target: { type: "server", id: serverId },
+      details: { name: input.name, hosts: result.binding.allowedHosts.join(",") },
+    })
+    return result.binding
+  }
+
+  /**
+   * Deletes a secret. When the published version uses it, this refuses (with the tools that use
+   * it) unless `confirm` is set; after deletion those tools fail with "Secret X is not configured".
+   */
+  async deleteSecret(
+    scope: WorkspaceScope,
+    serverId: string,
+    name: string,
+    options: { confirm: boolean },
+    actor: Actor,
+  ): Promise<void> {
+    if (!getServer(this.db, scope, serverId)) throw notFound()
+    checkSecretName(name)
+    const usedBy = await this.secretUsage(scope, serverId, name)
+    if (usedBy && !options.confirm) {
+      throw new StudioError(
+        "conflict",
+        `Secret ${name} is used by the published version ${usedBy.version} (${usedBy.tools.join(", ")}). ` +
+          "Those tools will fail until the secret exists again. Confirm to delete it anyway.",
+        [],
+        { usedBy },
+      )
+    }
+    if (!(await this.secrets.remove(scope, serverId, name))) throw notFound()
+    recordAudit(this.db, scope, actor, {
+      action: "secret.delete",
+      target: { type: "server", id: serverId },
+      details: { name, usedByTools: usedBy ? usedBy.tools.join(",") : null },
+    })
+  }
+
+  /** Which tools of the published version use a secret (conservatively, by their templates). */
+  async secretUsage(
+    scope: WorkspaceScope,
+    serverId: string,
+    name: string,
+  ): Promise<SecretUsage | null> {
+    // The name goes into a pattern below: only valid secret names get that far.
+    if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(name)) return null
+    const server = getServer(this.db, scope, serverId)
+    const version =
+      server?.publishedVersionId && getVersion(this.db, scope, serverId, server.publishedVersionId)
+    if (!version) return null
+    let spec: Spec
+    try {
+      spec = (
+        await loadSpec(version.yamlText, {
+          secrets: { get: () => undefined },
+          vault: new SecretVault(),
+          network: this.#options.network,
+          allowSecretsOverHttp: true,
+        })
+      ).spec
+    } catch {
+      return null
+    }
+    const reference = new RegExp(`\\{\\{\\s*secrets\\.${name}\\s*\\}\\}`)
+    const tools = spec.tools
+      .filter((tool) => reference.test(JSON.stringify(tool.http)))
+      .map((tool) => tool.name)
+    return tools.length > 0 ? { version: version.number, versionId: version.id, tools } : null
   }
 
   /** Creates an API key for a server. The key is returned once and never stored. */

@@ -18,6 +18,8 @@ export interface StudioConfig {
   trustProxy: number
   /** Extra addresses or CIDR ranges spec tools may never reach (internal infrastructure). */
   denyNetwork: string[]
+  /** Call logs older than this many days are deleted. Default: 30. */
+  logRetentionDays: number
 }
 
 export class ConfigError extends Error {
@@ -49,6 +51,7 @@ export function loadConfig(env: NodeJS.ProcessEnv, cwd = process.cwd()): StudioC
       .split(",")
       .map((entry) => entry.trim())
       .filter((entry) => entry !== ""),
+    logRetentionDays: parseRetention(env.KERVAN_STUDIO_LOG_RETENTION_DAYS),
   }
 }
 
@@ -81,6 +84,17 @@ function parsePort(raw: string | undefined): number {
     throw new ConfigError(`KERVAN_STUDIO_PORT must be a port number, not "${raw}".`)
   }
   return port
+}
+
+function parseRetention(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === "") return 30
+  const days = Number(raw)
+  if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    throw new ConfigError(
+      `KERVAN_STUDIO_LOG_RETENTION_DAYS must be a whole number of days (1-3650), not "${raw}".`,
+    )
+  }
+  return days
 }
 
 function parseTrustProxy(raw: string | undefined): number {

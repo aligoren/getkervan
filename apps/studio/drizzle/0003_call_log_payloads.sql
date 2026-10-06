@@ -1,0 +1,1 @@
+ALTER TABLE `servers` ADD `log_payloads` integer DEFAULT false NOT NULL;

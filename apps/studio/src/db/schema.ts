@@ -55,6 +55,8 @@ export const servers = sqliteTable(
     name: text("name").notNull(),
     /** The version the gateway serves; null until the first publish. */
     publishedVersionId: text("published_version_id"),
+    /** Opt-in: also log (redacted, truncated) arguments and results of tool calls. */
+    logPayloads: integer("log_payloads", { mode: "boolean" }).notNull().default(false),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

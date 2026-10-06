@@ -4,10 +4,12 @@ import { serve } from "@hono/node-server"
 import type { Logger } from "@kervan/core"
 import { allowedHostNames, bindHost, ConfigError, type StudioConfig } from "./config.js"
 import { type OpenedDatabase, openDatabase } from "./db/open.js"
+import { purgeCalls } from "./db/repos/call-logs.js"
 import { issueSetupToken, SETUP_TOKEN_TTL_MS } from "./db/repos/tokens.js"
 import { listAdmins } from "./db/repos/users.js"
 import { defaultWorkspace } from "./db/repos/workspaces.js"
 import { createStudioHttp } from "./http.js"
+import { envKeyProvider, type KeyProvider } from "./keys.js"
 import { studioLogger } from "./logger.js"
 import {
   addressRangeProblem,
@@ -15,16 +17,19 @@ import {
   type StudioNetworkOptions,
   studioNetworkPolicy,
 } from "./network.js"
-import { InMemorySecretStore, type SecretStore } from "./secrets.js"
+import type { WritableSecretStore } from "./secrets.js"
 import { Studio } from "./studio.js"
+import { DbSecretStore } from "./vault.js"
 
 export const DATABASE_FILE = "studio.db"
 
 export interface StartOptions {
   /** Where messages for the operator go (setup token, listening address). Default: stderr. */
   print?: (line: string) => void
-  /** Default: an in-memory store (secrets do not survive a restart). */
-  secrets?: SecretStore
+  /** Default: the encrypted vault in the database, keyed by `keys`. */
+  secrets?: WritableSecretStore
+  /** Master keys for the vault. Default: `KERVAN_STUDIO_MASTER_KEY` from the environment. */
+  keys?: KeyProvider
   /** DNS and interface overrides for tests. There is no way to allow private addresses. */
   network?: Omit<StudioNetworkOptions, "denyList" | "selfAddresses">
   /** Resolves the public host name to Studio's own addresses. Default: DNS. */
@@ -75,11 +80,20 @@ export async function startStudio(
       selfAddresses,
     })
 
+    let secrets = options.secrets
+    if (!secrets) {
+      const vault = new DbSecretStore(database.db, options.keys ?? envKeyProvider(process.env))
+      // Refuses to start when a stored secret cannot be decrypted; upgrades old key versions.
+      const rewrapped = vault.verifyAndRewrap()
+      if (rewrapped > 0) print(`Re-encrypted ${rewrapped} secret(s) with the current master key.`)
+      secrets = vault
+    }
+
     let studio: Studio | undefined
     const logger: Logger = studioLogger((text) => studio?.gateway.redact(text) ?? text)
     studio = new Studio({
       db: database.db,
-      secrets: options.secrets ?? new InMemorySecretStore(),
+      secrets,
       network,
       allowedHosts: allowedHostNames(config),
       logger,
@@ -145,6 +159,18 @@ export async function startStudio(
       `http://${address.family === "IPv6" ? `[${address.address}]` : address.address}:${address.port}`,
     )
 
+    // Call logs are kept for the configured number of days.
+    const purge = () => {
+      try {
+        purgeCalls(database.db, Date.now() - config.logRetentionDays * 24 * 60 * 60 * 1000)
+      } catch (error) {
+        print(`Could not delete old call logs: ${(error as Error).message}`)
+      }
+    }
+    purge()
+    const purgeTimer = setInterval(purge, 60 * 60 * 1000)
+    purgeTimer.unref()
+
     let setupToken: string | undefined
     if (!hasAdmin) {
       setupToken = issueSetupToken(database.db).token
@@ -166,6 +192,7 @@ export async function startStudio(
       setupToken,
       database,
       close: async () => {
+        clearInterval(purgeTimer)
         await studio.close()
         for (const listening of closing) {
           if ("closeAllConnections" in listening) listening.closeAllConnections()

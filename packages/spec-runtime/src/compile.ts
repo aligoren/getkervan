@@ -85,7 +85,7 @@ async function executePlan(
     secret: (name) => {
       const value = secrets.get(name)
       if (value === undefined) {
-        throw new ToolError(`Secret ${name} is not set or not allowed for ${plan.host}.`)
+        throw new ToolError(`Secret ${name} is not configured for ${plan.host}.`)
       }
       return value
     },

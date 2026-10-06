@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react"
-import { ApiError, api, type Issue, type Server, type VersionInfo } from "../api.js"
+import { ApiError, api, type Issue, type Server, type User, type VersionInfo } from "../api.js"
 import { ErrorText, IssueList } from "../components/untrusted.js"
 import { Playground } from "../playground/Playground.js"
+import { KeysPanel, LogsPanel, SecretsPanel, VersionsPanel } from "./ServerPanels.js"
 
 // Monaco is large; load it only here.
 const SpecEditor = lazy(() => import("../editor/SpecEditor.js"))
@@ -18,7 +19,11 @@ tools:
       select: "items[].{id: id, name: name}"
 `
 
-export function ServerPage(props: { serverId: string }) {
+type Tab = "editor" | "versions" | "secrets" | "keys" | "logs"
+
+export function ServerPage(props: { serverId: string; user: User }) {
+  const [tab, setTab] = useState<Tab>("editor")
+  const isAdmin = props.user.role === "admin"
   const [server, setServer] = useState<Server>()
   const [versions, setVersions] = useState<VersionInfo[]>([])
   const [selected, setSelected] = useState<string>()
@@ -100,6 +105,18 @@ export function ServerPage(props: { serverId: string }) {
   }
 
   if (!server) return <ErrorText error={error} />
+  const tabs: [Tab, string][] = [
+    ["editor", "Editor"],
+    ["versions", "Versions"],
+    ...(isAdmin
+      ? ([
+          ["secrets", "Secrets"],
+          ["keys", "API keys"],
+        ] as [Tab, string][])
+      : []),
+    ["logs", "Calls"],
+  ]
+  const reload = () => void load().catch((caught: unknown) => setError(caught))
   const exportUrl = selected
     ? `/api/servers/${encodeURIComponent(server.id)}/versions/${encodeURIComponent(selected)}/export`
     : undefined
@@ -110,7 +127,33 @@ export function ServerPage(props: { serverId: string }) {
         <a href="#/">Servers</a> / <strong>{server.name}</strong>{" "}
         <span className="muted">MCP endpoint: /s/{server.id}/mcp</span>
       </header>
-      <div className="columns">
+      <nav className="tabs">
+        {tabs.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            className={tab === id ? "active" : undefined}
+            onClick={() => setTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      {tab === "versions" ? (
+        <VersionsPanel
+          server={server}
+          versions={versions}
+          onOpen={(versionId) => {
+            setTab("editor")
+            void open(versionId)
+          }}
+          onChanged={reload}
+        />
+      ) : null}
+      {tab === "secrets" ? <SecretsPanel serverId={server.id} /> : null}
+      {tab === "keys" ? <KeysPanel serverId={server.id} /> : null}
+      {tab === "logs" ? <LogsPanel server={server} isAdmin={isAdmin} onChanged={reload} /> : null}
+      <div className="columns" hidden={tab !== "editor"}>
         <div className="main">
           <div className="toolbar">
             <label>

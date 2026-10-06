@@ -165,7 +165,7 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
       if (value === undefined || value === "") {
         at(
           path,
-          `Secret ${name} is not set or not allowed for ${plan.host}; tools that use it there fail until it is.`,
+          `Secret ${name} is not configured for ${plan.host}; tools that use it there fail until it is.`,
           options.requireSecrets ? "error" : "warning",
         )
         continue

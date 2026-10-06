@@ -8,6 +8,7 @@ export interface Server {
   slug: string
   name: string
   publishedVersionId: string | null
+  logPayloads: boolean
   createdAt: number
   updatedAt: number
 }
@@ -17,6 +18,7 @@ const columns = {
   slug: servers.slug,
   name: servers.name,
   publishedVersionId: servers.publishedVersionId,
+  logPayloads: servers.logPayloads,
   createdAt: servers.createdAt,
   updatedAt: servers.updatedAt,
 }
@@ -32,6 +34,7 @@ export function createServer(
     slug: input.slug,
     name: input.name,
     publishedVersionId: null,
+    logPayloads: false,
     createdAt: now,
     updatedAt: now,
   }
@@ -68,6 +71,21 @@ export function setPublishedVersion(
   const result = db
     .update(servers)
     .set({ publishedVersionId: versionId, updatedAt: now })
+    .where(and(eq(servers.workspaceId, scope.workspaceId), eq(servers.id, serverId)))
+    .run()
+  return result.changes === 1
+}
+
+export function setLogPayloads(
+  db: Db,
+  scope: WorkspaceScope,
+  serverId: string,
+  logPayloads: boolean,
+  now = Date.now(),
+): boolean {
+  const result = db
+    .update(servers)
+    .set({ logPayloads, updatedAt: now })
     .where(and(eq(servers.workspaceId, scope.workspaceId), eq(servers.id, serverId)))
     .run()
   return result.changes === 1

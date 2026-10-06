@@ -12,6 +12,7 @@ import { consumeSetupToken } from "../src/db/repos/tokens.js"
 import { createUser, findUserByEmail } from "../src/db/repos/users.js"
 import { defaultWorkspace } from "../src/db/repos/workspaces.js"
 import { sessions } from "../src/db/schema.js"
+import { staticKeyProvider } from "../src/keys.js"
 import { InMemorySecretStore } from "../src/secrets.js"
 import { DATABASE_FILE, startStudio } from "../src/server.js"
 import { StudioError } from "../src/studio.js"
@@ -42,11 +43,15 @@ function dataDir(): string {
   return dir
 }
 
+/** A fixed test master key (never use a constant key outside tests). */
+export const TEST_KEYS = staticKeyProvider({ version: 1, key: Buffer.alloc(32, 7) })
+
 async function start(env: NodeJS.ProcessEnv, options: Parameters<typeof startStudio>[1] = {}) {
   const lines: string[] = []
   const running = await startStudio(loadConfig({ KERVAN_STUDIO_PORT: "0", ...env }), {
     print: (line) => lines.push(line),
     resolveSelf: async () => [],
+    keys: TEST_KEYS,
     ...options,
   })
   cleanups.push(running.close)

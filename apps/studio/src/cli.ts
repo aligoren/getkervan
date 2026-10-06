@@ -6,7 +6,9 @@ import { DatabaseError, openDatabase } from "./db/open.js"
 import { recordAudit } from "./db/repos/audit.js"
 import { deleteSessionsOf, listAdmins, normalizeEmail, setPasswordHash } from "./db/repos/users.js"
 import { defaultWorkspace } from "./db/repos/workspaces.js"
+import { envKeyProvider, KeyError } from "./keys.js"
 import { DATABASE_FILE, startStudio } from "./server.js"
+import { VaultError } from "./vault.js"
 
 export interface StudioCliIo {
   out: (line: string) => void
@@ -32,6 +34,9 @@ Configuration (environment variables):
   KERVAN_STUDIO_DATA_DIR       Where the database lives (default ./.kervan-studio)
   KERVAN_STUDIO_TRUST_PROXY    Number of reverse proxies in front of Studio (default 0)
   KERVAN_STUDIO_DENY_NETWORK   Comma-separated addresses/CIDRs tools may never reach
+  KERVAN_STUDIO_LOG_RETENTION_DAYS  Days to keep call logs (default 30)
+  KERVAN_STUDIO_MASTER_KEY     Required: base64 of 32 random bytes; encrypts stored secrets
+  KERVAN_STUDIO_PREVIOUS_MASTER_KEYS  Older keys (version:base64,...) while rotating
 `
 
 class UsageError extends Error {}
@@ -52,7 +57,9 @@ export async function runStudioCli(argv: string[], io: StudioCliIo): Promise<num
     if (
       error instanceof UsageError ||
       error instanceof ConfigError ||
-      error instanceof DatabaseError
+      error instanceof DatabaseError ||
+      error instanceof KeyError ||
+      error instanceof VaultError
     ) {
       io.err(`Error: ${error.message}`)
       return 1
@@ -63,7 +70,10 @@ export async function runStudioCli(argv: string[], io: StudioCliIo): Promise<num
 
 async function start(argv: string[], io: StudioCliIo): Promise<number> {
   parse(argv, {})
-  const running = await startStudio(loadConfig(io.env, io.cwd), { print: io.err })
+  const running = await startStudio(loadConfig(io.env, io.cwd), {
+    print: io.err,
+    keys: envKeyProvider(io.env),
+  })
   const stop = () => {
     running.close().then(
       () => process.exit(0),

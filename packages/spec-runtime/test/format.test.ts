@@ -175,7 +175,7 @@ describe("secrets at load time", () => {
     const warnings = loaded.warnings.map((w) => w.message)
     expect(warnings).toContain("Secret UNUSED_KEY is declared but never used.")
     expect(warnings).toContain(
-      "Secret API_KEY is not set or not allowed for api.example.com:443; tools that use it there fail until it is.",
+      "Secret API_KEY is not configured for api.example.com:443; tools that use it there fail until it is.",
     )
   })
 

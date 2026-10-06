@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { ApiError, api, setCsrfToken, type User } from "./api.js"
 import { ErrorText } from "./components/untrusted.js"
+import { Audit, Users } from "./pages/Admin.js"
 import { Login, Setup } from "./pages/Auth.js"
 import { ServerPage } from "./pages/ServerPage.js"
 import { Servers } from "./pages/Servers.js"
@@ -53,12 +54,28 @@ export function App() {
   if (phase.kind === "login") return <Login onDone={ready} />
 
   const serverId = /^#\/servers\/([^/]+)$/.exec(hash)?.[1]
+  const isAdmin = phase.user.role === "admin"
+  const page = serverId ? (
+    <ServerPage serverId={decodeURIComponent(serverId)} user={phase.user} />
+  ) : hash === "#/users" && isAdmin ? (
+    <Users />
+  ) : hash === "#/audit" && isAdmin ? (
+    <Audit />
+  ) : (
+    <Servers />
+  )
   return (
     <div className="app">
       <nav>
         <a href="#/" className="brand">
           Kervan Studio
         </a>
+        {isAdmin ? (
+          <>
+            <a href="#/users">Users</a>
+            <a href="#/audit">Audit log</a>
+          </>
+        ) : null}
         <span className="muted">
           {phase.user.email} ({phase.user.role})
         </span>
@@ -66,7 +83,7 @@ export function App() {
           Sign out
         </button>
       </nav>
-      <main>{serverId ? <ServerPage serverId={decodeURIComponent(serverId)} /> : <Servers />}</main>
+      <main>{page}</main>
     </div>
   )
 }

@@ -106,3 +106,8 @@ export function revokeApiKey(db: Db, scope: WorkspaceScope, id: string, now = Da
     .run()
   return result.changes === 1
 }
+
+/** Records that a key was just used (callers throttle this). */
+export function touchApiKey(db: Db, id: string, now = Date.now()): void {
+  db.update(apiKeys).set({ lastUsedAt: now }).where(eq(apiKeys.id, id)).run()
+}

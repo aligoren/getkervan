@@ -196,7 +196,7 @@ describe("secret bindings at load time", () => {
     const { source } = recordingSource(["other.example.com:443"])
     const text = specText("[API_KEY]", keyTool("https://api.example.com/"))
     const message =
-      "Secret API_KEY is not set or not allowed for api.example.com:443; tools that use it there fail until it is."
+      "Secret API_KEY is not configured for api.example.com:443; tools that use it there fail until it is."
     const loaded = await loadSpec(text, { secrets: source, network })
     expect(loaded.warnings.map((warning) => warning.message)).toContain(message)
     await expect(
@@ -299,9 +299,7 @@ describe("secret bindings at call time", () => {
     )
     const result = await client.callTool({ name: "call", arguments: {} })
     expect(result.isError).toBe(true)
-    expect(resultText(result)).toBe(
-      `Secret API_KEY is not set or not allowed for bound.test:${port}.`,
-    )
+    expect(resultText(result)).toBe(`Secret API_KEY is not configured for bound.test:${port}.`)
     expect(requestsTo("/echo/refused")).toEqual([])
     expect(asked.at(-1)).toEqual({ host: `bound.test:${port}`, tool: "call" })
   })
@@ -314,9 +312,7 @@ describe("secret bindings at call time", () => {
       source,
     )
     const result = await client.callTool({ name: "call", arguments: {} })
-    expect(resultText(result)).toBe(
-      `Secret API_KEY is not set or not allowed for bound.test:${otherPort}.`,
-    )
+    expect(resultText(result)).toBe(`Secret API_KEY is not configured for bound.test:${otherPort}.`)
     expect(other.requests).toEqual([])
   })
 

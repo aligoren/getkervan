@@ -2,11 +2,14 @@ import { inspect } from "node:util"
 import {
   type App,
   type AuthInfo,
+  type CallToolResult,
   createApp,
   FORBIDDEN,
   InMemoryToolRegistry,
   type Logger,
   type ResolveResult,
+  type ToolCall,
+  ToolError,
 } from "@kervan/core"
 import {
   applySpec,
@@ -17,7 +20,8 @@ import {
 } from "@kervan/spec-runtime"
 import { type KervanHttpHandler, toFetchHandler } from "@kervan/transport"
 import type { Db } from "./db/open.js"
-import { findActiveApiKey } from "./db/repos/api-keys.js"
+import { findActiveApiKey, touchApiKey } from "./db/repos/api-keys.js"
+import { payloadText, recordCall } from "./db/repos/call-logs.js"
 import { getServer } from "./db/repos/servers.js"
 import { getVersion } from "./db/repos/versions.js"
 import { type WorkspaceScope, workspaceScope } from "./db/scope.js"
@@ -95,6 +99,7 @@ export class Gateway {
   /** Open event streams, so revoking a key or deleting a server can end them at once. */
   readonly #streams = new Set<{ keyId: string; serverId: string; abort: AbortController }>()
   readonly #drafts = new Map<string, Draft>()
+  readonly #lastTouched = new Map<string, number>()
   readonly #sweeper: NodeJS.Timeout
 
   constructor(options: GatewayOptions) {
@@ -104,6 +109,7 @@ export class Gateway {
       max: options.keyRateLimit ?? 600,
     })
     this.app = createApp({ name: "kervan-studio", version: "0.1.0", logger: options.logger })
+    this.app.use((call, next) => this.#logCall(call, next))
     this.handler = toFetchHandler(this.app, {
       path: GATEWAY_PATH,
       allowedHosts: [...options.allowedHosts],
@@ -219,6 +225,82 @@ export class Gateway {
     return this.handler.close()
   }
 
+  /** Writes an API key's `last_used_at`, at most once a minute per key. */
+  #touch(keyId: string, now = Date.now()): void {
+    if (now - (this.#lastTouched.get(keyId) ?? 0) < 60_000) return
+    this.#lastTouched.set(keyId, now)
+    try {
+      touchApiKey(this.#options.db, keyId, now)
+    } catch (error) {
+      this.#options.logger.warn("Could not record API key use", error)
+    }
+  }
+
+  /**
+   * Records every tool call: tool, status, duration and version. Arguments and results only when
+   * the server opted in, redacted with the server's vault and cut to a few KiB.
+   */
+  async #logCall(call: ToolCall, next: () => Promise<CallToolResult>): Promise<CallToolResult> {
+    const started = performance.now()
+    let result: CallToolResult | undefined
+    let failure: unknown
+    try {
+      result = await next()
+      return result
+    } catch (error) {
+      failure = error
+      throw error
+    } finally {
+      try {
+        this.#recordCall(call, performance.now() - started, result, failure)
+      } catch (error) {
+        this.#options.logger.warn("Could not record a tool call", error)
+      }
+    }
+  }
+
+  #recordCall(
+    call: ToolCall,
+    durationMs: number,
+    result: CallToolResult | undefined,
+    failure: unknown,
+  ): void {
+    const extra = call.ctx.auth?.extra
+    const workspaceId = extra?.workspaceId
+    const serverId = extra?.serverId
+    if (typeof workspaceId !== "string" || typeof serverId !== "string") return
+    const scope = workspaceScope(workspaceId)
+    const draftVersion = typeof extra?.versionId === "string" ? extra.versionId : undefined
+    const served = this.#served.get(servedKey(scope, serverId))
+    const versionId = draftVersion ?? served?.versionId ?? null
+    const vault = draftVersion
+      ? this.#drafts.get(`${workspaceId}/${serverId}/${draftVersion}`)?.vault
+      : served?.vault
+    const status = failure !== undefined || result?.isError ? "error" : "ok"
+    const server = getServer(this.#options.db, scope, serverId)
+    let payloads: { args?: string; result?: string } = {}
+    if (server?.logPayloads && vault) {
+      const outcome =
+        failure === undefined
+          ? result
+          : failure instanceof ToolError
+            ? { error: failure.message }
+            : { error: "internal error" }
+      payloads = {
+        args: payloadText(vault.redactValue(call.input)),
+        result: payloadText(vault.redactValue(outcome)),
+      }
+    }
+    recordCall(this.#options.db, scope, {
+      serverId,
+      versionId,
+      tool: call.tool.name,
+      status,
+      durationMs,
+      ...payloads,
+    })
+  }
+
   /** The verified caller of a request, from its API key or playground token. */
   #caller(request: Request): Caller | undefined {
     const presented = bearer(request)
@@ -249,6 +331,7 @@ export class Gateway {
         { status: 429, headers: { "retry-after": String(wait) } },
       )
     }
+    if (key.versionId === undefined) this.#touch(key.id)
     return {
       // The key itself never travels further than this function.
       token: key.id,

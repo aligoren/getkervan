@@ -89,6 +89,31 @@ describe("serving a published server", () => {
     expect((await c.listTools()).tools.map((tool) => tool.name)).toEqual(["echo"])
   })
 
+  it("updates connected clients on a rollback: list_changed, then the old tools", async () => {
+    const t = await studio()
+    const s = await publishedServer(t, spec(echoTool(`${base}/echo/r1`, "old_tool")))
+    const v2 = t.studio.saveVersion(
+      s.scope,
+      s.server.id,
+      spec(echoTool(`${base}/echo/r2`, "new_tool")),
+      user(),
+    )
+    await t.studio.publish(s.scope, s.server.id, v2.id, user())
+    const c = await client(s.mcpUrl, s.key)
+    let notified = 0
+    c.setNotificationHandler("notifications/tools/list_changed", () => {
+      notified++
+    })
+    await c.listen({ toolsListChanged: true })
+    expect((await c.listTools()).tools.map((tool) => tool.name)).toEqual(["new_tool"])
+
+    await t.studio.publish(s.scope, s.server.id, s.version.id, user())
+    for (let i = 0; i < 50 && notified === 0; i++) await sleep(20)
+    expect(notified).toBeGreaterThan(0)
+    expect((await c.listTools()).tools.map((tool) => tool.name)).toEqual(["old_tool"])
+    expect(t.studio.gateway.servedVersion(s.scope, s.server.id)).toBe(s.version.id)
+  })
+
   it("does not notify for a publish that changes nothing", async () => {
     const t = await studio()
     const text = spec(echoTool(`${base}/echo/same`))
@@ -155,7 +180,7 @@ describe("secrets bound to hosts", () => {
       .then(() => undefined)
       .catch((e: unknown) => e as StudioError)
     expect(error?.issues.map((issue) => issue.message)).toContain(
-      `Secret API_KEY is not set or not allowed for attacker.test:${upstream.port}; tools that use it there fail until it is.`,
+      `Secret API_KEY is not configured for attacker.test:${upstream.port}; tools that use it there fail until it is.`,
     )
     expect(requestsTo("/echo/stolen")).toEqual([])
   })
@@ -194,7 +219,7 @@ describe("secrets bound to hosts", () => {
     const c = await client(s.mcpUrl, s.key)
     const result = await c.callTool({ name: "keyed", arguments: {} })
     expect(result.isError).toBe(true)
-    expect(resultText(result)).toBe(`Secret API_KEY is not set or not allowed for ${bound()}.`)
+    expect(resultText(result)).toBe(`Secret API_KEY is not configured for ${bound()}.`)
     expect(requestsTo("/echo/later")).toEqual([])
   })
 

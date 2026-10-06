@@ -9,18 +9,21 @@ import { issueSetupToken } from "../src/db/repos/tokens.js"
 import { createUser, type Role } from "../src/db/repos/users.js"
 import { defaultWorkspace } from "../src/db/repos/workspaces.js"
 import { createStudioHttp } from "../src/http.js"
-import { InMemorySecretStore } from "../src/secrets.js"
+import { staticKeyProvider } from "../src/keys.js"
 import { Studio } from "../src/studio.js"
+import { DbSecretStore } from "../src/vault.js"
 import { recordingLogger, TEST_ONLY_NETWORK } from "./helpers.js"
 
 export const ORIGIN = "https://studio.test"
+/** A fixed master key for tests only. */
+export const TEST_KEYS = staticKeyProvider({ version: 1, key: Buffer.alloc(32, 9) })
 export const PASSWORD = "correct horse battery staple"
 
 /** A Studio HTTP app driven through `fetch` (no socket), as it runs behind TLS at ORIGIN. */
 export function apiStudio(options: { throttle?: ThrottleOptions; network?: NetworkPolicy } = {}) {
   const database = openDatabase(":memory:")
   const logger = recordingLogger()
-  const secrets = new InMemorySecretStore()
+  const secrets = new DbSecretStore(database.db, TEST_KEYS)
   const studio = new Studio({
     db: database.db,
     secrets,
@@ -141,3 +144,38 @@ export function cookieOf(headers: Headers): string {
 }
 
 export type ApiStudio = ReturnType<typeof apiStudio>
+
+/** A real MCP client on the gateway, through Studio's whole HTTP app, as a same-origin caller. */
+export async function gatewayClient(
+  s: ApiStudio,
+  serverId: string,
+  bearer: string,
+  cleanups: (() => Promise<void>)[],
+) {
+  const { Client, StreamableHTTPClientTransport } = await import("@modelcontextprotocol/client")
+  const transport = new StreamableHTTPClientTransport(new URL(`/s/${serverId}/mcp`, ORIGIN), {
+    requestInit: { headers: { authorization: `Bearer ${bearer}` } },
+    fetch: async (url, init) => {
+      const request = new Request(url, init)
+      const headers: Record<string, string> = {}
+      request.headers.forEach((value, name) => {
+        headers[name] = value
+      })
+      headers.host = "studio.test"
+      headers.origin = ORIGIN
+      const body = request.method === "GET" ? undefined : await request.text()
+      const response = await s.request(request.method, new URL(request.url).pathname, {
+        headers,
+        ...(body ? { body } : {}),
+      })
+      return new Response(response.text, { status: response.status, headers: response.headers })
+    },
+  })
+  const client = new Client(
+    { name: "gateway-test", version: "0" },
+    { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+  )
+  await client.connect(transport)
+  cleanups.push(() => client.close())
+  return client
+}

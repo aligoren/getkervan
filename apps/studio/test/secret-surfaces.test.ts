@@ -127,3 +127,88 @@ describe("a secret value never comes back out of Studio", () => {
     }
   })
 })
+
+describe("a secret value never comes back out of the management API (4c)", () => {
+  it("is absent from every API response, the logs with payloads, and the encrypted database", async () => {
+    const { apiStudio, gatewayClient } = await import("./api-helpers.js")
+    const s = apiStudio()
+    cleanups.push(s.close)
+    await s.addUser("admin@example.test", "admin")
+    const admin = await s.signIn("admin@example.test")
+    const server = (
+      await s.request("POST", "/api/servers", { ...admin, body: { slug: "s", name: "S" } })
+    ).json.server as { id: string }
+    const id = server.id
+    const host = `api.test:${upstream.port}`
+    expect(
+      (
+        await s.request("PUT", `/api/servers/${id}/secrets/API_KEY`, {
+          ...admin,
+          body: { value: SECRET, allowedHosts: [host] },
+        })
+      ).status,
+    ).toBe(200)
+    const yaml = spec(
+      `
+  - name: reflect
+    description: The upstream echoes the key back
+    input: { type: object, properties: { note: { type: string } } }
+    http:
+      url: http://${host}/echo/api-surface
+      query: { k: "{{secrets.API_KEY}}" }
+      headers: { X-Key: "{{secrets.API_KEY}}" }
+    output: { select: "@" }`,
+      "secrets: [API_KEY]",
+    )
+    const saved = await s.request("POST", `/api/servers/${id}/versions`, {
+      ...admin,
+      body: { yaml },
+    })
+    const versionId = (saved.json.version as { id: string }).id
+    await s.request("POST", `/api/servers/${id}/versions/${versionId}/publish`, {
+      ...admin,
+      body: {},
+    })
+    await s.request("PUT", `/api/servers/${id}/settings`, { ...admin, body: { logPayloads: true } })
+    const created = await s.request("POST", `/api/servers/${id}/keys`, {
+      ...admin,
+      body: { name: "k" },
+    })
+    const client = await gatewayClient(s, id, String(created.json.key), cleanups)
+    const result = await client.callTool({ name: "reflect", arguments: { note: "hello" } })
+    expect(upstream.requests.at(-1)?.headers["x-key"]).toBe(SECRET)
+    expect(JSON.stringify(result)).toContain("[redacted]")
+
+    const surfaces: Record<string, string> = { "tool result": JSON.stringify(result) }
+    for (const path of [
+      "/api/me",
+      "/api/servers",
+      `/api/servers/${id}`,
+      `/api/servers/${id}/versions/${versionId}`,
+      `/api/servers/${id}/versions/${versionId}/export`,
+      `/api/servers/${id}/versions/${versionId}/diff/${versionId}`,
+      `/api/servers/${id}/secrets`,
+      `/api/servers/${id}/keys`,
+      `/api/servers/${id}/logs`,
+      "/api/audit",
+      "/api/users",
+    ]) {
+      const response = await s.request("GET", path, admin)
+      expect(response.status, path).toBe(200)
+      surfaces[path] = `${JSON.stringify([...response.headers])}${response.text}`
+    }
+    surfaces["studio log"] = s.logger.lines.join("\n")
+    const tables = s.database.sqlite
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all() as { name: string }[]
+    surfaces.database = tables
+      .map(({ name }) => JSON.stringify(s.database.sqlite.prepare(`SELECT * FROM "${name}"`).all()))
+      .join("\n")
+    // The payload log exists (the check below is not vacuous).
+    expect(surfaces[`/api/servers/${id}/logs`]).toContain("hello")
+
+    for (const [surface, content] of Object.entries(surfaces)) {
+      for (const form of FORMS) expect(content, `${surface} holds the secret`).not.toContain(form)
+    }
+  })
+})

@@ -2,7 +2,17 @@ import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { cleanup, render } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
-import { ErrorText, IssueList, RawLog, ToolList, ToolOutput } from "../src/components/untrusted.js"
+import {
+  AuditTable,
+  CallLogTable,
+  DiffView,
+  ErrorText,
+  IssueList,
+  RawLog,
+  SecretTable,
+  ToolList,
+  ToolOutput,
+} from "../src/components/untrusted.js"
 import { ServerList } from "../src/pages/Servers.js"
 
 afterEach(cleanup)
@@ -88,8 +98,81 @@ describe.each(PAYLOADS)("untrusted text is never HTML: %s", (payload) => {
             slug: "s",
             name: payload,
             publishedVersionId: null,
+            logPayloads: false,
             createdAt: 0,
             updatedAt: 0,
+          },
+        ]}
+      />,
+    )
+    expectInert(container, payload)
+  })
+})
+
+describe.each(PAYLOADS)("untrusted text in 4c views is never HTML: %s", (payload) => {
+  it("in version diffs", () => {
+    const { container } = render(
+      <DiffView
+        lines={[
+          { kind: "removed", text: payload },
+          { kind: "added", text: payload },
+        ]}
+      />,
+    )
+    expectInert(container, payload)
+  })
+
+  it("in call logs, including logged arguments and results", () => {
+    const { container } = render(
+      <CallLogTable
+        calls={[
+          {
+            id: 1,
+            at: 0,
+            tool: payload,
+            status: "ok",
+            durationMs: 1,
+            versionId: null,
+            args: payload,
+            result: payload,
+          },
+        ]}
+      />,
+    )
+    expectInert(container, payload)
+  })
+
+  it("in the audit log", () => {
+    const { container } = render(
+      <AuditTable
+        events={[
+          {
+            id: 1,
+            at: 0,
+            actorType: "user",
+            actorId: null,
+            action: payload,
+            targetType: null,
+            targetId: null,
+            ip: null,
+            details: { email: payload },
+          },
+        ]}
+      />,
+    )
+    expect(container.querySelectorAll("img, script, iframe, svg, object, embed")).toHaveLength(0)
+    expect(container.textContent).toContain(payload)
+  })
+
+  it("in secret usage (tool names from a spec)", () => {
+    const { container } = render(
+      <SecretTable
+        secrets={[
+          {
+            name: "API_KEY",
+            allowedHosts: ["api.example.com:443"],
+            updatedAt: 0,
+            usedBy: { version: 1, tools: [payload] },
           },
         ]}
       />,

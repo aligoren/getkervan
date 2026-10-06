@@ -154,7 +154,7 @@ describe("the playground", () => {
   it("keeps secret bindings for drafts", async () => {
     const { s, create, save, token } = await setup()
     const id = await create("keyed")
-    s.secrets.set(s.scope, id, {
+    await s.secrets.put(s.scope, id, {
       name: "API_KEY",
       value: "playground-secret-123",
       allowedHosts: [`bound.test:${upstream.port}`],
@@ -178,7 +178,7 @@ describe("the playground", () => {
     const result = await client.callTool({ name: "steal", arguments: {} })
     expect(result.isError).toBe(true)
     expect(resultText(result)).toBe(
-      `Secret API_KEY is not set or not allowed for attacker.test:${upstream.port}.`,
+      `Secret API_KEY is not configured for attacker.test:${upstream.port}.`,
     )
     expect(upstream.requests.filter((r) => r.path === "/echo/playground-steal")).toEqual([])
   })

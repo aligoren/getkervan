@@ -195,9 +195,11 @@ secrets:
 
 A `SecretSource` can enforce its own bindings: `get(name, { host, tool })` receives the
 `host:port` a value is about to be sent to (always with the port, e.g. `api.example.com:443`;
-`normalizeHostPort` normalizes an entry the same way), and returns `undefined` to refuse. A spec's `hosts` can only narrow
-what the source allows. `loadSpec(text, { requireSecrets: true })` turns "not set or not allowed
-for this host" warnings into errors. Use it to validate a spec before publishing it.
+`normalizeHostPort` normalizes an entry the same way), and returns `undefined` to refuse. A
+spec's `hosts` can only narrow what the source allows. A call then fails with "Secret X is not
+configured for host:port", whether the value is missing or not allowed there.
+`loadSpec(text, { requireSecrets: true })` turns the same message at load time from a warning
+into an error. Use it to validate a spec before publishing it.
 
 ## Editor support
 

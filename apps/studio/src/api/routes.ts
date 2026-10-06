@@ -5,6 +5,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie"
 import { addUser, listUsers, setupAdmin, verifyLogin } from "../accounts.js"
 import { isSecure, type StudioConfig } from "../config.js"
 import { constantTimeEqual, sha256 } from "../crypto.js"
+import { listApiKeys } from "../db/repos/api-keys.js"
 import { listAudit, recordAudit } from "../db/repos/audit.js"
 import { getServer, listServers } from "../db/repos/servers.js"
 import {
@@ -18,6 +19,7 @@ import { anyAdminExists } from "../db/repos/users.js"
 import { getVersion, listVersions } from "../db/repos/versions.js"
 import { defaultWorkspace } from "../db/repos/workspaces.js"
 import { ExportError } from "../export.js"
+import { SecretInputError } from "../secrets.js"
 import { type Studio, StudioError } from "../studio.js"
 import { LoginThrottle } from "./throttle.js"
 
@@ -55,6 +57,17 @@ const setupBody = credentials.extend({ token: z.string().max(200) })
 const newServer = z.object({ slug: z.string().max(64), name: z.string().max(200) })
 const newVersion = z.object({ yaml: z.string() })
 const newUser = credentials.extend({ role: z.enum(["admin", "member"]) })
+const secretBody = z.object({
+  // Omitted when only the hosts change; never sent back.
+  value: z
+    .string()
+    .max(16 * 1024)
+    .optional(),
+  allowedHosts: z.array(z.string().max(300)).max(64),
+})
+const deleteSecretBody = z.object({ confirm: z.boolean().optional() })
+const newKey = z.object({ name: z.string().max(200) })
+const settingsBody = z.object({ logPayloads: z.boolean() })
 
 /**
  * The management API, mounted at `/api`. Authentication is a session cookie (HttpOnly,
@@ -288,6 +301,76 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     return c.json({ ...grant, mcpPath: `/s/${serverId}/mcp` })
   })
 
+  // Secrets: admins only. Values go in, never out.
+  api.get("/servers/:id/secrets", signedIn("admin"), async (c) =>
+    c.json({ secrets: await studio.listSecrets(scopeOf(c), c.req.param("id")) }),
+  )
+
+  api.put("/servers/:id/secrets/:name", signedIn("admin"), async (c) => {
+    const body = await parse(c, secretBody)
+    const secret = await studio.putSecret(
+      scopeOf(c),
+      c.req.param("id"),
+      { name: c.req.param("name"), value: body.value, allowedHosts: body.allowedHosts },
+      actor(c),
+    )
+    return c.json({ secret })
+  })
+
+  api.delete("/servers/:id/secrets/:name", signedIn("admin"), async (c) => {
+    const body = await parse(c, deleteSecretBody)
+    await studio.deleteSecret(
+      scopeOf(c),
+      c.req.param("id"),
+      c.req.param("name"),
+      { confirm: body.confirm === true },
+      actor(c),
+    )
+    return c.json({ ok: true })
+  })
+
+  // API keys: admins only. A new key is in the response once and never again.
+  api.get("/servers/:id/keys", signedIn("admin"), (c) => {
+    const scope = scopeOf(c)
+    const serverId = c.req.param("id")
+    if (!getServer(db, scope, serverId)) throw new StudioError("not_found", "Not found.")
+    return c.json({ keys: listApiKeys(db, scope, serverId) })
+  })
+
+  api.post("/servers/:id/keys", signedIn("admin"), async (c) => {
+    const body = await parse(c, newKey)
+    const created = studio.createApiKey(scopeOf(c), c.req.param("id"), body.name, actor(c))
+    return c.json({ key: created.key, info: created.info }, 201)
+  })
+
+  api.delete("/servers/:id/keys/:keyId", signedIn("admin"), (c) => {
+    const scope = scopeOf(c)
+    const keyId = c.req.param("keyId")
+    const owned = listApiKeys(db, scope, c.req.param("id")).some((key) => key.id === keyId)
+    if (!owned) throw new StudioError("not_found", "Not found.")
+    studio.revokeApiKey(scope, keyId, actor(c))
+    return c.json({ ok: true })
+  })
+
+  api.get("/servers/:id/versions/:from/diff/:to", signedIn(), (c) =>
+    c.json(
+      studio.diffVersions(scopeOf(c), c.req.param("id"), c.req.param("from"), c.req.param("to")),
+    ),
+  )
+
+  api.get("/servers/:id/logs", signedIn(), (c) => {
+    const admin = c.get("session")?.user.role === "admin"
+    return c.json({
+      calls: studio.listCalls(scopeOf(c), c.req.param("id"), { withPayloads: admin }),
+    })
+  })
+
+  api.put("/servers/:id/settings", signedIn("admin"), async (c) => {
+    const body = await parse(c, settingsBody)
+    studio.setLogPayloads(scopeOf(c), c.req.param("id"), body.logPayloads, actor(c))
+    return c.json({ ok: true })
+  })
+
   api.get("/users", signedIn("admin"), (c) => c.json({ users: listUsers(db, scopeOf(c)) }))
 
   api.post("/users", signedIn("admin"), async (c) => {
@@ -304,10 +387,15 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     if (error instanceof StudioError) {
       const status = { not_found: 404, invalid: 400, conflict: 409, forbidden: 403 } as const
       return c.json(
-        { error: error.message, ...(error.issues.length > 0 ? { issues: error.issues } : {}) },
+        {
+          error: error.message,
+          ...(error.issues.length > 0 ? { issues: error.issues } : {}),
+          ...error.details,
+        },
         status[error.code],
       )
     }
+    if (error instanceof SecretInputError) return c.json({ error: error.message }, 400)
     if (error instanceof ExportError) return c.json({ error: error.message }, 400)
     if (error instanceof BadRequest) return c.json({ error: error.message }, 400)
     const ref = crypto.randomUUID().slice(0, 8)

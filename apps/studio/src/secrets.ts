@@ -20,6 +20,24 @@ export interface SecretStore {
   source(scope: WorkspaceScope, serverId: string): SecretSource
 }
 
+/** A create, rotate (new value) or rebind (new hosts) request. `value` is optional when updating. */
+export interface SecretWrite {
+  name: string
+  value?: string | undefined
+  allowedHosts: readonly string[]
+}
+
+/** A store the management API can write to. Writes never return the value. */
+export interface WritableSecretStore extends SecretStore {
+  put(
+    scope: WorkspaceScope,
+    serverId: string,
+    input: SecretWrite,
+    now?: number,
+  ): Promise<{ binding: SecretBinding; created: boolean; rotated: boolean }>
+  remove(scope: WorkspaceScope, serverId: string, name: string): Promise<boolean>
+}
+
 export class SecretInputError extends Error {
   override name = "SecretInputError"
 }
@@ -49,10 +67,14 @@ export function normalizeAllowedHosts(hosts: readonly string[]): string[] {
   return normalized
 }
 
-export function checkSecretInput(name: string, value: string): void {
+export function checkSecretName(name: string): void {
   if (!SECRET_NAME.test(name)) {
     throw new SecretInputError("Secret names are A-Z, 0-9 and _, starting with a letter.")
   }
+}
+
+export function checkSecretInput(name: string, value: string): void {
+  checkSecretName(name)
   if (value.length < SPEC_LIMITS.minSecretLength) {
     throw new SecretInputError(
       `A secret value needs at least ${SPEC_LIMITS.minSecretLength} characters.`,
@@ -86,7 +108,7 @@ export function boundSource(
 }
 
 /** A store kept in memory: for tests and for running Studio without persistence. */
-export class InMemorySecretStore implements SecretStore {
+export class InMemorySecretStore implements WritableSecretStore {
   readonly #entries = new Map<
     string,
     { name: string; value: string; allowedHosts: string[]; updatedAt: number }
@@ -111,6 +133,23 @@ export class InMemorySecretStore implements SecretStore {
 
   delete(scope: WorkspaceScope, serverId: string, name: string): boolean {
     return this.#entries.delete(key(scope, serverId, name))
+  }
+
+  async put(scope: WorkspaceScope, serverId: string, input: SecretWrite, now = Date.now()) {
+    const existing = this.#entries.get(key(scope, serverId, input.name))
+    const value = input.value ?? existing?.value
+    if (value === undefined) throw new SecretInputError("A new secret needs a value.")
+    const binding = this.set(
+      scope,
+      serverId,
+      { name: input.name, value, allowedHosts: input.allowedHosts },
+      now,
+    )
+    return { binding, created: !existing, rotated: Boolean(existing && input.value !== undefined) }
+  }
+
+  async remove(scope: WorkspaceScope, serverId: string, name: string): Promise<boolean> {
+    return this.delete(scope, serverId, name)
   }
 
   async list(scope: WorkspaceScope, serverId: string): Promise<SecretBinding[]> {
