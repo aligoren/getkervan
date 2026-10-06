@@ -1,0 +1,19 @@
+{
+  "name": "kervan-example-dynamic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example Kervan MCP server whose tools change at runtime, plus a multi-tenant HTTP entry.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "start:tenants": "node dist/multi-tenant.js"
+  },
+  "dependencies": {
+    "@kervan/core": "workspace:^",
+    "@kervan/transport": "workspace:^"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1"
+  }
+}

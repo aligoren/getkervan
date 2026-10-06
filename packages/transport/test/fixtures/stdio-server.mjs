@@ -13,5 +13,16 @@ app.tool("add", {
   },
 })
 
+// Registers another tool at runtime, so tests can trigger a list change deterministically.
+app.tool("install_extra", {
+  description: "Registers the 'extra' tool",
+  handler: () => {
+    if (!app.registry.has("extra")) {
+      app.tool("extra", { description: "Added at runtime", handler: () => "extra!" })
+    }
+    return "installed"
+  },
+})
+
 app.logger.info("fixture ready")
 await serve(app)

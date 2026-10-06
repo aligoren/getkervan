@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net"
 import { serve as serveNode } from "@hono/node-server"
 import { getConnInfo } from "@hono/node-server/conninfo"
-import type { App } from "@kervan/core"
+import type { App, ToolRegistry } from "@kervan/core"
 import {
   type StdioServerHandle,
   serveStdio as sdkServeStdio,
@@ -15,11 +15,15 @@ export type { RateLimitOptions } from "./rate-limit.js"
 export interface StdioOptions {
   /** `"serve"` (default) also serves 2025-era clients; `"reject"` serves 2026-07-28 only. */
   legacy?: "serve" | "reject"
+  /** Tool set to serve. Default: the app's registry. Changes are pushed as `list_changed`. */
+  registry?: ToolRegistry
 }
 
 /** Serves the app over stdin/stdout. Logs must go to stderr; Kervan's default logger does. */
 export function serveStdio(app: App, options: StdioOptions = {}): StdioServerHandle {
-  return sdkServeStdio(() => app.createServer(), {
+  // The factory runs once per connection (plus once for a discarded discovery probe); each live
+  // server stops following the registry when the SDK closes it.
+  return sdkServeStdio(() => app.createLiveServer(options.registry).server, {
     ...(options.legacy === undefined ? {} : { legacy: options.legacy }),
     onerror: (error) => app.logger.error("stdio transport error", error),
   })

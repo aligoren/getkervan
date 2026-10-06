@@ -10,7 +10,7 @@ import { serve, serveHttp, serveStdio } from "@kervan/transport/node"
 
 await serve(app) // --http / --stdio flag, else KERVAN_TRANSPORT, else stdio; closes on SIGINT/SIGTERM
 
-serveStdio(app)
+serveStdio(app) // options: { registry, legacy }
 const server = await serveHttp(app, { port: 3000 }) // server.url, server.close()
 ```
 
@@ -43,9 +43,16 @@ export default toFetchHandler(app, { allowedHosts: ["mcp.example.com"] })
 | `responseMode` | `"auto"` | `"json"` drops mid-call notifications; `"sse"` always streams |
 | `legacy` | `"stateless"` | `"reject"` serves 2026-07-28 clients only |
 | `authenticate(request)` | | Return `AuthInfo` (reaches tools as `ctx.auth`), a `Response` to reject, or `undefined` |
+| `resolveServer(request, { auth })` | app's registry | Runs after `authenticate`. Return a `ToolRegistry`, `null` (404) or `FORBIDDEN` (403). Derive the tenant from the verified `auth`; return the same registry object for the same tenant. |
 
 The handler is stateless: a fresh SDK server handles each request, and no sessions are created.
 2025-era session operations (`GET`, `DELETE`) get `405`.
+
+Each registry gets its own SDK handler (`handler.handlerFor(registry)`), so change notifications
+stay within a tenant. Registry changes are pushed to 2026-07-28 clients on their
+`subscriptions/listen` stream. 2025-era HTTP clients cannot be pushed to (there is no stream in
+stateless legacy serving); they see changes on their next `tools/list`. On stdio, both eras get
+pushed notifications.
 
 ## Testing: `@kervan/transport/testing`
 
@@ -58,4 +65,5 @@ await client.close()
 ```
 
 This needs `@modelcontextprotocol/client` as a (dev) dependency. Pass `authInfo` to test tools
-that read `ctx.auth`.
+that read `ctx.auth`, `registry` to serve another tool set, and `client` for SDK client options
+such as `listChanged`. Both eras receive `list_changed`.

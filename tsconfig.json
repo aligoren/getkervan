@@ -1,8 +1,17 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/core" },
-    { "path": "packages/transport" },
-    { "path": "examples/weather" }
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/transport"
+    },
+    {
+      "path": "examples/weather"
+    },
+    {
+      "path": "examples/dynamic"
+    }
   ]
 }

@@ -40,6 +40,22 @@ app.tool("add", {
 | `timeoutMs` | Overrides `limits.toolTimeoutMs` |
 | `handler(input, ctx)` | Returns a string, a `CallToolResult`, or the `output` value |
 
+## Registry
+
+| | |
+| --- | --- |
+| `app.registry` | The app's `MutableToolRegistry` (default `InMemoryToolRegistry`; pass `createApp({ registry })` to use another) |
+| `app.tool` / `app.replaceTool` / `app.removeTool` | Change the tool set at runtime; connected clients get `list_changed` |
+| `ToolRegistry` | The read side transports use: `list()` and `onChange(listener)` |
+| `app.createServer(registry?)` | A fresh SDK server from a snapshot (per HTTP request) |
+| `app.createLiveServer(registry?)` | An SDK server that follows the registry (per stdio or in-memory connection) |
+| `ServerResolver`, `FORBIDDEN` | Types for the transport's `resolveServer` hook |
+
+Custom registries must return the **same entry objects** for unchanged tools: Kervan compares by
+identity to avoid spurious notifications. Registries shared by several instances should fire
+`onChange` on every instance. `InMemoryToolRegistry` coalesces changes made in one tick into a
+single `onChange` call.
+
 ## Tool context
 
 | | |

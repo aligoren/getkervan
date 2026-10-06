@@ -13,6 +13,7 @@ export {
   createApp,
   DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   DEFAULT_TOOL_TIMEOUT_MS,
+  type LiveServer,
   type ToolInfo,
 } from "./app.js"
 export type { ToolContext, ToolLogFn, ToolLogger, ToolLogLevel } from "./context.js"
@@ -24,6 +25,17 @@ export {
   type LogLevel,
   silentLogger,
 } from "./logger.js"
+export {
+  FORBIDDEN,
+  InMemoryToolRegistry,
+  type InMemoryToolRegistryOptions,
+  type MutableToolRegistry,
+  type ResolveResult,
+  type ServerResolver,
+  sameEntries,
+  type ToolEntry,
+  type ToolRegistry,
+} from "./registry.js"
 export {
   type AnyObjectSchema,
   type NoInput,

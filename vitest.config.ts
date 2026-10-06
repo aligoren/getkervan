@@ -8,6 +8,9 @@ export default defineConfig({
       {
         test: { name: "example-weather", root: "examples/weather", include: ["test/**/*.test.ts"] },
       },
+      {
+        test: { name: "example-dynamic", root: "examples/dynamic", include: ["test/**/*.test.ts"] },
+      },
     ],
   },
 })

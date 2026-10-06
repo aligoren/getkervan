@@ -185,6 +185,19 @@ importers:
         specifier: ^5.0.3
         version: 5.0.3(@types/node@24.19.1)(vite@8.3.2(@types/node@24.19.1))
 
+  examples/dynamic:
+    dependencies:
+      '@kervan/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@kervan/transport':
+        specifier: workspace:^
+        version: link:../../packages/transport
+    devDependencies:
+      '@modelcontextprotocol/client':
+        specifier: ^2.3.1
+        version: 2.3.1
+
   examples/weather:
     dependencies:
       '@kervan/core':

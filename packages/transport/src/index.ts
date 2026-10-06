@@ -1,12 +1,12 @@
-import type { App } from "@kervan/core"
+import { type App, FORBIDDEN, type ServerResolver, type ToolRegistry } from "@kervan/core"
 import { createMcpHonoApp } from "@modelcontextprotocol/hono"
-import {
-  type AuthInfo,
-  type CreateMcpHandlerOptions,
-  createMcpHandler,
-  type McpHttpHandler,
+import type {
+  AuthInfo,
+  CreateMcpHandlerOptions,
+  McpHttpHandler,
 } from "@modelcontextprotocol/server"
 import type { Context, Hono } from "hono"
+import { RegistryHandlers } from "./registry-handler.js"
 
 export type { AuthInfo } from "@modelcontextprotocol/server"
 
@@ -37,6 +37,12 @@ export interface FetchHandlerOptions {
   /** `"stateless"` (default) also serves 2025-era clients; `"reject"` serves 2026-07-28 only. */
   legacy?: CreateMcpHandlerOptions["legacy"]
   authenticate?: Authenticate
+  /**
+   * Picks the tool registry for each request, after `authenticate`. Default: the app's registry.
+   * Derive the tenant from the verified `auth`, and return the same registry object for the same
+   * tenant. `null`/`undefined` → 404, `FORBIDDEN` → 403; both with fixed messages.
+   */
+  resolveServer?: ServerResolver
 }
 
 export interface KervanHttpHandler {
@@ -44,9 +50,11 @@ export interface KervanHttpHandler {
   fetch: (request: Request, env?: unknown, executionCtx?: unknown) => Response | Promise<Response>
   /** The underlying Hono app, for mounting extra routes or middleware. */
   hono: Hono
-  /** The underlying SDK handler (change notifications, event bus). */
-  mcp: McpHttpHandler
-  /** Aborts in-flight requests and open subscription streams. */
+  /** The SDK handler serving the app's own registry. */
+  readonly mcp: McpHttpHandler
+  /** The SDK handler serving `registry` (created on first use). */
+  handlerFor(registry: ToolRegistry): McpHttpHandler
+  /** Aborts in-flight requests and open subscription streams of every registry. */
   close(): Promise<void>
 }
 
@@ -57,13 +65,12 @@ export interface KervanHttpHandler {
  */
 export function toFetchHandler(app: App, options: FetchHandlerOptions = {}): KervanHttpHandler {
   const path = options.path ?? "/mcp"
-  const mcp = createMcpHandler(() => app.createServer(), {
+  const handlers = new RegistryHandlers(app, {
     ...(options.legacy === undefined ? {} : { legacy: options.legacy }),
     ...(options.responseMode === undefined ? {} : { responseMode: options.responseMode }),
     ...(options.maxRequestBodySize === undefined
       ? {}
       : { maxRequestBodySize: options.maxRequestBodySize }),
-    onerror: (error) => app.logger.debug("MCP HTTP handler reported an error", error),
   })
 
   const hono = createMcpHonoApp({
@@ -83,7 +90,22 @@ export function toFetchHandler(app: App, options: FetchHandlerOptions = {}): Ker
       if (outcome instanceof Response) return outcome
       authInfo = outcome
     }
-    return mcp.fetch(c.req.raw, {
+
+    let registry: ToolRegistry = app.registry
+    if (options.resolveServer) {
+      // Runs after authentication. Error bodies are fixed strings: they never echo the tenant.
+      const resolved = await options.resolveServer(c.req.raw, { auth: authInfo })
+      if (resolved === FORBIDDEN) return jsonRpcError(c, 403, "Forbidden")
+      if (resolved === null || resolved === undefined) return jsonRpcError(c, 404, "Not found")
+      if (!isToolRegistry(resolved)) {
+        throw new TypeError(
+          "resolveServer must return a ToolRegistry, FORBIDDEN, null or undefined",
+        )
+      }
+      registry = resolved
+    }
+
+    return handlers.get(registry).fetch(c.req.raw, {
       ...(parsedBody === undefined ? {} : { parsedBody }),
       ...(authInfo === undefined ? {} : { authInfo }),
     })
@@ -92,21 +114,26 @@ export function toFetchHandler(app: App, options: FetchHandlerOptions = {}): Ker
   hono.onError((error, c) => {
     const ref = crypto.randomUUID().slice(0, 8)
     app.logger.error(`HTTP request failed (ref: ${ref})`, error)
-    return c.json(
-      {
-        jsonrpc: "2.0",
-        error: { code: -32603, message: `Internal error (ref: ${ref})` },
-        id: null,
-      },
-      500,
-    )
+    return jsonRpcError(c, 500, `Internal error (ref: ${ref})`, -32603)
   })
 
   return {
     fetch: (request, env, executionCtx) =>
       hono.fetch(request, env, executionCtx as Parameters<Hono["fetch"]>[2]),
     hono,
-    mcp,
-    close: () => mcp.close(),
+    get mcp() {
+      return handlers.get(app.registry)
+    },
+    handlerFor: (registry) => handlers.get(registry),
+    close: () => handlers.closeAll(),
   }
+}
+
+function jsonRpcError(c: Context, status: 403 | 404 | 500, message: string, code = -32000) {
+  return c.json({ jsonrpc: "2.0", error: { code, message }, id: null }, status)
+}
+
+function isToolRegistry(value: unknown): value is ToolRegistry {
+  const candidate = value as Partial<ToolRegistry> | null
+  return typeof candidate?.list === "function" && typeof candidate.onChange === "function"
 }

@@ -37,9 +37,26 @@ describe.each(["legacy", "modern"] as const)("stdio (%s era)", (era) => {
     const { client, errors } = await spawnClient(era)
     expect(client.getProtocolEra()).toBe(era)
     const { tools } = await client.listTools()
-    expect(tools.map((tool) => tool.name)).toEqual(["add"])
+    expect(tools.map((tool) => tool.name)).toEqual(["add", "install_extra"])
     const result = await client.callTool({ name: "add", arguments: { a: 2, b: 3 } })
     expect(result.content).toEqual([{ type: "text", text: "5" }])
+    expect(errors).toEqual([])
+  })
+
+  it("pushes list_changed when the server adds a tool at runtime", async () => {
+    const { client, errors } = await spawnClient(era)
+    let notified = 0
+    client.setNotificationHandler("notifications/tools/list_changed", () => {
+      notified++
+    })
+    if (era === "modern") await client.listen({ toolsListChanged: true })
+
+    await client.callTool({ name: "install_extra", arguments: {} })
+    await expect.poll(() => notified).toBe(1)
+    const { tools } = await client.listTools()
+    expect(tools.map((tool) => tool.name)).toEqual(["add", "install_extra", "extra"])
+    const result = await client.callTool({ name: "extra", arguments: {} })
+    expect(result.content).toEqual([{ type: "text", text: "extra!" }])
     expect(errors).toEqual([])
   })
 

@@ -35,6 +35,7 @@ await serve(app) // stdio by default; `--http` for Streamable HTTP
 | [`@kervan/core`](packages/core) | `createApp`, `app.tool`, the tool context (`ctx.signal`, `ctx.progress`, `ctx.log`, `ctx.auth`), error mapping. No transport, database or UI code. |
 | [`@kervan/transport`](packages/transport) | `toFetchHandler` (web-standard), `serveStdio` / `serveHttp` / `serve` (Node), and `createTestClient` for tests. |
 | [`examples/weather`](examples/weather) | A runnable example server with tests. |
+| [`examples/dynamic`](examples/dynamic) | Tools that change at runtime, and a multi-tenant HTTP server. |
 
 ## Tools
 
@@ -57,6 +58,65 @@ await serve(app) // stdio by default; `--http` for Streamable HTTP
 Unexpected error messages are never sent to the client, so connection strings, tokens or stack
 traces cannot leak into the model's context.
 
+## Changing tools at runtime
+
+Tools live in a registry (`app.registry`, an `InMemoryToolRegistry` by default) and can change
+while the server runs:
+
+```ts
+app.tool("report", { description: "...", handler: () => "v1" })
+app.replaceTool("report", { description: "...", handler: () => "v2" }) // keeps its position
+app.removeTool("report")
+```
+
+Connected clients are told with `notifications/tools/list_changed`:
+
+| Connection | How the change reaches the client |
+| --- | --- |
+| stdio, any protocol era | pushed on the connection |
+| HTTP, 2026-07-28 clients | pushed on the client's `subscriptions/listen` stream |
+| HTTP, 2025-era clients | **not pushed**: legacy HTTP is served statelessly, so there is no stream to push on. The client sees the new list on its next `tools/list`. |
+
+Several changes made in the same tick produce one notification, and the list order is always the
+registry order (`replaceTool` keeps a tool's position, new tools go last).
+
+### Bring your own registry
+
+Transports only need the read side, `ToolRegistry`: `list()` and `onChange(listener)`. You can back
+it with a database, a config service or anything else; Kervan's core contains no such
+implementation. Two rules keep notifications correct:
+
+- **Stable identity.** `list()` must return the *same entry objects* for tools that did not change.
+  Kervan compares entries by identity: a change event whose list is identical sends nothing.
+- **Shared registries notify everywhere.** If several server instances share a registry, fire
+  `onChange` on every instance when any of them changes it (for example through your database's
+  pub/sub). Each instance then notifies its own connected clients. This is Kervan's multi-instance
+  contract; there is no separate event bus to configure.
+
+### Multi-tenant servers: `resolveServer`
+
+```ts
+await serveHttp(app, {
+  authenticate: verifyApiKey, // returns AuthInfo with the tenant in a claim, or a 401 Response
+  resolveServer: (_request, { auth }) => registries.get(auth?.extra?.tenant) ?? null,
+})
+```
+
+`resolveServer` runs after `authenticate` and picks the registry that serves the request.
+`null`/`undefined` answers 404 and `FORBIDDEN` answers 403, both with fixed messages that never
+name the tenant. If you do not want to reveal whether a tenant exists, return `null` in both cases.
+Each registry gets its own SDK handler and event bus, so one tenant's changes never notify another
+tenant's clients.
+
+> **Security.** Derive the tenant from the *verified* credential (`auth`), such as a claim in a
+> validated token or the account an API key belongs to. A tenant id taken only from a header,
+> path or hostname the client controls is not proof of anything; use it only after checking it
+> against `auth`.
+
+Return the **same registry object** for the same tenant. Kervan keeps one handler per registry
+(weakly, so it is released together with the registry); a new object per request would create a
+new handler each time and break change notifications.
+
 ## Testing
 
 ```ts
@@ -66,7 +126,8 @@ const client = await createTestClient(app) // official SDK Client, no port, no p
 const result = await client.callTool({ name: "get_weather", arguments: { city: "Istanbul" } })
 ```
 
-`createTestClient(app, { era: "legacy" })` speaks the 2025 handshake instead.
+`createTestClient(app, { era: "legacy" })` speaks the 2025 handshake instead. Both eras receive
+`list_changed`, so you can test runtime changes too (pass `client: { listChanged: ... }`).
 
 ## Deploying
 
@@ -118,10 +179,10 @@ As of October 2026 there are several good TypeScript MCP server frameworks (for 
 mcp-use, FastMCP for TypeScript and mcp-framework), and edge/fetch support is common among them.
 Kervan's focus is different:
 
-- **Runtime tool registry** (planned for 0.2): add, replace and remove tools while the server runs,
-  with `list_changed` sent automatically on stdio and HTTP.
-- **Per-request server resolution** (planned for 0.2): a `resolveServer(request)` hook for
-  multi-tenant servers, with the tenant logic living outside the core.
+- **Runtime tool registry**: add, replace and remove tools while the server runs, with
+  `list_changed` sent automatically on stdio and HTTP, and a small interface for your own storage.
+- **Per-request server resolution**: a `resolveServer` hook for multi-tenant servers, with
+  per-tenant notification isolation and the tenant logic living outside the core.
 - **Declarative specs** (planned): a `kervan.yaml` file that turns HTTP APIs into tools. Every
   feature of the spec format is also available in the code API. We are not aware of another
   TypeScript framework built around this, but the ecosystem moves quickly.
@@ -130,9 +191,9 @@ Kervan's focus is different:
 
 ## Roadmap
 
-1. **Core and transports** (this release): `app.tool`, validation, stdio and Streamable HTTP, a test
-   client.
-2. Dynamic registry, `resolveServer`, middleware, and a CLI (`kervan create`, `kervan dev`).
+1. **Core and transports**: `app.tool`, validation, stdio and Streamable HTTP, a test client.
+2. **In progress**: dynamic registry and `resolveServer` (done), middleware, and a CLI
+   (`kervan create`, `kervan dev`).
 3. Spec runtime (`kervan.yaml`, HTTP executor, secrets, output mapping) and `kervan run <spec>`.
 4. Kervan Studio.
 
