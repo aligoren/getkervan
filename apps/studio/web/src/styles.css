@@ -15,6 +15,11 @@ body {
   margin: 0;
 }
 
+/* `display: grid` below would otherwise override the hidden attribute. */
+.columns[hidden] {
+  display: none;
+}
+
 .app nav {
   display: flex;
   gap: 1rem;

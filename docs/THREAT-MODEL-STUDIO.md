@@ -5,11 +5,10 @@ them, and MCP clients use them through Studio's gateway at `/s/{serverId}/mcp`. 
 lists who interacts with Studio, what must be protected, the attacks we design against, and how
 each one is mitigated and tested.
 
-Status legend:
-- **Implemented:** **4a** (gateway, data model, framework extensions) and **4b** (management API,
-  web UI, playground).
-- **Planned:** **4c** (encrypted vault, version history, API key management, logs). It is listed
-  so the design is reviewed as a whole.
+Status: all three parts are implemented:
+- **4a:** gateway, data model and framework extensions;
+- **4b:** management API, web UI and playground;
+- **4c:** encrypted vault, version history, API key management and call logs.
 
 ## Deployment model
 
@@ -255,23 +254,56 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Spec tools keep the runtime limits: timeouts, response sizes, per-tool rate limits and the DNS
   lookup cap.
 
-### T13: Repudiation (4a; more events in 4b/4c)
+### T13: Repudiation (4a–4c)
 
-- The audit log is append-only (database triggers refuse `UPDATE` and `DELETE`).
+- The audit log is append-only (database triggers refuse `UPDATE` and `DELETE`). Admins can read
+  it in the UI.
 - Events recorded:
-  - server create and delete;
-  - publish (including rollback), with the version and the previous version;
-  - API key create and revoke;
-  - password resets.
-- Login, logout and secret changes are added in 4b/4c.
-- Details hold names, ids and counts, never values.
+  - setup, login success and failure (with the client IP), logout;
+  - users created, password resets;
+  - servers created and deleted, and the server's call-log setting;
+  - publish and rollback, with the version and the previous version;
+  - secrets created, rotated, rebound and deleted (with the tools that used a deleted one);
+  - API keys created and revoked.
+- Details hold names, ids, hosts and counts, never values, keys or passwords.
+
+### T15: Call logs (4c)
+
+- Every gateway call is logged with tool, status, duration and version: published, or the
+  playground's draft.
+- Arguments and results are logged only when an admin turns it on for a server. Even then, they
+  are redacted with that server's vault and cut to 4 KiB. A secret a client sends as an argument
+  is redacted too, once the server has used it.
+- Members see call metadata only; payloads are for admins.
+- Logs are deleted after `KERVAN_STUDIO_LOG_RETENTION_DAYS` (30 by default), at startup and then
+  hourly.
+
+### T16: Secret lifecycle (4c)
+
+- **Admin-only and write-only.** Only admins create, rotate, rebind and delete secrets. The API
+  never returns a value; listings show names, hosts, the update time and which tools of the
+  published version use the secret.
+- **Changes apply at the next call.**
+  - Rotation: the old value stays redacted wherever the server saw it.
+  - A narrowed binding: the call is refused before anything is sent.
+- **Deleting a secret the published version uses** is refused with the list of tools that use
+  it, unless confirmed. Afterwards those tools fail with "Secret X is not configured for
+  host:port", and nothing is sent.
 
 ### T14: Master key and data at rest (4c; file permissions 4a)
 
-- Secrets are encrypted with AES-256-GCM using a key from `KERVAN_STUDIO_MASTER_KEY` (or a
-  `KeyProvider`). Studio refuses to start without one. The workspace, server and secret ids are
-  bound as associated data, so a ciphertext cannot be moved to another row. A key version
-  allows rotation.
+- Secrets are encrypted with AES-256-GCM, a fresh 96-bit IV per write, under a key from
+  `KERVAN_STUDIO_MASTER_KEY` (base64 of 32 bytes, or a `KeyProvider`).
+- Each row binds its workspace, server and secret name as associated data. A ciphertext copied
+  to another row fails authentication (tested).
+- Studio refuses to start in two cases (both tested):
+  - without a master key: it prints how to make one;
+  - when any stored secret does not decrypt with the configured keys.
+- **Rotation:** the new key becomes `KERVAN_STUDIO_MASTER_KEY` (`2:...`), and the old one moves to
+  `KERVAN_STUDIO_PREVIOUS_MASTER_KEYS` (`1:...`). On the next start, Studio re-encrypts every row
+  under the new key; after that the old key can be removed.
+- The master key never goes into the database. Back it up separately: a database backup alone
+  does not reveal secrets, and cannot restore them either.
 - The database:
   - POSIX: the data directory is 0700 and the database files 0600 (also tightened on an
     existing database).
@@ -295,8 +327,8 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - **When `KERVAN_STUDIO_TRUST_PROXY` is on, Studio must be reachable only through the
   proxy.** Bind Studio to loopback or a private interface that only the proxy can reach, and
   block its port from everywhere else. Otherwise a client that connects to Studio directly can
-  write any client IP into `X-Forwarded-For`. That defeats the per-IP limit, puts false addresses
-  in the audit log, and will affect login throttling in 4b.
+  write any client IP into `X-Forwarded-For`. That defeats the per-IP limit and the login
+  throttle, and puts false addresses in the audit log.
 - The proxy must pass the original `Host` header, because Studio accepts only the public URL's
   host name.
 

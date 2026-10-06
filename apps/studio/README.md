@@ -5,12 +5,10 @@ MCP clients through one gateway. Studio is optional: it is built only on the pub
 `@kervan/core`, `@kervan/transport` and `@kervan/spec-runtime`. Every server can be exported as a
 `kervan.yaml` that runs with `kervan run`.
 
-> **Status: in development, not published.** What exists so far:
-> - phase 4a: data model, gateway and the framework extensions Studio needs;
-> - phase 4b: management API, web UI with the spec editor, and the playground.
->
-> Next is phase 4c: encrypted secret vault, version history and API key management. Until then,
-> secrets are kept in memory and API keys have no UI.
+> **Status: in development, not published.** Phases 4a, 4b and 4c are done:
+> - gateway and data model;
+> - management API, web UI, spec editor and playground;
+> - encrypted secret vault, version history and rollback, API keys and call logs.
 
 The security design is in [docs/THREAT-MODEL-STUDIO.md](../../docs/THREAT-MODEL-STUDIO.md).
 
@@ -18,8 +16,13 @@ The security design is in [docs/THREAT-MODEL-STUDIO.md](../../docs/THREAT-MODEL-
 
 ```sh
 pnpm build
-node apps/studio/bin/kervan-studio.js start
+# Once: create a master key and keep it somewhere safe (a password manager, a secret store).
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+KERVAN_STUDIO_MASTER_KEY=<that key> node apps/studio/bin/kervan-studio.js start
 ```
+
+Studio encrypts secrets with the master key and does not start without it. A lost master key
+means the stored secrets are lost; set them again in the UI.
 
 `pnpm build` also builds the web UI (`apps/studio/dist-web`). Then open the URL Studio prints.
 
@@ -42,8 +45,17 @@ On first start, Studio:
 - **Playground:** connects a real MCP client to the gateway with a 15-minute token for the
   selected version (drafts too). It lists and calls tools, and shows the raw requests and
   responses. Everything a tool or upstream returns is shown as text.
-- **Roles:** members edit, publish and use the playground. Admins also manage users, delete
-  servers and read the audit log.
+- **Versions:** compare any two versions line by line. Publish an older one to roll back:
+  connected clients get `list_changed`, and the audit log records a rollback.
+- **Secrets (admins):** values are encrypted and write-only. Each secret has allowed hosts
+  (`host` or `host:port`). Before a secret the published version uses can be deleted, Studio
+  lists the tools that use it and asks for confirmation.
+- **API keys (admins):** a key is shown once when created; the list shows its prefix and last
+  use. Revoking takes effect at once.
+- **Calls:** tool, status and duration of recent calls. Admins can also log arguments and
+  results (redacted, cut to 4 KiB).
+- **Roles:** members edit, publish, use the playground and see call metadata. Admins also
+  manage users, secrets and keys, delete servers, and read payloads and the audit log.
 
 For UI development, run Studio, then `pnpm --filter @kervan/studio dev:web`. Vite serves the UI
 and forwards `/api` and `/s` to Studio on port 4310.
@@ -73,6 +85,9 @@ claude mcp add --transport http weather https://studio.example.com/s/<serverId>/
 | `KERVAN_STUDIO_DATA_DIR` | `./.kervan-studio` | Holds `studio.db`. |
 | `KERVAN_STUDIO_TRUST_PROXY` | `0` | Number of reverse proxies that append to `X-Forwarded-For`. **Only set it when Studio is reachable through the proxy alone** (see below). |
 | `KERVAN_STUDIO_DENY_NETWORK` | | Comma-separated addresses or CIDR ranges spec tools may never reach (your internal services). |
+| `KERVAN_STUDIO_MASTER_KEY` | (required) | `[version:]base64` of 32 random bytes; encrypts stored secrets. |
+| `KERVAN_STUDIO_PREVIOUS_MASTER_KEYS` | | `version:base64,...`: older keys while rotating. Studio re-encrypts with the current key on start. |
+| `KERVAN_STUDIO_LOG_RETENTION_DAYS` | `30` | How long call logs are kept. |
 
 There is deliberately no setting that lets spec tools reach private or loopback addresses.
 
@@ -128,6 +143,8 @@ and `studio.db-shm` next to it.
 
 ## Known limits
 
+- **Master key in an environment variable.** A `KeyProvider` (KMS, HSM) can be plugged in from
+  code, but the CLI reads the environment only.
 - **API keys, not OAuth.** The gateway authenticates with per-server API keys. OAuth 2.1 with
   protected resource metadata, as the MCP authorization spec describes, is future work.
 - **One process.** Rate limits and the gateway's registries are in memory, so Studio does not
