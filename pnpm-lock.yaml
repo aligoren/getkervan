@@ -198,6 +198,12 @@ importers:
         specifier: ^2.3.1
         version: 2.3.1
 
+  examples/spec:
+    devDependencies:
+      kervan:
+        specifier: workspace:^
+        version: link:../../packages/cli
+
   examples/weather:
     dependencies:
       '@kervan/core':
@@ -216,6 +222,9 @@ importers:
       '@kervan/core':
         specifier: workspace:^
         version: link:../core
+      '@kervan/spec-runtime':
+        specifier: workspace:^
+        version: link:../spec-runtime
       '@kervan/transport':
         specifier: workspace:^
         version: link:../transport
@@ -250,6 +259,9 @@ importers:
       '@kervan/core':
         specifier: workspace:^
         version: link:../core
+      ipaddr.js:
+        specifier: ^2.5.0
+        version: 2.5.0
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -799,6 +811,10 @@ packages:
   hono@4.13.13:
     resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
     engines: {node: '>=16.9.0'}
+
+  ipaddr.js@2.5.0:
+    resolution: {integrity: sha512-aq+t5NAc+cS6rZQQVWC2x98CPqGtKKTMDd4Gaodv0wShnItdKg/51djkGJ1hqH+Oy0ivDftCbSLCQob8zso01w==}
+    engines: {node: '>= 10'}
 
   is-fullwidth-code-point@3.0.0:
     resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==}
@@ -1524,6 +1540,8 @@ snapshots:
   highlight.js@10.7.3: {}
 
   hono@4.13.13: {}
+
+  ipaddr.js@2.5.0: {}
 
   is-fullwidth-code-point@3.0.0: {}
 

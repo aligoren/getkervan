@@ -2,6 +2,7 @@ import { parseArgs } from "node:util"
 import { CreateError, cliVersion, createProject, type PackageManager } from "./create.js"
 import { defaultDevOptions, runDev } from "./dev/index.js"
 import { currentRuntime, type RuntimeInfo, typeStrippingProblem } from "./node-version.js"
+import { runSpec } from "./run.js"
 
 export {
   CreateError,
@@ -25,13 +26,23 @@ Commands:
     --name <name>        Package name (default: the directory name)
     --pm <manager>       npm, pnpm, yarn or bun (default: the one running this command, else npm)
     --no-install         Skip installing dependencies
-  dev <entry>    Run a server with hot reload
+  dev <entry>    Run a server (a .ts/.js entry or a kervan.yaml spec) with hot reload
     --http               Serve on http://127.0.0.1:<port>/mcp with a REPL (default in a terminal)
     --stdio              Serve on stdin/stdout (default when started by an MCP client)
     --port <port>        HTTP port (default 3000)
     --drain-timeout <ms> How long a reload waits for running calls (default 10000)
     --repl / --no-repl   Force the terminal inspector on or off
     --no-watch           Do not restart on file changes
+    --env-file <path>    Load environment variables (repeatable; set variables win)
+    --allow-private-network  Specs only: let tools reach private and loopback addresses
+  run <spec>     Serve a kervan.yaml spec
+    --http               Serve Streamable HTTP instead of stdio
+    --port <port>        HTTP port (default 3000)
+    --host <host>        HTTP bind address (default 127.0.0.1)
+    --allowed-host <h>   Host name clients use (repeatable; required off localhost)
+    --env-file <path>    Load environment variables (repeatable; set variables win)
+    --watch              Reload the spec when it changes
+    --allow-private-network  Let tools reach private addresses (refused in production)
 
 Options:
   -h, --help     Show this help
@@ -63,6 +74,7 @@ export async function run(argv: string[], io: RunIo = defaultIo): Promise<number
   }
   try {
     if (command === "dev") return await runDevCommand(rest, io)
+    if (command === "run") return await runSpecCommand(rest)
     if (command === "create") {
       // Checked before parsing, so old Node.js versions get this message, not a parse error.
       const problem = typeStrippingProblem(io.runtime ?? currentRuntime())
@@ -93,6 +105,8 @@ async function runDevCommand(argv: string[], io: RunIo): Promise<number> {
     "drain-timeout": { type: "string" },
     repl: { type: "boolean" },
     watch: { type: "boolean", default: true },
+    "env-file": { type: "string", multiple: true },
+    "allow-private-network": { type: "boolean" },
   })
   const [entry] = positionals
   if (!entry || positionals.length > 1) {
@@ -110,8 +124,41 @@ async function runDevCommand(argv: string[], io: RunIo): Promise<number> {
     "--drain-timeout",
     options.drainTimeoutMs,
   )
+  options.envFiles = (values["env-file"] as string[] | undefined) ?? []
+  options.allowPrivateNetwork = values["allow-private-network"] === true
   if (io.runtime) options.runtime = io.runtime
   return runDev(options)
+}
+
+async function runSpecCommand(argv: string[]): Promise<number> {
+  const { values, positionals } = parseUsage(argv, {
+    http: { type: "boolean" },
+    port: { type: "string" },
+    host: { type: "string" },
+    "allowed-host": { type: "string", multiple: true },
+    "env-file": { type: "string", multiple: true },
+    watch: { type: "boolean" },
+    "allow-private-network": { type: "boolean" },
+  })
+  const [spec] = positionals
+  if (!spec || positionals.length > 1) {
+    throw new UsageError("Usage: kervan run <spec> [--http] [--port <port>] [--watch]")
+  }
+  return runSpec({
+    spec,
+    mode: values.http ? "http" : "stdio",
+    port: parseNumber(values.port, "--port", 3000, true),
+    host: (values.host as string | undefined) ?? "127.0.0.1",
+    allowedHosts: (values["allowed-host"] as string[] | undefined) ?? [],
+    envFiles: (values["env-file"] as string[] | undefined) ?? [],
+    watch: values.watch === true,
+    allowPrivateNetwork: values["allow-private-network"] === true,
+    cwd: process.cwd(),
+    env: process.env,
+    stdin: process.stdin,
+    stdout: process.stdout,
+    stderr: process.stderr,
+  })
 }
 
 function parseNumber(raw: unknown, flag: string, fallback: number, allowZero = false): number {
@@ -159,7 +206,10 @@ async function runCreate(argv: string[], io: RunIo): Promise<number> {
   return 0
 }
 
-type Spec = Record<string, { type: "string" | "boolean"; default?: string | boolean }>
+type Spec = Record<
+  string,
+  { type: "string" | "boolean"; default?: string | boolean; multiple?: boolean }
+>
 
 function parseUsage(argv: string[], options: Spec) {
   try {

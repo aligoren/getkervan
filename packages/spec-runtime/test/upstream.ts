@@ -60,6 +60,15 @@ export async function startUpstream(): Promise<Upstream> {
       case "redirect":
         res.writeHead(302, { location: "/echo/redirected" })
         return res.end()
+      case "redirect-to": {
+        // /redirect-to?to=<location>&status=<3xx>; no "to" means no Location header.
+        const to = url.searchParams.get("to")
+        res.writeHead(
+          Number(url.searchParams.get("status") ?? 302),
+          to === null ? {} : { location: to },
+        )
+        return res.end()
+      }
       case "slow":
         setTimeout(() => json(200, { slow: true }), 2_000).unref()
         return

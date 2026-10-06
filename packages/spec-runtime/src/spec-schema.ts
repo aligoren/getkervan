@@ -9,6 +9,7 @@ export const SPEC_LIMITS = {
   maxTimeoutMs: 120_000,
   maxResponseBytes: 50 * 1024 * 1024,
   maxOutputChars: 1_000_000,
+  maxRedirects: 5,
 } as const
 
 export const HTTP_DEFAULTS = {
@@ -16,6 +17,8 @@ export const HTTP_DEFAULTS = {
   maxResponseBytes: 1024 * 1024,
   maxOutputChars: 20_000,
   allowInsecureHttp: false,
+  followRedirects: 0,
+  rateLimit: { perMinute: 60, concurrency: 10 },
 } as const
 
 const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/
@@ -47,6 +50,18 @@ const jsonSchemaObject = z
 
 const scalar = z.union([z.string(), z.number(), z.boolean()])
 
+const followRedirects = z.number().int().min(0).max(SPEC_LIMITS.maxRedirects).meta({
+  description:
+    "How many redirects to follow (default 0). Each hop is checked again; secret headers are dropped when the host changes.",
+})
+
+const rateLimit = z
+  .strictObject({
+    perMinute: z.number().int().min(1).max(100_000).optional(),
+    concurrency: z.number().int().min(1).max(1_000).optional(),
+  })
+  .meta({ description: "Per-tool limits on outgoing calls (defaults: 60 per minute, 10 at once)." })
+
 const httpDefaults = z
   .strictObject({
     timeoutMs: timeoutMs.optional(),
@@ -55,6 +70,7 @@ const httpDefaults = z
     allowInsecureHttp: z.boolean().optional().meta({
       description: "Allow plain http:// URLs. Off by default: secrets would travel unencrypted.",
     }),
+    followRedirects: followRedirects.optional(),
   })
   .meta({ description: "Defaults for every tool's HTTP request." })
 
@@ -80,6 +96,7 @@ const httpRequest = z
     timeoutMs: timeoutMs.optional(),
     maxResponseBytes: maxResponseBytes.optional(),
     allowInsecureHttp: z.boolean().optional(),
+    followRedirects: followRedirects.optional(),
   })
   .meta({ description: "The HTTP request this tool makes." })
 
@@ -122,6 +139,7 @@ export const specToolSchema = z.strictObject({
     .optional()
     .meta({ description: "JSON Schema of the arguments; must have `type: object`." }),
   annotations: annotations.optional(),
+  rateLimit: rateLimit.optional(),
   http: httpRequest,
   output: z.union([selectOutput, rawOutput]).meta({
     description: "How the response becomes the tool result: `select` (JMESPath) or `raw: true`.",
@@ -139,7 +157,9 @@ export const specSchema = z
       description:
         "Secret names this spec may use as {{secrets.NAME}}. Only declared names are resolved.",
     }),
-    defaults: z.strictObject({ http: httpDefaults.optional() }).optional(),
+    defaults: z
+      .strictObject({ http: httpDefaults.optional(), rateLimit: rateLimit.optional() })
+      .optional(),
     tools: z.array(specToolSchema).min(1).max(SPEC_LIMITS.maxTools),
   })
   .meta({

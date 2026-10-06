@@ -26,10 +26,36 @@ the `.ts` extension, and the `tsconfig.json` enables `rewriteRelativeImportExten
 emits `.js` imports) and `erasableSyntaxOnly` (no enums or namespaces, which type stripping
 cannot run).
 
+## `kervan run <spec>`
+
+Serves a `kervan.yaml` spec (see [`@kervan/spec-runtime`](../spec-runtime)).
+
+```sh
+kervan run kervan.yaml                                   # stdio
+kervan run kervan.yaml --http --port 8080                # http://127.0.0.1:8080/mcp
+kervan run kervan.yaml --http --host 0.0.0.0 --allowed-host mcp.example.com
+kervan run kervan.yaml --env-file .env --watch
+```
+
+| Option | |
+| --- | --- |
+| `--http` | Streamable HTTP instead of stdio |
+| `--port`, `--host` | Default `3000` and `127.0.0.1` |
+| `--allowed-host <name>` | Host names clients use (repeatable). Required when `--host` is not localhost. |
+| `--env-file <path>` | Variables for `{{secrets.X}}` (repeatable). Variables already set win. |
+| `--watch` | Reload the spec when it changes; an invalid edit keeps the last good version. |
+| `--allow-private-network` | Let tools reach internal addresses. Development only; refused with `NODE_ENV=production`. |
+
+An invalid spec stops `run` with the file, line and column of every problem. Secret values never
+appear in the output. Note: Node.js itself checks `--env-file` arguments, even after the script
+name, and exits with `<file>: not found` (code 9) when the file is missing.
+
 ## `kervan dev <entry>`
 
 Runs your server with hot reload. Your code runs in a child process; `kervan dev` is a stable
-MCP server in front of it that clients stay connected to.
+MCP server in front of it that clients stay connected to. Given a `.yaml`/`.yml` spec instead,
+it reloads the spec in its own process (`--env-file` and `--allow-private-network` work as for
+`run`).
 
 ```sh
 kervan dev src/index.ts            # in a terminal: HTTP on 127.0.0.1:3000 plus a REPL

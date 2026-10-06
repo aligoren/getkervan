@@ -1,9 +1,9 @@
 import { request as httpRequest, type IncomingMessage } from "node:http"
 import { request as httpsRequest } from "node:https"
-import type { LookupFunction } from "node:net"
 import type { Transform } from "node:stream"
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib"
 import { ToolError } from "@kervan/core"
+import { isPinnedAddress, type ResolvedTarget } from "./network.js"
 
 export interface HttpCall {
   method: string
@@ -19,8 +19,8 @@ export interface HttpLimits {
 
 export interface HttpOptions extends HttpLimits {
   signal?: AbortSignal
-  /** DNS lookup used to connect (the SSRF layer pins validated addresses through this). */
-  lookup?: LookupFunction
+  /** The checked addresses to connect to (required: there is no unchecked path). */
+  target: ResolvedTarget
 }
 
 export interface HttpResponse {
@@ -28,15 +28,21 @@ export interface HttpResponse {
   statusText: string
   contentType: string
   body: Buffer
+  /** For 3xx responses: the Location header (the body is not read). */
+  location?: string
 }
 
 /**
- * Makes one request. Redirects are never followed; bodies are counted while streaming and after
- * decompression, so neither a large response nor a compression bomb gets past `maxResponseBytes`.
- * Error messages name only the host: never the path, query or body, which may hold secrets.
+ * Makes one request to an already checked target. Redirects are returned, not followed (the caller
+ * re-checks each hop). Bodies are counted while streaming and after decompression, so neither a
+ * large response nor a compression bomb gets past `maxResponseBytes`. Error messages name only
+ * the host: never the path, query or body, which may hold secrets.
  */
 export function sendHttp(call: HttpCall, options: HttpOptions): Promise<HttpResponse> {
   const host = call.url.host
+  if (options.target.hostname !== call.url.hostname) {
+    return Promise.reject(new ToolError(`Request to ${host} was blocked: it was not checked.`))
+  }
   const timeout = AbortSignal.timeout(options.timeoutMs)
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
   const send = call.url.protocol === "https:" ? httpsRequest : httpRequest
@@ -65,17 +71,32 @@ export function sendHttp(call: HttpCall, options: HttpOptions): Promise<HttpResp
             : { "content-length": String(Buffer.byteLength(call.body)) }),
         },
         signal,
-        ...(options.lookup ? { lookup: options.lookup } : {}),
+        // Connect only to the checked addresses, on a fresh connection (no pooled sockets).
+        lookup: options.target.lookup,
+        agent: false,
       },
       (res) => {
+        // Defense in depth: the socket must be connected to a checked address.
+        if (!isPinnedAddress(res.socket?.remoteAddress, options.target.addresses)) {
+          res.destroy()
+          fail(
+            new ToolError(`Request to ${host} was blocked: it connected to an unchecked address.`),
+          )
+          return
+        }
         const status = res.statusCode ?? 0
         if (status >= 300 && status < 400) {
           res.destroy()
-          fail(
-            new ToolError(
-              `Request to ${host} was redirected (${status}); redirects are not followed.`,
-            ),
-          )
+          if (settled) return
+          settled = true
+          const location = res.headers.location
+          resolve({
+            status,
+            statusText: res.statusMessage ?? "",
+            contentType: "",
+            body: Buffer.alloc(0),
+            ...(typeof location === "string" ? { location } : {}),
+          })
           return
         }
         readBody(res, options.maxResponseBytes, host).then(
@@ -96,6 +117,15 @@ export function sendHttp(call: HttpCall, options: HttpOptions): Promise<HttpResp
     req.on("error", (error: NodeJS.ErrnoException) => {
       if (signal.aborted) return fail(abortError())
       fail(new ToolError(`Request to ${host} failed${error.code ? ` (${error.code})` : ""}.`))
+    })
+    req.on("socket", (socket) => {
+      const verify = () => {
+        if (!isPinnedAddress(socket.remoteAddress, options.target.addresses)) {
+          req.destroy(new Error("unchecked address"))
+        }
+      }
+      if (socket.connecting) socket.once("connect", verify)
+      else verify()
     })
     if (call.body !== undefined) req.write(call.body)
     req.end()

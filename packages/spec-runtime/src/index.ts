@@ -15,7 +15,19 @@ export {
   loadSpec,
   SpecLoadError,
 } from "./load.js"
+export {
+  type AddressVerdict,
+  checkAddress,
+  type NetworkPolicy,
+  NetworkPolicyError,
+  pinnedLookup,
+  type ResolvedAddress,
+  type ResolvedTarget,
+  type Resolver,
+  resolveTarget,
+} from "./network.js"
 export type { SpecIssue } from "./plan.js"
+export { checkSchemaLimits, SCHEMA_LIMITS } from "./schema-limits.js"
 export { envSecrets, REDACTED, SecretError, type SecretSource, SecretVault } from "./secrets.js"
 export {
   HTTP_DEFAULTS,
@@ -92,7 +104,7 @@ export function httpTool(
   const definition = compilePlan(plan, {
     secrets: options.secrets ?? envSecrets(),
     vault: options.vault ?? new SecretVault(),
-    ...(options.lookup ? { lookup: options.lookup } : {}),
+    ...(options.network ? { network: options.network } : {}),
   })
   return [plan.name, definition]
 }

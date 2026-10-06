@@ -26,6 +26,8 @@ function recordingLogger(): Logger & { lines: string[] } {
 }
 
 const secrets: SecretSource = { get: (name) => (name === "API_KEY" ? SECRET : undefined) }
+// The test API runs on loopback, which the SSRF policy blocks unless explicitly allowed.
+const network = { allowPrivate: ["127.0.0.1/32"] }
 
 async function serve(tools: string, era: "modern" | "legacy" = "modern", head = "") {
   const text = `specVersion: 1
@@ -36,7 +38,7 @@ defaults: { http: { allowInsecureHttp: true, timeoutMs: 1000, maxResponseBytes: 
 ${head}
 tools:
 ${tools.replaceAll("BASE", upstream.url)}`
-  const loaded = await loadSpec(text, { secrets })
+  const loaded = await loadSpec(text, { secrets, network })
   const logger = recordingLogger()
   const app = createApp({ name: "executor", version: "0.0.0", logger })
   applySpec(app.registry, loaded)
@@ -292,7 +294,7 @@ version: 0.0.0
 secrets: [OTHER_KEY]
 tools:
   - { name: t, description: d, http: { url: "${upstream.url}/echo", allowInsecureHttp: true, headers: { X-Key: "{{secrets.OTHER_KEY}}" } }, output: { select: "@" } }`,
-      { secrets: { get: () => undefined } },
+      { secrets: { get: () => undefined }, network },
     )
     const app = createApp({ name: "s", version: "0", logger: recordingLogger() })
     applySpec(app.registry, loaded)
@@ -313,7 +315,7 @@ describe("httpTool (code API)", () => {
         http: { url: `${upstream.url}/echo/{{input.id}}`, allowInsecureHttp: true },
         output: { select: "path" },
       },
-      { secrets },
+      { secrets, network },
     )
     const app = createApp({ name: "code", version: "0" })
     if ("output" in definition && definition.output) app.tool(name, definition)

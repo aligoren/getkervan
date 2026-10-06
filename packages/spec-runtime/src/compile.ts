@@ -1,5 +1,4 @@
 import { STATUS_CODES } from "node:http"
-import type { LookupFunction } from "node:net"
 import {
   jsonSchema,
   type StructuredToolDefinition,
@@ -8,7 +7,14 @@ import {
   ToolError,
   type ToolMiddleware,
 } from "@kervan/core"
-import { type HttpCall, isJsonContentType, isTextContentType, sendHttp } from "./http.js"
+import {
+  type HttpCall,
+  type HttpResponse,
+  isJsonContentType,
+  isTextContentType,
+  sendHttp,
+} from "./http.js"
+import { type NetworkPolicy, resolveTarget } from "./network.js"
 import type { BodyTemplate, ToolPlan } from "./plan.js"
 import { SecretError, type SecretSource, type SecretVault } from "./secrets.js"
 import { select } from "./select.js"
@@ -26,15 +32,17 @@ export interface RuntimeOptions {
   secrets: SecretSource
   /** Scrubs secret values from results, errors and logs. */
   vault: SecretVault
-  /** Custom DNS lookup for outgoing requests. */
-  lookup?: LookupFunction
+  /** Which addresses requests may reach (SSRF policy). Default: public unicast only. */
+  network?: NetworkPolicy
 }
 
 export type CompiledDefinition = ToolDefinition | StructuredToolDefinition
 
 /** Builds the `app.tool()` definition for a planned spec tool: the code API equivalent of YAML. */
 export function compilePlan(plan: ToolPlan, runtime: RuntimeOptions): CompiledDefinition {
-  const run = (input: unknown, ctx: ToolContext) => executePlan(plan, input, ctx, runtime)
+  const limiter = new CallLimiter(plan.name, plan.rateLimit)
+  const run = (input: unknown, ctx: ToolContext) =>
+    limiter.run(() => executePlan(plan, input, ctx, runtime))
   const base = {
     ...(plan.title === undefined ? {} : { title: plan.title }),
     description: plan.description,
@@ -117,12 +125,7 @@ async function executePlan(
     headers,
     ...(body === undefined ? {} : { body }),
   }
-  const response = await sendHttp(call, {
-    timeoutMs: plan.limits.timeoutMs,
-    maxResponseBytes: plan.limits.maxResponseBytes,
-    signal: ctx.signal,
-    ...(runtime.lookup ? { lookup: runtime.lookup } : {}),
-  })
+  const response = await sendFollowingRedirects(call, plan, ctx, runtime)
 
   if (response.status >= 400) {
     // The path may hold templated values; the vault scrubs secrets from it before logging.
@@ -163,6 +166,120 @@ async function executePlan(
     return selected
   }
   return truncate(text, plan.limits.maxOutputChars)
+}
+
+/**
+ * Sends the request, following at most `followRedirects` redirects. Every hop is resolved and
+ * checked again (scheme, credentials, addresses). When the origin changes, headers carrying
+ * secrets and credentials are dropped, and a request body is never sent to another origin.
+ */
+async function sendFollowingRedirects(
+  first: HttpCall,
+  plan: ToolPlan,
+  ctx: ToolContext,
+  runtime: RuntimeOptions,
+): Promise<HttpResponse> {
+  let call = first
+  for (let hop = 0; ; hop++) {
+    const target = await resolveTarget(call.url, runtime.network)
+    const response = await sendHttp(call, {
+      timeoutMs: plan.limits.timeoutMs,
+      maxResponseBytes: plan.limits.maxResponseBytes,
+      signal: ctx.signal,
+      target,
+    })
+    if (response.status < 300 || response.status >= 400) return response
+
+    const host = call.url.host
+    if (plan.limits.followRedirects === 0) {
+      throw new ToolError(
+        `Request to ${host} was redirected (${response.status}); redirects are not followed.`,
+      )
+    }
+    if (hop >= plan.limits.followRedirects) {
+      throw new ToolError(
+        `Request to ${host} was redirected more than ${plan.limits.followRedirects} times.`,
+      )
+    }
+    if (!response.location) {
+      throw new ToolError(`Request to ${host} was redirected without a location.`)
+    }
+    let next: URL
+    try {
+      next = new URL(response.location, call.url)
+    } catch {
+      throw new ToolError(`Request to ${host} was redirected to an invalid location.`)
+    }
+    const allowed =
+      next.protocol === "https:" || (next.protocol === "http:" && plan.limits.allowInsecureHttp)
+    if (!allowed) throw new ToolError(`Request to ${host} was redirected to a disallowed scheme.`)
+    if (next.username || next.password) {
+      throw new ToolError(`Request to ${host} was redirected to a URL with credentials.`)
+    }
+    // Downgrading https to http would expose secrets even on the same host.
+    if (call.url.protocol === "https:" && next.protocol === "http:") {
+      throw new ToolError(`Request to ${host} was redirected from https to http.`)
+    }
+
+    const toGet =
+      response.status === 303 ||
+      ((response.status === 301 || response.status === 302) && call.method !== "GET")
+    const method = toGet ? "GET" : call.method
+    const body = toGet ? undefined : call.body
+    const crossOrigin = next.origin !== call.url.origin
+    if (crossOrigin && body !== undefined) {
+      throw new ToolError(
+        `Request to ${host} was redirected to another host with a request body; not followed.`,
+      )
+    }
+    const headers: Record<string, string> = {}
+    for (const [name, value] of Object.entries(call.headers)) {
+      const lower = name.toLowerCase()
+      if (toGet && lower === "content-type") continue
+      if (crossOrigin && (CREDENTIAL_HEADERS.has(lower) || plan.secretHeaders.includes(lower)))
+        continue
+      headers[name] = value
+    }
+    call = { method, url: next, headers, ...(body === undefined ? {} : { body }) }
+  }
+}
+
+const CREDENTIAL_HEADERS = new Set(["authorization", "cookie", "proxy-authorization"])
+
+/** Per-tool limits on outgoing calls: a fixed one-minute window and a concurrency cap. */
+class CallLimiter {
+  #windowStart = 0
+  #count = 0
+  #active = 0
+  readonly #name: string
+  readonly #limits: ToolPlan["rateLimit"]
+
+  constructor(name: string, limits: ToolPlan["rateLimit"]) {
+    this.#name = name
+    this.#limits = limits
+  }
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    const now = Date.now()
+    if (now - this.#windowStart >= 60_000) {
+      this.#windowStart = now
+      this.#count = 0
+    }
+    if (this.#count >= this.#limits.perMinute) {
+      const wait = Math.ceil((this.#windowStart + 60_000 - now) / 1000)
+      throw new ToolError(`Rate limit reached for tool "${this.#name}"; try again in ${wait} s.`)
+    }
+    if (this.#active >= this.#limits.concurrency) {
+      throw new ToolError(`Too many concurrent calls to tool "${this.#name}"; try again shortly.`)
+    }
+    this.#count++
+    this.#active++
+    try {
+      return await fn()
+    } finally {
+      this.#active--
+    }
+  }
 }
 
 async function resolveSecrets(names: readonly string[], runtime: RuntimeOptions) {

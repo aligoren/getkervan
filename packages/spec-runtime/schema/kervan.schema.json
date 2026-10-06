@@ -57,10 +57,33 @@
             "allowInsecureHttp": {
               "description": "Allow plain http:// URLs. Off by default: secrets would travel unencrypted.",
               "type": "boolean"
+            },
+            "followRedirects": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5,
+              "description": "How many redirects to follow (default 0). Each hop is checked again; secret headers are dropped when the host changes."
             }
           },
           "additionalProperties": false,
           "description": "Defaults for every tool's HTTP request."
+        },
+        "rateLimit": {
+          "type": "object",
+          "properties": {
+            "perMinute": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            },
+            "concurrency": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          "additionalProperties": false,
+          "description": "Per-tool limits on outgoing calls (defaults: 60 per minute, 10 at once)."
         }
       },
       "additionalProperties": false
@@ -113,6 +136,23 @@
               }
             },
             "additionalProperties": false
+          },
+          "rateLimit": {
+            "type": "object",
+            "properties": {
+              "perMinute": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              "concurrency": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            },
+            "additionalProperties": false,
+            "description": "Per-tool limits on outgoing calls (defaults: 60 per minute, 10 at once)."
           },
           "http": {
             "type": "object",
@@ -174,6 +214,12 @@
               },
               "allowInsecureHttp": {
                 "type": "boolean"
+              },
+              "followRedirects": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 5,
+                "description": "How many redirects to follow (default 0). Each hop is checked again; secret headers are dropped when the host changes."
               }
             },
             "required": ["url"],

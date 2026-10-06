@@ -26,7 +26,8 @@ export interface LoadOptions {
   secrets?: SecretSource
   /** Shared across reloads so earlier secret values stay redacted. Default: a new vault. */
   vault?: SecretVault
-  lookup?: RuntimeOptions["lookup"]
+  /** SSRF policy for outgoing requests. Default: public unicast addresses only. */
+  network?: RuntimeOptions["network"]
 }
 
 export class SpecLoadError extends Error {
@@ -112,7 +113,7 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
   spec.tools.forEach((tool, index) => {
     if (names.has(tool.name)) at(["tools", index, "name"], `Duplicate tool name "${tool.name}".`)
     names.add(tool.name)
-    const plan = planTool(tool, spec.defaults?.http, declared, ["tools", index], at)
+    const plan = planTool(tool, spec.defaults, declared, ["tools", index], at)
     if (plan) {
       for (const name of plan.secrets) used.add(name)
       plans.push([tool, plan])
@@ -144,7 +145,7 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
   const runtime: RuntimeOptions = {
     secrets: source,
     vault,
-    ...(options.lookup ? { lookup: options.lookup } : {}),
+    ...(options.network ? { network: options.network } : {}),
   }
   const tools = plans.map(([tool, plan]) => ({
     name: plan.name,

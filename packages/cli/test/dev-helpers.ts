@@ -158,8 +158,11 @@ export function spawnDev(
   project: Project,
   args: string[],
   env: Record<string, string> = {},
+  /** Pass `args` to `kervan` as they are, instead of after `dev src/server.ts`. */
+  raw = false,
 ): DevProcess {
-  const child = spawn(process.execPath, [kervanBin, "dev", "src/server.ts", ...args], {
+  const command = raw ? [kervanBin, ...args] : [kervanBin, "dev", "src/server.ts", ...args]
+  const child = spawn(process.execPath, command, {
     cwd: project.dir,
     env: { ...process.env, ...env },
     stdio: ["pipe", "pipe", "pipe"],

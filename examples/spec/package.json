@@ -1,0 +1,14 @@
+{
+  "name": "kervan-example-spec",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example kervan.yaml spec backed by Open-Meteo.",
+  "type": "module",
+  "scripts": {
+    "start": "kervan run kervan.yaml",
+    "dev": "kervan dev kervan.yaml"
+  },
+  "devDependencies": {
+    "kervan": "workspace:^"
+  }
+}

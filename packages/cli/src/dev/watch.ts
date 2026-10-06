@@ -2,7 +2,18 @@ import { existsSync, watch } from "node:fs"
 import path from "node:path"
 
 const IGNORED_DIRS = new Set(["node_modules", "dist", ".git", "coverage", ".turbo", ".cache"])
-const WATCHED_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx", ".js", ".mjs", ".cjs", ".json"])
+const WATCHED_EXTENSIONS = new Set([
+  ".ts",
+  ".mts",
+  ".cts",
+  ".tsx",
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".json",
+  ".yaml",
+  ".yml",
+])
 
 /**
  * Whether a change to `file` (relative to the watched root, with either separator) should reload

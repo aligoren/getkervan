@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs"
 import path from "node:path"
+import type { App } from "@kervan/core"
 import { serveHttp, serveStdio } from "@kervan/transport/node"
 import {
   currentRuntime,
@@ -7,8 +8,9 @@ import {
   typeStrippingProblem,
   windowsLibuvWarning,
 } from "../node-version.js"
+import { ALLOW_ALL_NETWORKS, loadEnvFiles, SpecHost } from "../spec-host.js"
 import { DevHost } from "./host.js"
-import { collectSecrets, createRedactor } from "./redact.js"
+import { collectSecrets, createRedactor, type Redactor } from "./redact.js"
 import { startRepl } from "./repl.js"
 import { findProjectRoot, watchProject } from "./watch.js"
 
@@ -23,6 +25,10 @@ export interface DevOptions {
   cwd: string
   env: NodeJS.ProcessEnv
   runtime: RuntimeInfo
+  /** `--env-file` paths; their variables do not override ones already set. */
+  envFiles: string[]
+  /** Specs only: let tools reach private and loopback addresses (`--allow-private-network`). */
+  allowPrivateNetwork: boolean
   stdin: NodeJS.ReadableStream
   stdout: NodeJS.WritableStream
   stderr: NodeJS.WritableStream
@@ -66,21 +72,45 @@ export async function runDev(options: DevOptions): Promise<number> {
     return 1
   }
 
+  let env: NodeJS.ProcessEnv
+  try {
+    env = await loadEnvFiles(options.envFiles, options.env, options.cwd)
+  } catch (error) {
+    warn(`Error: ${(error as Error).message}`)
+    return 1
+  }
   const root = findProjectRoot(path.dirname(entry))
-  const redact = createRedactor(collectSecrets(options.env))
-  const host = new DevHost({
-    entry,
-    cwd: root,
-    env: {
-      ...options.env,
-      KERVAN_TRANSPORT: "stdio",
-      NODE_ENV: options.env.NODE_ENV ?? "development",
-    },
-    drainTimeoutMs: options.drainTimeoutMs,
-    redact,
-    print,
-  })
-  await host.reload("start")
+
+  // A kervan.yaml spec is data: it is reloaded in this process. Code runs in a child process.
+  let host: DevBackend
+  let redact: Redactor
+  if (isSpecFile(entry)) {
+    try {
+      const spec = await SpecHost.start({
+        file: entry,
+        env,
+        print,
+        ...(options.allowPrivateNetwork ? { network: { allowPrivate: ALLOW_ALL_NETWORKS } } : {}),
+      })
+      host = spec
+      redact = spec.redact
+    } catch (error) {
+      warn(`Error: ${(error as Error).message}`)
+      return 1
+    }
+  } else {
+    redact = createRedactor(collectSecrets(env))
+    const child = new DevHost({
+      entry,
+      cwd: root,
+      env: { ...env, KERVAN_TRANSPORT: "stdio", NODE_ENV: env.NODE_ENV ?? "development" },
+      drainTimeoutMs: options.drainTimeoutMs,
+      redact,
+      print,
+    })
+    await child.reload("start")
+    host = child
+  }
 
   const stopWatching = options.watch
     ? watchProject(root, (files) => {
@@ -136,6 +166,18 @@ export async function runDev(options: DevOptions): Promise<number> {
   return 0
 }
 
+/** `kervan.yaml`, `x.yml`, ...: served as a spec instead of code. */
+export function isSpecFile(file: string): boolean {
+  return /\.ya?ml$/i.test(file)
+}
+
+/** What `kervan dev` serves: a child-process server (DevHost) or a spec (SpecHost). */
+interface DevBackend {
+  readonly app: App
+  reload(reason: string): Promise<boolean>
+  close(): Promise<void>
+}
+
 export function defaultDevOptions(entry: string): DevOptions {
   return {
     entry,
@@ -147,6 +189,8 @@ export function defaultDevOptions(entry: string): DevOptions {
     cwd: process.cwd(),
     env: process.env,
     runtime: currentRuntime(),
+    envFiles: [],
+    allowPrivateNetwork: false,
     stdin: process.stdin,
     stdout: process.stdout,
     stderr: process.stderr,

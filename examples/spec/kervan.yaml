@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=../../packages/spec-runtime/schema/kervan.schema.json
+specVersion: 1
+name: open-meteo
+version: 0.1.0
+description: Weather and city lookup backed by the public Open-Meteo APIs (no API key needed).
+
+defaults:
+  http: { timeoutMs: 8000, maxResponseBytes: 262144 }
+  rateLimit: { perMinute: 30, concurrency: 5 }
+
+tools:
+  - name: search_city
+    title: Search city
+    description: Finds up to 5 places by name and returns their coordinates.
+    annotations: { readOnlyHint: true }
+    input:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100, description: City name, e.g. Ankara }
+      required: [name]
+    http:
+      url: https://geocoding-api.open-meteo.com/v1/search
+      query: { name: "{{input.name}}", count: 5, language: en, format: json }
+    output:
+      # Only the fields the model needs; never the whole API response.
+      select: "results[].{name: name, country: country, latitude: latitude, longitude: longitude}"
+
+  - name: get_current_weather
+    title: Current weather
+    description: Current temperature (°C), wind speed (km/h) and WMO weather code at a coordinate.
+    annotations: { readOnlyHint: true }
+    input:
+      type: object
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+      required: [latitude, longitude]
+    http:
+      url: https://api.open-meteo.com/v1/forecast
+      query:
+        latitude: "{{input.latitude}}"
+        longitude: "{{input.longitude}}"
+        current: temperature_2m,wind_speed_10m,weather_code
+    output:
+      select: "{temperatureC: current.temperature_2m, windKmh: current.wind_speed_10m, weatherCode: current.weather_code}"
+      schema:
+        type: object
+        properties:
+          temperatureC: { type: number }
+          windKmh: { type: number }
+          weatherCode: { type: integer }
+        required: [temperatureC, windKmh, weatherCode]

@@ -13,6 +13,9 @@
     },
     {
       "path": "../transport"
+    },
+    {
+      "path": "../spec-runtime"
     }
   ]
 }

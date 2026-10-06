@@ -39,9 +39,10 @@ await serve(app) // stdio by default; `--http` for Streamable HTTP
 | --- | --- |
 | [`@kervan/core`](packages/core) | `createApp`, `app.tool`, the tool context (`ctx.signal`, `ctx.progress`, `ctx.log`, `ctx.auth`), error mapping. No transport, database or UI code. |
 | [`@kervan/transport`](packages/transport) | `toFetchHandler` (web-standard), `serveStdio` / `serveHttp` / `serve` (Node), and `createTestClient` for tests. |
-| [`@kervan/spec-runtime`](packages/spec-runtime) | `kervan.yaml` specs: HTTP API tools with templates, JMESPath output selection and secret redaction (pre-release). |
+| [`@kervan/spec-runtime`](packages/spec-runtime) | `kervan.yaml` specs: HTTP API tools with templates, JMESPath output selection, SSRF protection and secret redaction. |
 | [`kervan`](packages/cli) | The CLI: `kervan create` (and `npm create kervan`) and `kervan dev` (hot reload, terminal REPL). Generated projects run TypeScript directly on Node.js 22.18+. |
 | [`examples/weather`](examples/weather) | A runnable example server with tests. |
+| [`examples/spec`](examples/spec) | A `kervan.yaml` spec backed by Open-Meteo. |
 | [`examples/dynamic`](examples/dynamic) | Tools that change at runtime, and a multi-tenant HTTP server. |
 
 ## Tools
@@ -195,9 +196,10 @@ Kervan's focus is different:
   `list_changed` sent automatically on stdio and HTTP, and a small interface for your own storage.
 - **Per-request server resolution**: a `resolveServer` hook for multi-tenant servers, with
   per-tenant notification isolation and the tenant logic living outside the core.
-- **Declarative specs** (planned): a `kervan.yaml` file that turns HTTP APIs into tools. Every
-  feature of the spec format is also available in the code API. We are not aware of another
-  TypeScript framework built around this, but the ecosystem moves quickly.
+- **Declarative specs**: a `kervan.yaml` file that turns HTTP APIs into tools, with SSRF
+  protection, secret redaction and output selection built in. Every feature of the spec format is
+  also available in the code API (`httpTool`). We are not aware of another TypeScript framework
+  built around this, but the ecosystem moves quickly.
 - **An optional Studio UI** (later) that builds on the framework. The framework will never depend
   on it.
 
@@ -206,7 +208,7 @@ Kervan's focus is different:
 1. **Core and transports**: `app.tool`, validation, stdio and Streamable HTTP, a test client.
 2. **Dynamic tools and tooling**: runtime registry, `resolveServer`, middleware, `kervan create` and
    `kervan dev`.
-3. Spec runtime (`kervan.yaml`, HTTP executor, secrets, output mapping) and `kervan run <spec>`.
+3. **Specs**: `kervan.yaml`, HTTP executor with SSRF protection, secrets, output selection, `kervan run`.
 4. Kervan Studio.
 
 ## Development

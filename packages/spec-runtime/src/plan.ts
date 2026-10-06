@@ -1,3 +1,4 @@
+import { checkSchemaLimits } from "./schema-limits.js"
 import { checkSelect, SelectError } from "./select.js"
 import { HTTP_DEFAULTS, type Spec, type SpecTool } from "./spec-schema.js"
 import { parseTemplate, references, type Template, TemplateError } from "./template.js"
@@ -34,7 +35,16 @@ export interface ToolPlan {
   headers: [string, Template][]
   body: BodyTemplate | undefined
   secrets: string[]
-  limits: { timeoutMs: number; maxResponseBytes: number; maxOutputChars: number }
+  limits: {
+    timeoutMs: number
+    maxResponseBytes: number
+    maxOutputChars: number
+    followRedirects: number
+    allowInsecureHttp: boolean
+  }
+  rateLimit: { perMinute: number; concurrency: number }
+  /** Lower-case names of headers whose value contains a secret (dropped on cross-host redirects). */
+  secretHeaders: string[]
   output:
     | { mode: "select"; select: string; schema: Record<string, unknown> | undefined }
     | { mode: "raw" }
@@ -67,11 +77,12 @@ type Report = (path: IssuePath, message: string, severity?: "error" | "warning")
  */
 export function planTool(
   tool: SpecTool,
-  defaults: NonNullable<Spec["defaults"]>["http"] | undefined,
+  specDefaults: Spec["defaults"] | undefined,
   declaredSecrets: ReadonlySet<string> | undefined,
   at: IssuePath,
   report: Report,
 ): ToolPlan | undefined {
+  const defaults = specDefaults?.http
   let errors = 0
   const error: Report = (path, message, severity = "error") => {
     if (severity === "error") errors++
@@ -79,6 +90,11 @@ export function planTool(
   }
 
   const input = tool.input ?? { type: "object", properties: {} }
+  for (const problem of checkSchemaLimits(input)) error(["input"], problem)
+  if ("schema" in tool.output && tool.output.schema) {
+    for (const problem of checkSchemaLimits(tool.output.schema))
+      error(["output", "schema"], problem)
+  }
   if (input.type !== "object")
     error(["input", "type"], 'The input schema must have type: "object".')
 
@@ -128,6 +144,7 @@ export function planTool(
   }
 
   const headers: [string, Template][] = []
+  const secretHeaders: string[] = []
   for (const [name, value] of Object.entries(http.headers ?? {})) {
     const path = ["http", "headers", name]
     if (!HEADER_NAME.test(name)) error(path, `"${name}" is not a valid header name.`)
@@ -135,7 +152,10 @@ export function planTool(
       error(path, `The "${name}" header is managed by Kervan and cannot be set.`)
     }
     const parsed = template(String(value), path)
-    if (parsed) headers.push([name, parsed])
+    if (parsed) {
+      headers.push([name, parsed])
+      if (parsed.some((part) => part.kind === "secret")) secretHeaders.push(name.toLowerCase())
+    }
   }
 
   let body: BodyTemplate | undefined
@@ -177,7 +197,21 @@ export function planTool(
         http.maxResponseBytes ?? defaults?.maxResponseBytes ?? HTTP_DEFAULTS.maxResponseBytes,
       maxOutputChars:
         tool.output.maxOutputChars ?? defaults?.maxOutputChars ?? HTTP_DEFAULTS.maxOutputChars,
+      followRedirects:
+        http.followRedirects ?? defaults?.followRedirects ?? HTTP_DEFAULTS.followRedirects,
+      allowInsecureHttp: allowInsecure,
     },
+    rateLimit: {
+      perMinute:
+        tool.rateLimit?.perMinute ??
+        specDefaults?.rateLimit?.perMinute ??
+        HTTP_DEFAULTS.rateLimit.perMinute,
+      concurrency:
+        tool.rateLimit?.concurrency ??
+        specDefaults?.rateLimit?.concurrency ??
+        HTTP_DEFAULTS.rateLimit.concurrency,
+    },
+    secretHeaders,
     output,
   }
 }
