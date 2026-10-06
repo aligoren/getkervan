@@ -108,8 +108,17 @@ describe("createProject", () => {
   })
 })
 
-function runBin(script: string, args: string[], cwd: string) {
-  return spawnSync(process.execPath, [script, ...args], { cwd, encoding: "utf8" })
+function runBin(script: string, args: string[], cwd: string, env: NodeJS.ProcessEnv = {}) {
+  // Windows treats variable names case-insensitively: drop every spelling of an overridden name.
+  const overridden = new Set(Object.keys(env).map((key) => key.toLowerCase()))
+  const base = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !overridden.has(key.toLowerCase())),
+  )
+  return spawnSync(process.execPath, [script, ...args], {
+    cwd,
+    encoding: "utf8",
+    env: { ...base, ...env },
+  })
 }
 
 describe("command line", () => {
@@ -123,8 +132,27 @@ describe("command line", () => {
     )
     expect(result.status, result.stderr).toBe(0)
     expect(result.stdout).toContain("Created cli-made")
-    expect(result.stdout).toContain("npm install")
     expect(existsSync(path.join(target, "src", "app.ts"))).toBe(true)
+  })
+
+  it.each([
+    ["npm/11.12.1 node/v24.21.0", "npm install", "npm run dev"],
+    ["pnpm/12.9.1 npm/? node/v24.21.0", "pnpm install", "pnpm dev"],
+    ["yarn/4.9.0 npm/? node/v24.21.0", "yarn install", "yarn dev"],
+    ["bun/1.3.0 npm/? node/v24.21.0", "bun install", "bun run dev"],
+  ])("prints next steps for the package manager that ran it (%s)", async (agent, install, dev) => {
+    const parent = await tempParent()
+    const result = runBin(
+      path.join(cliRoot, "bin", "kervan.js"),
+      ["create", "steps", "--no-install"],
+      parent,
+      { npm_config_user_agent: agent },
+    )
+    expect(result.status, result.stderr).toBe(0)
+    const steps = result.stdout.split("Next steps:")[1] ?? ""
+    expect(steps.split(/\r?\n/).map((line) => line.trim())).toEqual(
+      expect.arrayContaining(["cd steps", install, dev]),
+    )
   })
 
   it("create-kervan forwards to kervan create", async () => {

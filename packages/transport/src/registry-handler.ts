@@ -1,15 +1,14 @@
 import type { App, ToolEntry, ToolRegistry } from "@kervan/core"
-
-/** Same entry objects in the same order: the registry's identity contract for "no change". */
-function sameEntries(a: readonly ToolEntry[], b: readonly ToolEntry[]): boolean {
-  return a.length === b.length && a.every((entry, i) => entry === b[i])
-}
-
 import {
   type CreateMcpHandlerOptions,
   createMcpHandler,
   type McpHttpHandler,
 } from "@modelcontextprotocol/server"
+
+/** Same entry objects in the same order: the registry's identity contract for "no change". */
+function sameEntries(a: readonly ToolEntry[], b: readonly ToolEntry[]): boolean {
+  return a.length === b.length && a.every((entry, i) => entry === b[i])
+}
 
 export type RegistryHandlerOptions = Pick<
   CreateMcpHandlerOptions,

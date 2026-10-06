@@ -39,6 +39,8 @@ export interface CreateResult {
   name: string
   files: string[]
   installed: boolean
+  /** The package manager used (or to use) for installing and running scripts. */
+  packageManager: PackageManager
 }
 
 export class CreateError extends Error {
@@ -83,14 +85,14 @@ export async function createProject(options: CreateOptions): Promise<CreateResul
   }
   log(`Created ${name} in ${dir}`)
 
+  const pm = options.packageManager ?? detectPackageManager()
   let installed = false
   if (options.install !== false) {
-    const pm = options.packageManager ?? detectPackageManager()
     log(`Installing dependencies with ${pm}...`)
     await runInstall(pm, dir)
     installed = true
   }
-  return { dir, name, files: files.sort(), installed }
+  return { dir, name, files: files.sort(), installed, packageManager: pm }
 }
 
 function fill(content: string, values: Record<string, string>): string {
@@ -139,12 +141,12 @@ export function detectPackageManager(
 
 function runInstall(pm: PackageManager, cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Package managers are .cmd shims on Windows, which need a shell to run.
-    const child = spawn(pm, ["install"], {
-      cwd,
-      stdio: "inherit",
-      shell: process.platform === "win32",
-    })
+    // Package managers are .cmd shims on Windows, which need a shell. The command is one fixed
+    // string (pm comes from a closed list), so nothing user-controlled reaches the shell.
+    const windows = process.platform === "win32"
+    const child = windows
+      ? spawn(`${pm} install`, { cwd, stdio: "inherit", shell: true })
+      : spawn(pm, ["install"], { cwd, stdio: "inherit" })
     child.on("error", reject)
     child.on("exit", (code) =>
       code === 0

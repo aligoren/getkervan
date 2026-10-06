@@ -194,13 +194,16 @@ async function runCreate(argv: string[], io: RunIo): Promise<number> {
     log: io.out,
   })
   const relative = dir.includes(" ") ? `"${dir}"` : dir
+  const pmName = result.packageManager
+  // npm and bun need "run" for scripts; pnpm and yarn take the script name directly.
+  const runDevScript = pmName === "npm" || pmName === "bun" ? `${pmName} run dev` : `${pmName} dev`
   io.out(
     [
       "",
       "Next steps:",
       `  cd ${relative}`,
-      ...(result.installed ? [] : ["  npm install"]),
-      "  npm run dev",
+      ...(result.installed ? [] : [`  ${pmName} install`]),
+      `  ${runDevScript}`,
     ].join("\n"),
   )
   return 0
