@@ -1,8 +1,7 @@
 import type { AuthInfo } from "@modelcontextprotocol/server"
-import type * as z from "zod"
 import { KervanDefinitionError } from "./errors.js"
+import type { InputSchema, OutputSchema } from "./schema.js"
 import {
-  type AnyObjectSchema,
   type AnyToolDefinition,
   type NoInput,
   type RegisteredToolDefinition,
@@ -31,14 +30,14 @@ export interface ToolRegistry {
 /** A registry that can be changed at runtime. */
 export interface MutableToolRegistry extends ToolRegistry {
   /** Adds a tool at the end. Throws `KervanDefinitionError` if it is invalid or the name is taken. */
-  add<I extends AnyObjectSchema = NoInput>(name: string, definition: ToolDefinition<I>): void
-  add<I extends AnyObjectSchema = NoInput, O extends z.ZodType = z.ZodType>(
+  add<I extends InputSchema = NoInput>(name: string, definition: ToolDefinition<I>): void
+  add<I extends InputSchema = NoInput, O extends OutputSchema = OutputSchema>(
     name: string,
     definition: StructuredToolDefinition<I, O>,
   ): void
   /** Replaces an existing tool, keeping its position. Throws if the tool does not exist. */
-  replace<I extends AnyObjectSchema = NoInput>(name: string, definition: ToolDefinition<I>): void
-  replace<I extends AnyObjectSchema = NoInput, O extends z.ZodType = z.ZodType>(
+  replace<I extends InputSchema = NoInput>(name: string, definition: ToolDefinition<I>): void
+  replace<I extends InputSchema = NoInput, O extends OutputSchema = OutputSchema>(
     name: string,
     definition: StructuredToolDefinition<I, O>,
   ): void

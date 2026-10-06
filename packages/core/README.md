@@ -40,6 +40,13 @@ app.tool("add", {
 | `timeoutMs` | Overrides `limits.toolTimeoutMs` |
 | `handler(input, ctx)` | Returns a string, a `CallToolResult`, or the `output` value |
 
+## JSON Schema and raw results
+
+`input` and `output` also accept `jsonSchema({...})`, for schemas that come from data (another
+server, a spec file) rather than code; arguments are validated against it. A tool with an `output`
+schema can return `rawResult(callToolResult)` to send a complete result unchanged (used by
+`kervan dev` to forward results).
+
 ## Registry
 
 | | |

@@ -38,6 +38,16 @@ export {
 } from "./registry.js"
 export {
   type AnyObjectSchema,
+  type InputOf,
+  type InputSchema,
+  type JsonSchema,
+  jsonSchema,
+  type OutputOf,
+  type OutputSchema,
+  type RawResult,
+  rawResult,
+} from "./schema.js"
+export {
   type NoInput,
   type StructuredToolDefinition,
   TOOL_NAME_PATTERN,

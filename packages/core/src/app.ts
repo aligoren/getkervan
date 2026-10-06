@@ -9,12 +9,13 @@ import {
   type ToolEntry,
   type ToolRegistry,
 } from "./registry.js"
+import type { InputSchema, OutputSchema } from "./schema.js"
 import {
-  type AnyObjectSchema,
   type AnyToolDefinition,
   invokeTool,
   type NoInput,
   type StructuredToolDefinition,
+  sdkSchema,
   type ToolDefinition,
   type ToolMiddleware,
 } from "./tool.js"
@@ -74,14 +75,14 @@ export interface App {
   /** The app's own tool set. Transports serve it unless a `resolveServer` hook picks another. */
   readonly registry: MutableToolRegistry
   /** Registers a tool. Throws `KervanDefinitionError` on an invalid or duplicate definition. */
-  tool<I extends AnyObjectSchema = NoInput>(name: string, definition: ToolDefinition<I>): App
-  tool<I extends AnyObjectSchema = NoInput, O extends z.ZodType = z.ZodType>(
+  tool<I extends InputSchema = NoInput>(name: string, definition: ToolDefinition<I>): App
+  tool<I extends InputSchema = NoInput, O extends OutputSchema = OutputSchema>(
     name: string,
     definition: StructuredToolDefinition<I, O>,
   ): App
   /** Replaces a registered tool in place. Connected clients are notified. */
-  replaceTool<I extends AnyObjectSchema = NoInput>(name: string, definition: ToolDefinition<I>): App
-  replaceTool<I extends AnyObjectSchema = NoInput, O extends z.ZodType = z.ZodType>(
+  replaceTool<I extends InputSchema = NoInput>(name: string, definition: ToolDefinition<I>): App
+  replaceTool<I extends InputSchema = NoInput, O extends OutputSchema = OutputSchema>(
     name: string,
     definition: StructuredToolDefinition<I, O>,
   ): App
@@ -155,8 +156,8 @@ export function createApp(options: AppOptions): App {
       {
         ...(tool.title === undefined ? {} : { title: tool.title }),
         description: tool.description,
-        inputSchema: tool.input ?? emptyInput,
-        ...(tool.output === undefined ? {} : { outputSchema: tool.output }),
+        inputSchema: tool.input === undefined ? emptyInput : sdkSchema(tool.input),
+        ...(tool.output === undefined ? {} : { outputSchema: sdkSchema(tool.output) }),
         ...(tool.annotations === undefined ? {} : { annotations: tool.annotations }),
       },
       (input, raw) =>

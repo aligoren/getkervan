@@ -39,7 +39,7 @@ await serve(app) // stdio by default; `--http` for Streamable HTTP
 | --- | --- |
 | [`@kervan/core`](packages/core) | `createApp`, `app.tool`, the tool context (`ctx.signal`, `ctx.progress`, `ctx.log`, `ctx.auth`), error mapping. No transport, database or UI code. |
 | [`@kervan/transport`](packages/transport) | `toFetchHandler` (web-standard), `serveStdio` / `serveHttp` / `serve` (Node), and `createTestClient` for tests. |
-| [`kervan`](packages/cli) | The CLI: `kervan create` (and `npm create kervan`). Generated projects run TypeScript directly on Node.js 22.18+. |
+| [`kervan`](packages/cli) | The CLI: `kervan create` (and `npm create kervan`) and `kervan dev` (hot reload, terminal REPL). Generated projects run TypeScript directly on Node.js 22.18+. |
 | [`examples/weather`](examples/weather) | A runnable example server with tests. |
 | [`examples/dynamic`](examples/dynamic) | Tools that change at runtime, and a multi-tenant HTTP server. |
 
@@ -203,8 +203,8 @@ Kervan's focus is different:
 ## Roadmap
 
 1. **Core and transports**: `app.tool`, validation, stdio and Streamable HTTP, a test client.
-2. **In progress**: dynamic registry, `resolveServer`, middleware and `kervan create` (done);
-   `kervan dev` (hot reload and a terminal inspector) is next.
+2. **Dynamic tools and tooling**: runtime registry, `resolveServer`, middleware, `kervan create` and
+   `kervan dev`.
 3. Spec runtime (`kervan.yaml`, HTTP executor, secrets, output mapping) and `kervan run <spec>`.
 4. Kervan Studio.
 

@@ -8,24 +8,33 @@ import type * as z from "zod"
 import { createToolContext, type ToolContext } from "./context.js"
 import { KervanDefinitionError, ToolError } from "./errors.js"
 import type { Logger } from "./logger.js"
-
-// biome-ignore lint/suspicious/noExplicitAny: matches any object schema regardless of its shape
-export type AnyObjectSchema = z.ZodObject<any>
+import {
+  type InputOf,
+  type InputSchema,
+  isJsonSchema,
+  isRawResult,
+  type OutputOf,
+  type OutputSchema,
+  type RawResult,
+} from "./schema.js"
 
 /** Input type of a tool whose definition has no `input` schema. */
 export type NoInput = z.ZodObject<Record<never, never>>
 
-export type ToolHandler<I extends AnyObjectSchema, R> = (
-  input: z.output<I>,
+export type ToolHandler<I extends InputSchema, R> = (
+  input: InputOf<I>,
   ctx: ToolContext,
 ) => R | Promise<R>
 
-interface ToolDefinitionBase<I extends AnyObjectSchema> {
+interface ToolDefinitionBase<I extends InputSchema> {
   /** Human-readable display name. */
   title?: string
   /** What the tool does and when to use it. This is the model's main guidance, so it is required. */
   description: string
-  /** Arguments schema; must be a `z.object(...)`. Omit for a tool without arguments. */
+  /**
+   * Arguments schema: a `z.object(...)`, or `jsonSchema({ type: "object", ... })`. Omit for a
+   * tool without arguments.
+   */
   input?: I
   /** Behavior hints for clients. Untrusted by clients; they never change execution. */
   annotations?: ToolAnnotations
@@ -62,19 +71,19 @@ export type ToolMiddleware = (
 ) => CallToolResult | Promise<CallToolResult>
 
 /** A tool whose handler returns text or a full `CallToolResult`. */
-export interface ToolDefinition<I extends AnyObjectSchema = AnyObjectSchema>
-  extends ToolDefinitionBase<I> {
+export interface ToolDefinition<I extends InputSchema = InputSchema> extends ToolDefinitionBase<I> {
   output?: undefined
   handler: ToolHandler<I, string | CallToolResult>
 }
 
 /** A tool with an `output` schema: the handler returns that value and Kervan builds the result. */
 export interface StructuredToolDefinition<
-  I extends AnyObjectSchema = AnyObjectSchema,
-  O extends z.ZodType = z.ZodType,
+  I extends InputSchema = InputSchema,
+  O extends OutputSchema = OutputSchema,
 > extends ToolDefinitionBase<I> {
   output: O
-  handler: ToolHandler<I, z.output<O>>
+  /** Returns the output value, or `rawResult(...)` to send a complete result unchanged. */
+  handler: ToolHandler<I, OutputOf<O> | RawResult>
 }
 
 export type AnyToolDefinition = ToolDefinition | StructuredToolDefinition
@@ -84,8 +93,8 @@ export interface RegisteredToolDefinition {
   name: string
   title: string | undefined
   description: string
-  input: AnyObjectSchema | undefined
-  output: z.ZodType | undefined
+  input: InputSchema | undefined
+  output: OutputSchema | undefined
   annotations: ToolAnnotations | undefined
   timeoutMs: number | undefined
   middleware: readonly ToolMiddleware[]
@@ -114,13 +123,14 @@ export function validateToolDefinition(
   if (def.input !== undefined && !isObjectSchema(def.input)) {
     throw new KervanDefinitionError(
       "INVALID_INPUT_SCHEMA",
-      `Tool "${name}": "input" must be a Zod object schema, e.g. z.object({ city: z.string() }).`,
+      `Tool "${name}": "input" must be a Zod object schema, e.g. z.object({ city: z.string() }), ` +
+        'or jsonSchema({ type: "object", ... }).',
     )
   }
-  if (def.output !== undefined && !isZodSchema(def.output)) {
+  if (def.output !== undefined && !isZodSchema(def.output) && !isJsonSchema(def.output)) {
     throw new KervanDefinitionError(
       "INVALID_OUTPUT_SCHEMA",
-      `Tool "${name}": "output" must be a Zod schema.`,
+      `Tool "${name}": "output" must be a Zod schema or jsonSchema(...).`,
     )
   }
   if (typeof def.handler !== "function") {
@@ -253,6 +263,7 @@ export class InvalidToolReturnError extends Error {
 }
 
 export function toCallToolResult(tool: RegisteredToolDefinition, value: unknown): CallToolResult {
+  if (isRawResult(value)) return value.result
   if (tool.output !== undefined) {
     // The SDK validates structuredContent against the output schema before sending.
     return {
@@ -314,5 +325,11 @@ function isZodSchema(value: unknown): value is ZodLike {
 }
 
 function isObjectSchema(value: unknown): boolean {
+  if (isJsonSchema(value)) return (value.json as { type?: unknown }).type === "object"
   return isZodSchema(value) && value._zod.def.type === "object"
+}
+
+/** The schema object handed to the SDK for a tool's input or output. */
+export function sdkSchema(schema: InputSchema | OutputSchema) {
+  return isJsonSchema(schema) ? schema.standard : schema
 }
