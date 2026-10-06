@@ -1,0 +1,30 @@
+{
+  "name": "create-kervan",
+  "version": "0.1.0",
+  "description": "Create a Kervan MCP server: npm create kervan@latest my-server",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "^22.18.0 || >=23.6.0"
+  },
+  "bin": {
+    "create-kervan": "./bin/create-kervan.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "create",
+    "scaffold",
+    "kervan"
+  ],
+  "scripts": {
+    "check:pack": "publint",
+    "prepublishOnly": "node ../../scripts/guard-publish.mjs"
+  },
+  "dependencies": {
+    "kervan": "workspace:^"
+  }
+}

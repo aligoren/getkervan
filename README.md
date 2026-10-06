@@ -7,6 +7,11 @@ Streamable HTTP on Node, and fetch runtimes such as Cloudflare Workers, Deno and
 
 > **Status:** 0.1, pre-release. The packages are not published to npm yet.
 
+```sh
+npm create kervan@latest my-server   # once published
+cd my-server && npm run dev
+```
+
 ```ts
 import { createApp, ToolError, z } from "@kervan/core"
 import { serve } from "@kervan/transport/node"
@@ -34,6 +39,7 @@ await serve(app) // stdio by default; `--http` for Streamable HTTP
 | --- | --- |
 | [`@kervan/core`](packages/core) | `createApp`, `app.tool`, the tool context (`ctx.signal`, `ctx.progress`, `ctx.log`, `ctx.auth`), error mapping. No transport, database or UI code. |
 | [`@kervan/transport`](packages/transport) | `toFetchHandler` (web-standard), `serveStdio` / `serveHttp` / `serve` (Node), and `createTestClient` for tests. |
+| [`kervan`](packages/cli) | The CLI: `kervan create` (and `npm create kervan`). Generated projects run TypeScript directly on Node.js 22.18+. |
 | [`examples/weather`](examples/weather) | A runnable example server with tests. |
 | [`examples/dynamic`](examples/dynamic) | Tools that change at runtime, and a multi-tenant HTTP server. |
 
@@ -197,8 +203,8 @@ Kervan's focus is different:
 ## Roadmap
 
 1. **Core and transports**: `app.tool`, validation, stdio and Streamable HTTP, a test client.
-2. **In progress**: dynamic registry, `resolveServer` and middleware (done), and a CLI
-   (`kervan create`, `kervan dev`).
+2. **In progress**: dynamic registry, `resolveServer`, middleware and `kervan create` (done);
+   `kervan dev` (hot reload and a terminal inspector) is next.
 3. Spec runtime (`kervan.yaml`, HTTP executor, secrets, output mapping) and `kervan run <spec>`.
 4. Kervan Studio.
 
@@ -220,7 +226,8 @@ Publishing is blocked by a `prepublishOnly` guard until the npm scope is secured
 **Windows and Node 24.** With Node 24.15.0 (libuv 1.51.0) on Windows, the HTTP test file
 occasionally crashed its Vitest worker with exit code `3221226505` (a libuv
 `UV_HANDLE_CLOSING` assertion around `fetch`). We saw it in 4 of 70 runs on 24.15.0 and in none of
-60 runs on Node 24.21.0 (libuv 1.52.1) or 30 runs on Node 22. Use Node 24.21 or newer on Windows.
+60 runs on Node 24.21.0 (libuv 1.52.1) or 30 runs on Node 22. On Windows, if you use Node 24,
+use 24.21 or newer.
 
 ## License
 

@@ -1,0 +1,29 @@
+{
+  "name": "{{name}}",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An MCP server built with Kervan",
+  "type": "module",
+  "engines": {
+    "node": "{{nodeEngines}}"
+  },
+  "scripts": {
+    "dev": "kervan dev src/index.ts",
+    "start": "node src/index.ts",
+    "start:http": "node src/index.ts --http",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kervan/core": "^{{kervanVersion}}",
+    "@kervan/transport": "^{{kervanVersion}}"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "{{mcpClientVersion}}",
+    "@types/node": "{{typesNodeVersion}}",
+    "kervan": "^{{kervanVersion}}",
+    "typescript": "{{typescriptVersion}}",
+    "vitest": "{{vitestVersion}}"
+  }
+}

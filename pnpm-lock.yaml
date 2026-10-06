@@ -211,6 +211,18 @@ importers:
         specifier: ^2.3.1
         version: 2.3.1
 
+  packages/cli:
+    devDependencies:
+      '@kervan/core':
+        specifier: workspace:^
+        version: link:../core
+      '@kervan/transport':
+        specifier: workspace:^
+        version: link:../transport
+      '@modelcontextprotocol/client':
+        specifier: ^2.3.1
+        version: 2.3.1
+
   packages/core:
     dependencies:
       '@modelcontextprotocol/server':
@@ -223,6 +235,12 @@ importers:
       '@modelcontextprotocol/client':
         specifier: ^2.3.1
         version: 2.3.1
+
+  packages/create-kervan:
+    dependencies:
+      kervan:
+        specifier: workspace:^
+        version: link:../cli
 
   packages/transport:
     dependencies:

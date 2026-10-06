@@ -1,0 +1,45 @@
+{
+  "name": "kervan",
+  "version": "0.1.0",
+  "description": "Command line tools for Kervan MCP servers: create projects and develop with hot reload.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "^22.18.0 || >=23.6.0"
+  },
+  "bin": {
+    "kervan": "./bin/kervan.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "bin",
+    "dist",
+    "src",
+    "templates",
+    "!**/*.tsbuildinfo"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "cli",
+    "scaffold",
+    "kervan"
+  ],
+  "scripts": {
+    "check:pack": "publint && attw --pack . --profile esm-only",
+    "prepublishOnly": "node ../../scripts/guard-publish.mjs"
+  },
+  "devDependencies": {
+    "@kervan/core": "workspace:^",
+    "@kervan/transport": "workspace:^",
+    "@modelcontextprotocol/client": "^2.3.1"
+  }
+}
