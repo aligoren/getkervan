@@ -47,6 +47,11 @@ await serve(app) // stdio by default; `--http` for Streamable HTTP
 - Definition mistakes (bad name, duplicate tool, non-object input, ...) throw `KervanDefinitionError`
   at startup with a code and a hint.
 
+### Middleware
+
+`app.use((call, next) => ...)` wraps every tool call (logging, policy checks, metrics); a tool can
+add its own with `middleware: [...]`. See [`@kervan/core`](packages/core#middleware).
+
 ### Errors
 
 | Handler does | Client sees |
@@ -192,7 +197,7 @@ Kervan's focus is different:
 ## Roadmap
 
 1. **Core and transports**: `app.tool`, validation, stdio and Streamable HTTP, a test client.
-2. **In progress**: dynamic registry and `resolveServer` (done), middleware, and a CLI
+2. **In progress**: dynamic registry, `resolveServer` and middleware (done), and a CLI
    (`kervan create`, `kervan dev`).
 3. Spec runtime (`kervan.yaml`, HTTP executor, secrets, output mapping) and `kervan run <spec>`.
 4. Kervan Studio.

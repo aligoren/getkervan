@@ -17,6 +17,7 @@ export type DefinitionErrorCode =
   | "INVALID_OUTPUT_SCHEMA"
   | "INVALID_HANDLER"
   | "INVALID_TIMEOUT"
+  | "INVALID_MIDDLEWARE"
 
 /** Thrown synchronously at definition time when an app or tool is misconfigured. */
 export class KervanDefinitionError extends Error {

@@ -16,6 +16,7 @@ import {
   type NoInput,
   type StructuredToolDefinition,
   type ToolDefinition,
+  type ToolMiddleware,
 } from "./tool.js"
 
 export interface AppLimits {
@@ -86,6 +87,11 @@ export interface App {
   ): App
   /** Removes a tool. Connected clients are notified. Returns `false` if it did not exist. */
   removeTool(name: string): boolean
+  /**
+   * Adds middleware around every tool call, in registration order (first added = outermost).
+   * Applies immediately, to every registry this app serves.
+   */
+  use(middleware: ToolMiddleware): App
   /** Tools of the app's registry, in order. */
   listTools(): ToolInfo[]
   /**
@@ -112,6 +118,7 @@ export function createApp(options: AppOptions): App {
   const maxToolInputElements =
     options.limits?.maxToolInputElements ?? DEFAULT_MAX_TOOL_INPUT_ELEMENTS
   const protocolLogging = options.protocolLogging ?? false
+  const middleware: ToolMiddleware[] = []
   const registry =
     options.registry ??
     new InMemoryToolRegistry({
@@ -152,7 +159,8 @@ export function createApp(options: AppOptions): App {
         ...(tool.output === undefined ? {} : { outputSchema: tool.output }),
         ...(tool.annotations === undefined ? {} : { annotations: tool.annotations }),
       },
-      (input, raw) => invokeTool(tool, input, raw, { timeoutMs, logger, protocolLogging }),
+      (input, raw) =>
+        invokeTool(tool, input, raw, { timeoutMs, logger, protocolLogging, middleware }),
     )
   }
 
@@ -174,6 +182,14 @@ export function createApp(options: AppOptions): App {
 
     removeTool(name) {
       return registry.remove(name)
+    },
+
+    use(fn) {
+      if (typeof fn !== "function") {
+        throw new KervanDefinitionError("INVALID_MIDDLEWARE", "app.use() expects a function.")
+      }
+      middleware.push(fn)
+      return app
     },
 
     listTools() {

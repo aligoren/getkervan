@@ -41,6 +41,9 @@ export {
   type NoInput,
   type StructuredToolDefinition,
   TOOL_NAME_PATTERN,
+  type ToolCall,
+  type ToolCallInfo,
   type ToolDefinition,
   type ToolHandler,
+  type ToolMiddleware,
 } from "./tool.js"

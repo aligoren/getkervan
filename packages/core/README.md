@@ -56,6 +56,33 @@ identity to avoid spurious notifications. Registries shared by several instances
 `onChange` on every instance. `InMemoryToolRegistry` coalesces changes made in one tick into a
 single `onChange` call.
 
+## Middleware
+
+```ts
+app.use(async (call, next) => {
+  const started = Date.now()
+  try {
+    return await next()
+  } finally {
+    app.logger.info(`${call.tool.name} took ${Date.now() - started} ms`)
+  }
+})
+
+app.tool("drop_table", { description: "...", middleware: [requireAdmin], handler })
+```
+
+- Order: app middleware in `app.use` order, then the tool's `middleware`, then the handler.
+  Results unwind in reverse.
+- A middleware sees the validated `call.input`, `call.tool` (name, title, description,
+  annotations) and `call.ctx`. It can return a result without calling `next()` (short-circuit) or
+  change the result `next()` returns.
+- Errors travel through the chain as exceptions and are mapped once, at the outside: `ToolError`
+  messages reach the client, anything else is masked. Timeouts and cancellation cover the whole
+  chain. Calling `next()` twice is an error.
+- `app.use` applies immediately, also to connected clients and to tools served from other
+  registries (`resolveServer`). Filtering which tools a caller *sees* is `resolveServer`'s job,
+  not middleware's. For HTTP-level middleware, use `handler.hono`.
+
 ## Tool context
 
 | | |

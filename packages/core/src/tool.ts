@@ -31,7 +31,35 @@ interface ToolDefinitionBase<I extends AnyObjectSchema> {
   annotations?: ToolAnnotations
   /** Per-tool timeout in milliseconds; overrides `limits.toolTimeoutMs`. */
   timeoutMs?: number
+  /** Middleware for this tool only. Runs after the app's middleware (`app.use`). */
+  middleware?: readonly ToolMiddleware[]
 }
+
+/** What a middleware knows about the tool being called. */
+export interface ToolCallInfo {
+  readonly name: string
+  readonly title: string | undefined
+  readonly description: string
+  readonly annotations: ToolAnnotations | undefined
+}
+
+export interface ToolCall {
+  readonly tool: ToolCallInfo
+  /** Arguments after schema validation. */
+  readonly input: unknown
+  readonly ctx: ToolContext
+}
+
+/**
+ * Wraps a tool call. Call `next()` once to continue, or return a result without calling it to
+ * short-circuit. Errors propagate through the chain as exceptions and are mapped at the outermost
+ * layer: `ToolError` messages reach the client, anything else is masked. Timeouts and cancellation
+ * cover the whole chain.
+ */
+export type ToolMiddleware = (
+  call: ToolCall,
+  next: () => Promise<CallToolResult>,
+) => CallToolResult | Promise<CallToolResult>
 
 /** A tool whose handler returns text or a full `CallToolResult`. */
 export interface ToolDefinition<I extends AnyObjectSchema = AnyObjectSchema>
@@ -60,6 +88,7 @@ export interface RegisteredToolDefinition {
   output: z.ZodType | undefined
   annotations: ToolAnnotations | undefined
   timeoutMs: number | undefined
+  middleware: readonly ToolMiddleware[]
   handler: (input: unknown, ctx: ToolContext) => unknown
 }
 
@@ -106,6 +135,15 @@ export function validateToolDefinition(
       `Tool "${name}": "timeoutMs" must be a positive number of milliseconds.`,
     )
   }
+  if (
+    def.middleware !== undefined &&
+    !(Array.isArray(def.middleware) && def.middleware.every((mw) => typeof mw === "function"))
+  ) {
+    throw new KervanDefinitionError(
+      "INVALID_MIDDLEWARE",
+      `Tool "${name}": "middleware" must be an array of functions.`,
+    )
+  }
   return {
     name,
     title: def.title,
@@ -114,6 +152,7 @@ export function validateToolDefinition(
     output: def.output,
     annotations: def.annotations,
     timeoutMs: def.timeoutMs,
+    middleware: Object.freeze([...(def.middleware ?? [])]),
     handler: def.handler as RegisteredToolDefinition["handler"],
   }
 }
@@ -122,6 +161,8 @@ export interface InvokeOptions {
   timeoutMs: number
   logger: Logger
   protocolLogging: boolean
+  /** App-level middleware, outermost first. Read at call time, so `app.use` applies immediately. */
+  middleware?: readonly ToolMiddleware[]
 }
 
 /**
@@ -143,11 +184,16 @@ export async function invokeTool(
     protocolLogging: options.protocolLogging,
   })
   try {
-    const value = await raceAbort(
-      Promise.resolve().then(() => tool.handler(input, ctx)),
-      signal,
-    )
-    return toCallToolResult(tool, value)
+    const chain = [...(options.middleware ?? []), ...tool.middleware]
+    const call: ToolCall = Object.freeze({ tool: callInfo(tool), input, ctx })
+    const run = async () => toCallToolResult(tool, await tool.handler(input, ctx))
+    const result = await raceAbort(Promise.resolve().then(compose(chain, call, run)), signal)
+    if (!isCallToolResult(result)) {
+      throw new InvalidToolReturnError(
+        `A middleware of tool "${tool.name}" returned ${describe(result)} instead of a CallToolResult.`,
+      )
+    }
+    return result
   } catch (error) {
     if (timeout.aborted) {
       return errorResult(`Tool "${tool.name}" timed out after ${options.timeoutMs} ms.`)
@@ -164,6 +210,41 @@ export async function invokeTool(
   } finally {
     close()
   }
+}
+
+/** Builds the onion: middleware[0] wraps middleware[1] ... wraps the handler. */
+function compose(
+  chain: readonly ToolMiddleware[],
+  call: ToolCall,
+  handler: () => Promise<CallToolResult>,
+): () => Promise<CallToolResult> {
+  const dispatch = (index: number): (() => Promise<CallToolResult>) => {
+    const middleware = chain[index]
+    if (middleware === undefined) return handler
+    return async () => {
+      let called = false
+      const next = () => {
+        if (called) {
+          return Promise.reject(
+            new Error(`next() called more than once in a middleware of tool "${call.tool.name}"`),
+          )
+        }
+        called = true
+        return dispatch(index + 1)()
+      }
+      return middleware(call, next)
+    }
+  }
+  return dispatch(0)
+}
+
+function callInfo(tool: RegisteredToolDefinition): ToolCallInfo {
+  return Object.freeze({
+    name: tool.name,
+    title: tool.title,
+    description: tool.description,
+    annotations: tool.annotations,
+  })
 }
 
 /** Thrown when a handler returns a value Kervan cannot turn into a tool result. */
