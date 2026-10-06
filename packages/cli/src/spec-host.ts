@@ -16,6 +16,15 @@ import { collectSecrets, createRedactor, type Redactor } from "./dev/redact.js"
 /** Every address, for `--allow-private-network` (development only). */
 export const ALLOW_ALL_NETWORKS = ["0.0.0.0/0", "::/0"]
 
+/** Printed on every start with `--allow-insecure-secrets`: hard to miss in a terminal or log. */
+export const INSECURE_SECRETS_WARNING = [
+  "!".repeat(72),
+  "!! WARNING: --allow-insecure-secrets is on.",
+  "!! Spec tools may send secrets over plain http, unencrypted, readable on the network.",
+  "!! Use it only against a local development API, never in production.",
+  "!".repeat(72),
+].join("\n")
+
 /** The SSRF policy for `--allow-private-network` and `--deny-network`. */
 export function cliNetworkPolicy(options: {
   allowPrivateNetwork: boolean

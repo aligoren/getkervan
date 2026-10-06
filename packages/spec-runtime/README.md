@@ -184,8 +184,8 @@ secrets:
   to `api.example.com` is never sent to `api.example.com:8443`.
 - Hosts and ports match exactly, after normalization (case, IDNA, IP forms). `example.com` does
   not cover `api.example.com`, and wildcards, schemes and paths are refused.
-- In a one-line (flow) list, quote `host:port` entries: `hosts: ["api.example.com:8443"]`. YAML
-  reads an unquoted `a:b` inside `[...]` as a key and value.
+- Write `host:port` without a space after the colon. YAML reads `api.example.com: 8443` as a key
+  and value, and the load error says so.
 - A tool that uses a bound secret against another host is a load error.
 - The executor checks again before every request and every redirect hop:
   - A redirect to a host that may not receive the tool's secrets is not followed, even when the

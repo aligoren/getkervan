@@ -125,8 +125,16 @@ export async function startStudio(
           }
           void rebind(config.host).then(
             () => print(`The first admin exists: now listening on ${config.host}.`),
-            (error: unknown) =>
-              print(`Could not listen on ${config.host}: ${(error as Error).message}`),
+            async (error: unknown) => {
+              // Never end up listening nowhere: go back to loopback and say so.
+              print(
+                `Could not listen on ${config.host} (${(error as Error).message}); still ` +
+                  `listening on ${host}. Fix KERVAN_STUDIO_HOST and restart Studio.`,
+              )
+              await rebind(host).catch((fallback: unknown) =>
+                print(`Could not listen on ${host} either: ${(fallback as Error).message}`),
+              )
+            },
           )
         }, 0)
       },

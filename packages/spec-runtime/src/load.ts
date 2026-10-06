@@ -117,7 +117,9 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
 
   const parsed = specSchema.safeParse(data)
   if (!parsed.success) {
-    for (const issue of parsed.error.issues) at(issue.path as IssuePath, zodMessage(issue))
+    for (const issue of parsed.error.issues) {
+      at(issue.path as IssuePath, zodMessage(issue, data))
+    }
     throw new SpecLoadError(fileName, issues)
   }
   const spec = parsed.data
@@ -238,7 +240,31 @@ function position(doc: ReturnType<typeof parseDocument>, counter: LineCounter, p
   return {}
 }
 
-function zodMessage(issue: z.core.$ZodIssue): string {
+function zodMessage(issue: z.core.$ZodIssue, data: unknown): string {
   if (issue.code === "unrecognized_keys") return `Unknown field(s): ${issue.keys.join(", ")}.`
+  // `api.example.com: 8443` (a space after the colon) is a one-entry mapping in YAML, not a
+  // host:port string. Zod reports it on the host or, through the union, on the whole entry.
+  if (issue.path[0] === "secrets") {
+    const entry = valueAt(data, issue.path.slice(0, 2)) as { hosts?: unknown } | undefined
+    const hosts = Array.isArray(entry?.hosts) ? entry.hosts : []
+    const mapping = hosts.find(
+      (host): host is Record<string, unknown> =>
+        host !== null && typeof host === "object" && !Array.isArray(host),
+    )
+    if (mapping) {
+      const [host, port] = Object.entries(mapping)[0] ?? []
+      const example = host === undefined ? "api.example.com:8443" : `${host}:${String(port ?? "")}`
+      return `YAML read a host:port as a key and value (because of the space after the colon); write "${example}".`
+    }
+  }
   return issue.message
+}
+
+function valueAt(data: unknown, path: readonly PropertyKey[]): unknown {
+  let current = data
+  for (const key of path) {
+    if (current === null || typeof current !== "object") return undefined
+    current = (current as Record<PropertyKey, unknown>)[key]
+  }
+  return current
 }

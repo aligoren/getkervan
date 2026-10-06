@@ -8,7 +8,7 @@ import {
   typeStrippingProblem,
   windowsLibuvWarning,
 } from "../node-version.js"
-import { cliNetworkPolicy, loadEnvFiles, SpecHost } from "../spec-host.js"
+import { cliNetworkPolicy, INSECURE_SECRETS_WARNING, loadEnvFiles, SpecHost } from "../spec-host.js"
 import { DevHost } from "./host.js"
 import { collectSecrets, createRedactor, type Redactor } from "./redact.js"
 import { startRepl } from "./repl.js"
@@ -100,6 +100,7 @@ export async function runDev(options: DevOptions): Promise<number> {
       })
       host = spec
       redact = spec.redact
+      if (options.allowInsecureSecrets) warn(INSECURE_SECRETS_WARNING)
     } catch (error) {
       warn(`Error: ${(error as Error).message}`)
       return 1

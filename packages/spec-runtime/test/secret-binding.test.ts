@@ -454,3 +454,33 @@ describe("secret bindings and redirects", () => {
     expect(landed?.headers["user-agent"]).not.toBe(SECRET)
   })
 })
+
+describe("host:port written without quotes", () => {
+  it.each([
+    ["a flow list", "[{ name: API_KEY, hosts: [api.example.com: 8443] }]"],
+    ["a block list", "\n  - name: API_KEY\n    hosts:\n      - api.example.com: 8443"],
+  ])("explains how to write it when a space follows the colon (%s)", async (_name, secrets) => {
+    const errors = await loadErrors(specText(secrets, keyTool("https://api.example.com:8443/")))
+    expect(errors).toContain(
+      'YAML read a host:port as a key and value (because of the space after the colon); write "api.example.com:8443".',
+    )
+  })
+
+  it("accepts it without a space, quoted, and in a block list", async () => {
+    const plain = specText(
+      "[{ name: API_KEY, hosts: [api.example.com:8443] }]",
+      keyTool("https://api.example.com:8443/"),
+    )
+    expect(await loadErrors(plain)).toEqual([])
+    const quoted = specText(
+      "[{ name: API_KEY, hosts: ['api.example.com:8443'] }]",
+      keyTool("https://api.example.com:8443/"),
+    )
+    const block = specText(
+      "\n  - name: API_KEY\n    hosts:\n      - api.example.com:8443",
+      keyTool("https://api.example.com:8443/"),
+    )
+    expect(await loadErrors(quoted)).toEqual([])
+    expect(await loadErrors(block)).toEqual([])
+  })
+})

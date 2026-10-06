@@ -105,6 +105,8 @@ describe.each(["legacy", "modern"] as const)("kervan run (stdio, %s era)", (era)
     expect(seenKeys.at(-1)).toBe(SECRET)
     expect(stderr()).toMatch(/Loaded run-test 0\.0\.1: 2 tool/)
     expect(stderr()).not.toContain(SECRET)
+    // The development flag is announced on every start.
+    expect(stderr()).toContain("!! WARNING: --allow-insecure-secrets is on.")
   })
 })
 
@@ -253,7 +255,7 @@ describe("kervan dev with a spec", () => {
   it("reloads kervan.yaml in process and keeps unchanged tools", { timeout: 30_000 }, async () => {
     const dir = await workspace()
     await writeFile(path.join(dir, "package.json"), '{ "name": "spec-dev", "type": "module" }\n')
-    const { client, notifications } = await connect(dir, [
+    const { client, notifications, stderr } = await connect(dir, [
       "dev",
       "kervan.yaml",
       "--stdio",
@@ -267,6 +269,7 @@ describe("kervan dev with a spec", () => {
     await writeFile(path.join(dir, "kervan.yaml"), specText("Changed in dev"))
     await expect.poll(notifications, POLL).toBe(1)
     expect((await client.listTools()).tools[0]?.description).toBe("Changed in dev")
+    expect(stderr()).toContain("!! WARNING: --allow-insecure-secrets is on.")
   })
 })
 

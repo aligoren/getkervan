@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import { serveHttp, serveStdio } from "@kervan/transport/node"
 import { findProjectRoot, watchProject } from "./dev/watch.js"
-import { cliNetworkPolicy, loadEnvFiles, SpecHost } from "./spec-host.js"
+import { cliNetworkPolicy, INSECURE_SECRETS_WARNING, loadEnvFiles, SpecHost } from "./spec-host.js"
 
 export interface RunOptions {
   spec: string
@@ -86,7 +86,7 @@ export async function runSpec(options: RunOptions): Promise<number> {
     print("Warning: --allow-private-network is on; tools can reach internal addresses.")
   }
   if (options.allowInsecureSecrets) {
-    print("Warning: --allow-insecure-secrets is on; secrets may travel over plain http.")
+    print(INSECURE_SECRETS_WARNING)
   }
 
   const closers: (() => Promise<void>)[] = []

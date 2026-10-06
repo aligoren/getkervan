@@ -137,6 +137,37 @@ describe("starting Studio", () => {
     expect(await after.json()).toEqual({ needed: false })
   })
 
+  it("goes back to loopback when the configured host cannot be used", async () => {
+    // 192.0.2.1 (TEST-NET-1) is not an address of this machine: listening on it fails.
+    const port = await freePort()
+    const { running, lines } = await start({
+      KERVAN_STUDIO_DATA_DIR: dataDir(),
+      KERVAN_STUDIO_PORT: String(port),
+      KERVAN_STUDIO_HOST: "192.0.2.1",
+      KERVAN_STUDIO_PUBLIC_URL: `http://127.0.0.1:${port}`,
+    })
+    const origin = `http://127.0.0.1:${port}`
+    const setup = await fetch(`${origin}/api/setup`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin },
+      body: JSON.stringify({
+        token: running.setupToken,
+        email: "admin@example.test",
+        password: "correct horse battery staple",
+      }),
+    })
+    expect(setup.status).toBe(201)
+    await expect
+      .poll(() => lines.join("\n"), { timeout: 5000 })
+      .toMatch(/still listening on 127\.0\.0\.1/)
+    // Studio still answers on loopback.
+    await expect
+      .poll(async () => (await fetch(`${origin}/api/setup`).catch(() => undefined))?.status, {
+        timeout: 5000,
+      })
+      .toBe(200)
+  })
+
   // 0.0.0.0 covers 127.0.0.1 on the same port: the loopback listener must go first. (Skipped on
   // Windows, where listening on all interfaces would prompt the firewall.)
   it.runIf(process.platform !== "win32")(
