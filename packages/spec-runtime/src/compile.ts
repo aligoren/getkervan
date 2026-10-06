@@ -77,12 +77,14 @@ async function executePlan(
   ctx: ToolContext,
   runtime: RuntimeOptions,
 ): Promise<unknown> {
-  const secrets = await resolveSecrets(plan.secrets, runtime)
+  const secrets = await resolveSecrets(plan, plan.host, runtime)
   const render: RenderContext = {
     input,
     secret: (name) => {
       const value = secrets.get(name)
-      if (value === undefined) throw new ToolError(`Secret ${name} is not configured.`)
+      if (value === undefined) {
+        throw new ToolError(`Secret ${name} is not set or not allowed for ${plan.host}.`)
+      }
       return value
     },
   }
@@ -129,7 +131,7 @@ async function executePlan(
     headers,
     ...(body === undefined ? {} : { body }),
   }
-  const response = await sendFollowingRedirects(call, plan, ctx, runtime)
+  const response = await sendFollowingRedirects(call, plan, ctx, runtime, [...secrets.values()])
 
   if (response.status >= 400) {
     // The path may hold templated values; the vault scrubs secrets from it before logging.
@@ -146,7 +148,11 @@ async function executePlan(
     if (!isTextContentType(response.contentType)) {
       throw new ToolError(`Upstream returned content type ${type}; raw output needs text or JSON.`)
     }
-    return truncate(response.body.toString("utf8"), plan.limits.maxOutputChars)
+    // Redact before cutting, so a cut can never leave part of a secret behind.
+    return truncate(
+      runtime.vault.redact(response.body.toString("utf8")),
+      plan.limits.maxOutputChars,
+    )
   }
 
   if (!isJsonContentType(response.contentType)) {
@@ -158,7 +164,10 @@ async function executePlan(
   } catch {
     throw new ToolError("Upstream returned invalid JSON.")
   }
-  const selected = select(data, plan.output.select) ?? null
+  // The spec's select expression must never see a secret: it could reshape one (upper-case it,
+  // reverse it, split it) or test it character by character, and the result would no longer match
+  // what redaction looks for. So upstream data is redacted first, and the output again later.
+  const selected = select(runtime.vault.redactValue(data), plan.output.select) ?? null
   const text = JSON.stringify(selected)
   if (plan.output.schema) {
     if (text.length > plan.limits.maxOutputChars) {
@@ -182,6 +191,7 @@ async function sendFollowingRedirects(
   plan: ToolPlan,
   ctx: ToolContext,
   runtime: RuntimeOptions,
+  secretValues: readonly string[],
 ): Promise<HttpResponse> {
   let call = first
   for (let hop = 0; ; hop++) {
@@ -241,6 +251,13 @@ async function sendFollowingRedirects(
         `Request to ${host} was redirected to another host with a request body; not followed.`,
       )
     }
+    // The new URL comes from the upstream and may carry secrets it reflected from this request
+    // (an open redirect). A host that may not receive every secret the tool uses is refused.
+    if (next.hostname !== call.url.hostname && !(await mayReceiveSecrets(plan, next, runtime))) {
+      throw new ToolError(
+        `Request to ${host} was redirected to a host that may not receive this tool's secrets; not followed.`,
+      )
+    }
     const headers: Record<string, string> = {}
     for (const [name, value] of Object.entries(call.headers)) {
       const lower = name.toLowerCase()
@@ -248,6 +265,7 @@ async function sendFollowingRedirects(
       // Another origin gets none of the spec's headers: any of them may carry a credential,
       // templated or written literally.
       if (crossOrigin && !CROSS_ORIGIN_HEADERS.has(lower)) continue
+      if (crossOrigin && secretValues.some((secret) => value.includes(secret))) continue
       headers[name] = value
     }
     call = { method, url: next, headers, ...(body === undefined ? {} : { body }) }
@@ -293,10 +311,29 @@ class CallLimiter {
   }
 }
 
-async function resolveSecrets(names: readonly string[], runtime: RuntimeOptions) {
+/** Whether every secret the tool uses may be sent to `url`'s host (spec binding and source). */
+async function mayReceiveSecrets(plan: ToolPlan, url: URL, runtime: RuntimeOptions) {
+  for (const name of plan.secrets) {
+    const hosts = plan.secretHosts.get(name)
+    if (hosts && !hosts.includes(url.hostname)) return false
+    const value = await runtime.secrets.get(name, { host: url.hostname, tool: plan.name })
+    if (value === undefined || value === "") return false
+  }
+  return true
+}
+
+/**
+ * Asks the source for each secret the tool uses, for the host it is about to be sent to. A bound
+ * secret is refused here for any other host, whatever the source would return.
+ */
+async function resolveSecrets(plan: ToolPlan, host: string, runtime: RuntimeOptions) {
   const values = new Map<string, string>()
-  for (const name of names) {
-    const value = await runtime.secrets.get(name)
+  for (const name of plan.secrets) {
+    const hosts = plan.secretHosts.get(name)
+    if (hosts && !hosts.includes(host)) {
+      throw new ToolError(`Secret ${name} may not be sent to ${host}.`)
+    }
+    const value = await runtime.secrets.get(name, { host, tool: plan.name })
     if (value === undefined || value === "") continue
     try {
       runtime.vault.add(name, value)

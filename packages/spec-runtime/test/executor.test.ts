@@ -323,7 +323,7 @@ tools:
     const client = await createTestClient(app)
     clients.push(client)
     const result = await client.callTool({ name: "t", arguments: {} })
-    expect(text(result)).toBe("Secret OTHER_KEY is not configured.")
+    expect(text(result)).toBe("Secret OTHER_KEY is not set or not allowed for 127.0.0.1.")
   })
 })
 

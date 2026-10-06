@@ -2,7 +2,7 @@ import type { MutableToolRegistry } from "@kervan/core"
 import { type CompiledDefinition, compilePlan } from "./compile.js"
 import { type LoadedSpec, type LoadOptions, SpecLoadError } from "./load.js"
 import { planTool, type SpecIssue } from "./plan.js"
-import { envSecrets, SecretVault } from "./secrets.js"
+import { envSecrets, normalizeHost, SecretVault } from "./secrets.js"
 import { type SpecTool, specToolSchema } from "./spec-schema.js"
 
 // Public API. The security building blocks (address checks, pinned lookups, template parsing,
@@ -25,7 +25,15 @@ export {
 } from "./network.js"
 export type { SpecIssue } from "./plan.js"
 export { SCHEMA_LIMITS } from "./schema-limits.js"
-export { envSecrets, REDACTED, SecretError, type SecretSource, SecretVault } from "./secrets.js"
+export {
+  envSecrets,
+  normalizeHost,
+  REDACTED,
+  type SecretContext,
+  SecretError,
+  type SecretSource,
+  SecretVault,
+} from "./secrets.js"
 export {
   HTTP_DEFAULTS,
   SPEC_LIMITS,
@@ -72,7 +80,10 @@ export function applySpec(
  */
 export function httpTool(
   tool: unknown,
-  options: Omit<LoadOptions, "fileName"> & { secretNames?: readonly string[] } = {},
+  options: Omit<LoadOptions, "fileName" | "requireSecrets"> & {
+    /** Secrets the tool may use: names, or `{ name, hosts }` to bind one to hosts. */
+    secretNames?: readonly (string | { name: string; hosts: readonly string[] })[]
+  } = {},
 ): [string, CompiledDefinition] {
   const issues: SpecIssue[] = []
   const parsed = specToolSchema.safeParse(tool)
@@ -86,7 +97,7 @@ export function httpTool(
       })),
     )
   }
-  const declared = options.secretNames ? new Set(options.secretNames) : undefined
+  const declared = options.secretNames ? bindings(options.secretNames) : undefined
   const plan = planTool(
     parsed.data as SpecTool,
     undefined,
@@ -104,4 +115,36 @@ export function httpTool(
     ...(options.network ? { network: options.network } : {}),
   })
   return [plan.name, definition]
+}
+
+function bindings(
+  entries: readonly (string | { name: string; hosts: readonly string[] })[],
+): Map<string, readonly string[] | undefined> {
+  const declared = new Map<string, readonly string[] | undefined>()
+  for (const entry of entries) {
+    if (typeof entry === "string") {
+      declared.set(entry, undefined)
+      continue
+    }
+    const hosts = entry.hosts.map((host) => {
+      const normalized = normalizeHost(host)
+      if (normalized === undefined) {
+        throw new SpecLoadError("httpTool", [
+          { path: ["secretNames"], message: `"${host}" is not a host name.`, severity: "error" },
+        ])
+      }
+      return normalized
+    })
+    if (hosts.length === 0) {
+      throw new SpecLoadError("httpTool", [
+        {
+          path: ["secretNames"],
+          message: `Secret ${entry.name} needs at least one host.`,
+          severity: "error",
+        },
+      ])
+    }
+    declared.set(entry.name, hosts)
+  }
+  return declared
 }

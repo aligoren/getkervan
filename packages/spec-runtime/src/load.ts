@@ -2,7 +2,13 @@ import { LineCounter, parseDocument } from "yaml"
 import type * as z from "zod"
 import { type CompiledDefinition, compilePlan, type RuntimeOptions } from "./compile.js"
 import { type IssuePath, planTool, type SpecIssue, type ToolPlan } from "./plan.js"
-import { envSecrets, SecretError, type SecretSource, SecretVault } from "./secrets.js"
+import {
+  envSecrets,
+  normalizeHost,
+  SecretError,
+  type SecretSource,
+  SecretVault,
+} from "./secrets.js"
 import { SPEC_LIMITS, type Spec, type SpecTool, specSchema } from "./spec-schema.js"
 
 export interface CompiledTool {
@@ -28,6 +34,11 @@ export interface LoadOptions {
   vault?: SecretVault
   /** SSRF policy for outgoing requests. Default: public unicast addresses only. */
   network?: RuntimeOptions["network"]
+  /**
+   * Fail when a secret a tool uses is not available for that tool's host, instead of warning.
+   * Use it to validate a spec before publishing it. Default: false.
+   */
+  requireSecrets?: boolean
 }
 
 export class SpecLoadError extends Error {
@@ -106,7 +117,7 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
   }
   const spec = parsed.data
 
-  const declared = new Set(spec.secrets ?? [])
+  const declared = declaredSecrets(spec, at)
   const used = new Set<string>()
   const names = new Set<string>()
   const plans: [SpecTool, ToolPlan][] = []
@@ -119,23 +130,43 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
       plans.push([tool, plan])
     }
   })
-  for (const name of declared) {
-    if (!used.has(name)) at(["secrets"], `Secret ${name} is declared but never used.`, "warning")
+  const secretIndex = new Map((spec.secrets ?? []).map((entry, i) => [secretEntryName(entry), i]))
+  for (const name of declared.keys()) {
+    if (!used.has(name)) {
+      at(
+        ["secrets", secretIndex.get(name) ?? 0],
+        `Secret ${name} is declared but never used.`,
+        "warning",
+      )
+    }
   }
 
+  // Each secret is asked for once per host it is sent to, the way calls ask for it, so a source
+  // that binds secrets to hosts is checked before the server starts.
   const source = options.secrets ?? envSecrets()
   const vault = options.vault ?? new SecretVault()
-  for (const name of declared) {
-    const value = await source.get(name)
-    if (value === undefined || value === "") {
-      at(["secrets"], `Secret ${name} is not set; tools that use it fail until it is.`, "warning")
-      continue
-    }
-    try {
-      vault.add(name, value)
-    } catch (error) {
-      if (error instanceof SecretError) at(["secrets"], error.message)
-      else throw error
+  const asked = new Set<string>()
+  for (const [, plan] of plans) {
+    for (const name of plan.secrets) {
+      const key = JSON.stringify([name, plan.host])
+      if (asked.has(key)) continue
+      asked.add(key)
+      const path = ["secrets", secretIndex.get(name) ?? 0]
+      const value = await source.get(name, { host: plan.host, tool: plan.name })
+      if (value === undefined || value === "") {
+        at(
+          path,
+          `Secret ${name} is not set or not allowed for ${plan.host}; tools that use it there fail until it is.`,
+          options.requireSecrets ? "error" : "warning",
+        )
+        continue
+      }
+      try {
+        vault.add(name, value)
+      } catch (error) {
+        if (error instanceof SecretError) at(path, error.message)
+        else throw error
+      }
     }
   }
 
@@ -150,9 +181,39 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
   const tools = plans.map(([tool, plan]) => ({
     name: plan.name,
     definition: compilePlan(plan, runtime),
-    signature: JSON.stringify([tool, spec.defaults ?? null]),
+    // Bindings change what a tool may do, so they are part of its identity.
+    signature: JSON.stringify([tool, spec.defaults ?? null, [...plan.secretHosts]]),
   }))
   return { spec, tools, warnings: issues.filter((issue) => issue.severity === "warning"), vault }
+}
+
+function secretEntryName(entry: NonNullable<Spec["secrets"]>[number]): string {
+  return typeof entry === "string" ? entry : entry.name
+}
+
+/** Declared secret names with their normalized host bindings (`undefined` when unbound). */
+function declaredSecrets(
+  spec: Spec,
+  at: (path: IssuePath, message: string) => void,
+): Map<string, readonly string[] | undefined> {
+  const declared = new Map<string, readonly string[] | undefined>()
+  ;(spec.secrets ?? []).forEach((entry, index) => {
+    const name = secretEntryName(entry)
+    if (declared.has(name)) at(["secrets", index], `Secret ${name} is declared twice.`)
+    if (typeof entry === "string") {
+      declared.set(name, undefined)
+      return
+    }
+    const hosts: string[] = []
+    entry.hosts.forEach((host, i) => {
+      const normalized = normalizeHost(host)
+      if (normalized === undefined) {
+        at(["secrets", index, "hosts", i], `"${host}" is not a host name.`)
+      } else if (!hosts.includes(normalized)) hosts.push(normalized)
+    })
+    declared.set(name, hosts)
+  })
+  return declared
 }
 
 /** The line and column of the YAML node at `path`, or of its nearest existing parent. */

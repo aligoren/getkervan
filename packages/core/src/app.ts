@@ -5,6 +5,7 @@ import { createConsoleLogger, type Logger } from "./logger.js"
 import {
   InMemoryToolRegistry,
   type MutableToolRegistry,
+  type ServerInfo,
   sameEntries,
   type ToolEntry,
   type ToolRegistry,
@@ -126,15 +127,17 @@ export function createApp(options: AppOptions): App {
       onListenerError: (error) => logger.error("Tool registry listener failed", error),
     })
 
-  const newServer = () =>
-    new McpServer(
+  const newServer = (source: ToolRegistry) => {
+    // A registry's own identity replaces the app's as a whole, so fields never mix.
+    const info: ServerInfo = source.serverInfo ?? options
+    return new McpServer(
       {
-        name: options.name,
-        version: options.version,
-        ...(options.title ? { title: options.title } : {}),
+        name: info.name,
+        version: info.version,
+        ...(info.title ? { title: info.title } : {}),
       },
       {
-        ...(options.instructions === undefined ? {} : { instructions: options.instructions }),
+        ...(info.instructions === undefined ? {} : { instructions: info.instructions }),
         // Declared up front so an empty registry still answers tools/list and clients
         // still open a list_changed subscription.
         capabilities: {
@@ -148,6 +151,7 @@ export function createApp(options: AppOptions): App {
         maxToolInputElements,
       },
     )
+  }
 
   const register = (server: McpServer, tool: ToolEntry): RegisteredTool => {
     const timeoutMs = tool.timeoutMs ?? toolTimeoutMs
@@ -198,13 +202,13 @@ export function createApp(options: AppOptions): App {
     },
 
     createServer(source = registry) {
-      const server = newServer()
+      const server = newServer(source)
       for (const tool of source.list()) register(server, tool)
       return server
     },
 
     createLiveServer(source = registry) {
-      const server = newServer()
+      const server = newServer(source)
       let current = source.list()
       let handles = current.map((tool) => register(server, tool))
 

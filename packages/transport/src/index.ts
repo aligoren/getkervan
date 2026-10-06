@@ -13,13 +13,18 @@ export type { AuthInfo } from "@modelcontextprotocol/server"
 /**
  * Verifies the caller. Return `AuthInfo` to accept, a `Response` (e.g. a 401 with a
  * `WWW-Authenticate` challenge) to reject, or `undefined` to continue unauthenticated.
+ * `context.params` holds the MCP route's parameters (see `path`).
  */
 export type Authenticate = (
   request: Request,
+  context: { params: Readonly<Record<string, string>> },
 ) => AuthInfo | Response | undefined | Promise<AuthInfo | Response | undefined>
 
 export interface FetchHandlerOptions {
-  /** Route that serves MCP. Default: `"/mcp"`. */
+  /**
+   * Route that serves MCP. Default: `"/mcp"`. May have parameters, e.g. `"/s/:serverId/mcp"`;
+   * `authenticate` and `resolveServer` receive them as `params`.
+   */
   path?: string
   /**
    * Host the server is bound to. With a localhost-class value (the default, `"127.0.0.1"`) and no
@@ -36,6 +41,12 @@ export interface FetchHandlerOptions {
   responseMode?: CreateMcpHandlerOptions["responseMode"]
   /** `"stateless"` (default) also serves 2025-era clients; `"reject"` serves 2026-07-28 only. */
   legacy?: CreateMcpHandlerOptions["legacy"]
+  /**
+   * Refuse JSON-RPC batches (a JSON array body) with a 400. Batching exists only in protocol
+   * 2025-03-26; one batched request can carry many tool calls, so per-request limits (rate
+   * limits, `authenticate` quotas) undercount it. Default: false.
+   */
+  rejectBatches?: boolean
   authenticate?: Authenticate
   /**
    * Picks the tool registry for each request, after `authenticate`. Default: the app's registry.
@@ -84,9 +95,13 @@ export function toFetchHandler(app: App, options: FetchHandlerOptions = {}): Ker
 
   hono.all(path, async (c: Context) => {
     const parsedBody: unknown = c.get("parsedBody")
+    if (options.rejectBatches && Array.isArray(parsedBody)) {
+      return jsonRpcError(c, 400, "Batch requests are not supported", -32600)
+    }
+    const params: Readonly<Record<string, string>> = Object.freeze({ ...c.req.param() })
     let authInfo: AuthInfo | undefined
     if (options.authenticate) {
-      const outcome = await options.authenticate(c.req.raw)
+      const outcome = await options.authenticate(c.req.raw, { params })
       if (outcome instanceof Response) return outcome
       authInfo = outcome
     }
@@ -94,7 +109,7 @@ export function toFetchHandler(app: App, options: FetchHandlerOptions = {}): Ker
     let registry: ToolRegistry = app.registry
     if (options.resolveServer) {
       // Runs after authentication. Error bodies are fixed strings: they never echo the tenant.
-      const resolved = await options.resolveServer(c.req.raw, { auth: authInfo })
+      const resolved = await options.resolveServer(c.req.raw, { auth: authInfo, params })
       if (resolved === FORBIDDEN) return jsonRpcError(c, 403, "Forbidden")
       if (resolved === null || resolved === undefined) return jsonRpcError(c, 404, "Not found")
       if (!isToolRegistry(resolved)) {
@@ -129,7 +144,7 @@ export function toFetchHandler(app: App, options: FetchHandlerOptions = {}): Ker
   }
 }
 
-function jsonRpcError(c: Context, status: 403 | 404 | 500, message: string, code = -32000) {
+function jsonRpcError(c: Context, status: 400 | 403 | 404 | 500, message: string, code = -32000) {
   return c.json({ jsonrpc: "2.0", error: { code, message }, id: null }, status)
 }
 

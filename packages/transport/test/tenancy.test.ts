@@ -11,6 +11,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { afterEach, describe, expect, it } from "vitest"
 import type { Authenticate } from "../src/index.js"
 import { type HttpServerHandle, serveHttp } from "../src/node.js"
+import { createTestClient } from "../src/testing.js"
 import { MODERN, modernRequest, rawRequest } from "./helpers.js"
 
 // Tokens are the only trusted input; the tenant comes from the verified auth info.
@@ -213,5 +214,92 @@ describe("resolveServer", () => {
     expect(handle.handler.handlerFor(registries.acme)).not.toBe(
       handle.handler.handlerFor(registries.globex),
     )
+  })
+})
+
+describe("route parameters and per-registry identity", () => {
+  // One app serving several distinct servers under /s/:serverId/mcp, each with its own identity.
+  function servers() {
+    const app = createApp({ name: "gateway", version: "9.9.9", logger: silentLogger })
+    const one = new InMemoryToolRegistry({
+      serverInfo: { name: "one", version: "1.0.0", title: "Server One", instructions: "Use one." },
+    })
+    one.add("one_tool", def("one"))
+    const two = new InMemoryToolRegistry({ serverInfo: { name: "two", version: "2.0.0" } })
+    two.add("two_tool", def("two"))
+    const byId: Record<string, ToolRegistry> = { one, two }
+    const seen: unknown[] = []
+    const auth: Authenticate = (_request, { params }) => {
+      seen.push(["auth", params])
+      return { token: "t", clientId: "c", scopes: [], extra: { serverId: params.serverId } }
+    }
+    const resolveServer: ServerResolver = (_request, { auth: info, params }) => {
+      seen.push(["resolve", params])
+      if (info?.extra?.serverId !== params.serverId) return FORBIDDEN
+      return params.serverId ? byId[params.serverId] : undefined
+    }
+    return { app, one, two, seen, auth, resolveServer }
+  }
+
+  async function startServers(s: ReturnType<typeof servers>) {
+    const handle = await serveHttp(s.app, {
+      port: 0,
+      rateLimit: false,
+      path: "/s/:serverId/mcp",
+      authenticate: s.auth,
+      resolveServer: s.resolveServer,
+    })
+    handles.push(handle)
+    return (id: string) => new URL(`/s/${id}/mcp`, handle.url)
+  }
+
+  it.each(["modern", "legacy"] as const)(
+    "serves each server with its own identity and tools (%s)",
+    async (era) => {
+      const s = servers()
+      const url = await startServers(s)
+      const one = await connect(url("one"), "x", era)
+      const two = await connect(url("two"), "x", era)
+      expect(one.getServerVersion()).toMatchObject({
+        name: "one",
+        version: "1.0.0",
+        title: "Server One",
+      })
+      expect(one.getInstructions()).toBe("Use one.")
+      expect(two.getServerVersion()).toMatchObject({ name: "two", version: "2.0.0" })
+      // A registry's identity replaces the app's whole: no app title or instructions leak in.
+      expect(two.getServerVersion()?.title).toBeUndefined()
+      expect(two.getInstructions()).toBeUndefined()
+      expect((await one.listTools()).tools.map((t) => t.name)).toEqual(["one_tool"])
+      expect((await two.listTools()).tools.map((t) => t.name)).toEqual(["two_tool"])
+      expect(s.seen).toContainEqual(["auth", { serverId: "one" }])
+      expect(s.seen).toContainEqual(["resolve", { serverId: "two" }])
+    },
+  )
+
+  it("answers 404 for an unknown server and leaves other paths unrouted", async () => {
+    const s = servers()
+    const url = await startServers(s)
+    expect((await post(url("nope"), "x")).status).toBe(404)
+    expect((await post(new URL("/mcp", url("one")), "x")).status).toBe(404)
+    expect((await post(new URL("/s/one/two/mcp", url("one")), "x")).status).toBe(404)
+  })
+
+  it("uses the registry's identity on live connections too", async () => {
+    const { app, one } = servers()
+    for (const era of ["modern", "legacy"] as const) {
+      const client = await createTestClient(app, { registry: one, era })
+      clients.push(client)
+      expect(client.getServerVersion()).toMatchObject({ name: "one", version: "1.0.0" })
+    }
+  })
+
+  it("falls back to the app's identity for a registry without one", async () => {
+    const app = createApp({ name: "plain", version: "3.0.0", logger: silentLogger })
+    app.tool("t", def("t"))
+    const handle = await serveHttp(app, { port: 0, rateLimit: false })
+    handles.push(handle)
+    const client = await connect(handle.url, "x")
+    expect(client.getServerVersion()).toMatchObject({ name: "plain", version: "3.0.0" })
   })
 })

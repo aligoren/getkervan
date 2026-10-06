@@ -16,7 +16,7 @@ tools:
     input:
       type: object
       properties:
-        name: { type: string, minLength: 2, maxLength: 100, description: City name, e.g. Ankara }
+        name: { type: string, minLength: 2, maxLength: 100, description: "City name, e.g. Ankara" }
       required: [name]
     http:
       url: https://geocoding-api.open-meteo.com/v1/search

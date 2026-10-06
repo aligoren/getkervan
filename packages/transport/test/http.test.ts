@@ -130,6 +130,35 @@ describe("protocol edge cases", () => {
     expect(response.status).toBe(413)
   })
 
+  it("refuses JSON-RPC batches with rejectBatches, and serves them otherwise", async () => {
+    let calls = 0
+    const app = createApp({ name: "batch", version: "0.0.0", logger: silentLogger })
+    app.tool("count", {
+      description: "Counts calls",
+      handler: () => {
+        calls++
+        return String(calls)
+      },
+    })
+    const batch = Array.from({ length: 5 }, (_, i) => ({
+      jsonrpc: "2.0",
+      id: i + 1,
+      method: "tools/call",
+      params: { name: "count", arguments: {} },
+    }))
+    const headers = { "mcp-protocol-version": "2025-03-26" }
+
+    const strict = await start({ rejectBatches: true }, app)
+    const refused = await rawRequest(strict.url, { headers, body: batch })
+    expect(refused.status).toBe(400)
+    expect(messagesOf(refused)[0]).toMatchObject({ error: { code: -32600 } })
+    expect(calls).toBe(0)
+
+    const lenient = await start({}, app)
+    await rawRequest(lenient.url, { headers, body: batch })
+    expect(calls).toBe(5)
+  })
+
   it("returns 404 outside the MCP path", async () => {
     const { url } = await start()
     const response = await rawRequest(new URL("/elsewhere", url), { body: {} })

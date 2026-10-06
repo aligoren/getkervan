@@ -6,6 +6,8 @@ export const SPEC_LIMITS = {
   maxTools: 200,
   maxSelectLength: 1000,
   minSecretLength: 8,
+  maxSecrets: 100,
+  maxSecretHosts: 32,
   maxTimeoutMs: 120_000,
   maxResponseBytes: 50 * 1024 * 1024,
   maxOutputChars: 1_000_000,
@@ -23,6 +25,23 @@ export const HTTP_DEFAULTS = {
 
 const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/
 const SECRET_NAME = /^[A-Z][A-Z0-9_]{0,127}$/
+/** A DNS name or a bracketed IPv6 literal; no scheme, port, path or wildcard. */
+const HOST_NAME = /^(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?|\[[0-9A-Fa-f:.]+\])$/
+
+const secretName = z.string().regex(SECRET_NAME)
+const boundSecret = z
+  .strictObject({
+    name: secretName,
+    hosts: z
+      .array(z.string().max(253).regex(HOST_NAME))
+      .min(1)
+      .max(SPEC_LIMITS.maxSecretHosts)
+      .meta({
+        description:
+          "The only hosts this secret may be sent to, matched exactly (no subdomains or wildcards), e.g. api.example.com.",
+      }),
+  })
+  .meta({ description: "A secret bound to the hosts it may be sent to." })
 
 const timeoutMs = z
   .number()
@@ -153,10 +172,14 @@ export const specSchema = z
     name: z.string().min(1).max(128),
     version: z.string().min(1).max(64),
     description: z.string().optional(),
-    secrets: z.array(z.string().regex(SECRET_NAME)).optional().meta({
-      description:
-        "Secret names this spec may use as {{secrets.NAME}}. Only declared names are resolved.",
-    }),
+    secrets: z
+      .array(z.union([secretName, boundSecret]))
+      .max(SPEC_LIMITS.maxSecrets)
+      .optional()
+      .meta({
+        description:
+          "Secrets this spec may use as {{secrets.NAME}}: a name, or { name, hosts } to allow sending it only to those hosts. Only declared names are resolved.",
+      }),
     defaults: z
       .strictObject({ http: httpDefaults.optional(), rateLimit: rateLimit.optional() })
       .optional(),

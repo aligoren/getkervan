@@ -18,6 +18,7 @@ describe("@kervan/spec-runtime public API", () => {
       "formatIssue",
       "httpTool",
       "loadSpec",
+      "normalizeHost",
       "specJsonSchema",
     ])
   })

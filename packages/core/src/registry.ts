@@ -21,6 +21,11 @@ export type ToolEntry = Readonly<RegisteredToolDefinition>
  * Shared (multi-instance) implementations fire `onChange` for changes made on any instance.
  */
 export interface ToolRegistry {
+  /**
+   * How the server serving this tool set introduces itself to clients. Default: the app's name,
+   * version, title and instructions. Lets one app serve several distinct servers.
+   */
+  readonly serverInfo?: ServerInfo | undefined
   /** Current tools in a deterministic order. */
   list(): readonly ToolEntry[]
   /** Called after the tool set may have changed. Returns an idempotent unsubscribe function. */
@@ -46,9 +51,21 @@ export interface MutableToolRegistry extends ToolRegistry {
   has(name: string): boolean
 }
 
+/** A server's identity, sent to clients when they connect or discover it. */
+export interface ServerInfo {
+  name: string
+  version: string
+  /** Human-readable server name. */
+  title?: string
+  /** Server-level guidance sent to clients. */
+  instructions?: string
+}
+
 export interface InMemoryToolRegistryOptions {
   /** Receives errors thrown by change listeners. Default: `console.error`. */
   onListenerError?: (error: unknown) => void
+  /** The identity of the server serving this registry. Default: the app's. */
+  serverInfo?: ServerInfo
 }
 
 /**
@@ -61,8 +78,14 @@ export class InMemoryToolRegistry implements MutableToolRegistry {
   readonly #onListenerError: (error: unknown) => void
   #snapshot: readonly ToolEntry[] | undefined
   #pending = false
+  /**
+   * Can be changed at any time; it applies to connections and requests that start afterwards
+   * (it is not a tool change, so no `list_changed` is sent).
+   */
+  serverInfo: ServerInfo | undefined
 
   constructor(options: InMemoryToolRegistryOptions = {}) {
+    this.serverInfo = options.serverInfo
     this.#onListenerError =
       options.onListenerError ??
       ((error) => console.error("[kervan] error: tool registry listener failed", error))
@@ -146,7 +169,17 @@ export const FORBIDDEN: unique symbol = Symbol.for("kervan.forbidden")
  */
 export type ServerResolver = (
   request: Request,
-  context: { auth: AuthInfo | undefined },
+  context: ResolveContext,
 ) => ResolveResult | Promise<ResolveResult>
+
+export interface ResolveContext {
+  /** What `authenticate` returned; `undefined` for unauthenticated requests. */
+  auth: AuthInfo | undefined
+  /**
+   * Parameters of the MCP route, e.g. `{ serverId: "abc" }` for a `path` of `/s/:serverId/mcp`.
+   * They come from the URL: check them against `auth` before trusting them.
+   */
+  params: Readonly<Record<string, string>>
+}
 
 export type ResolveResult = ToolRegistry | typeof FORBIDDEN | null | undefined

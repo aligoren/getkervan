@@ -23,11 +23,39 @@
       "type": "string"
     },
     "secrets": {
-      "description": "Secret names this spec may use as {{secrets.NAME}}. Only declared names are resolved.",
+      "description": "Secrets this spec may use as {{secrets.NAME}}: a name, or { name, hosts } to allow sending it only to those hosts. Only declared names are resolved.",
+      "maxItems": 100,
       "type": "array",
       "items": {
-        "type": "string",
-        "pattern": "^[A-Z][A-Z0-9_]{0,127}$"
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,127}$"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{0,127}$"
+              },
+              "hosts": {
+                "minItems": 1,
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^(?:[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.?|\\[[0-9A-Fa-f:.]+\\])$"
+                },
+                "description": "The only hosts this secret may be sent to, matched exactly (no subdomains or wildcards), e.g. api.example.com."
+              }
+            },
+            "required": ["name", "hosts"],
+            "additionalProperties": false,
+            "description": "A secret bound to the hosts it may be sent to."
+          }
+        ]
       }
     },
     "defaults": {

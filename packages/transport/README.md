@@ -42,8 +42,9 @@ export default toFetchHandler(app, { allowedHosts: ["mcp.example.com"] })
 | `maxRequestBodySize` | 4 MiB | `413` above it |
 | `responseMode` | `"auto"` | `"json"` drops mid-call notifications; `"sse"` always streams |
 | `legacy` | `"stateless"` | `"reject"` serves 2026-07-28 clients only |
-| `authenticate(request)` | | Return `AuthInfo` (reaches tools as `ctx.auth`), a `Response` to reject, or `undefined` |
-| `resolveServer(request, { auth })` | app's registry | Runs after `authenticate`. Return a `ToolRegistry`, `null` (404) or `FORBIDDEN` (403). Derive the tenant from the verified `auth`; return the same registry object for the same tenant. |
+| `rejectBatches` | `false` | Answer JSON-RPC batches (protocol 2025-03-26 only) with 400. Turn it on when you limit or bill per request, because a batch carries many calls in one request. |
+| `authenticate(request, { params })` | | Return `AuthInfo` (reaches tools as `ctx.auth`), a `Response` to reject, or `undefined` |
+| `resolveServer(request, { auth, params })` | app's registry | Runs after `authenticate`. Return a `ToolRegistry`, `null` (404) or `FORBIDDEN` (403). Derive the tenant from the verified `auth`; return the same registry object for the same tenant. `params` holds the route parameters of `path` (e.g. `/s/:serverId/mcp`); check them against `auth`. A registry's optional `serverInfo` sets the name, version and instructions clients see. |
 
 The handler is stateless: a fresh SDK server handles each request, and no sessions are created.
 2025-era session operations (`GET`, `DELETE`) get `405`.

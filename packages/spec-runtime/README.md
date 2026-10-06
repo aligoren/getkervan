@@ -147,8 +147,33 @@ to 32 levels, 2,000 nodes, 64 `anyOf`/`oneOf`/`allOf` keywords, 64 KiB and 512-c
 `{{secrets.NAME}}` values come from a `SecretSource` (environment variables by default). They are
 never put in error messages or logs, and every result and error a spec tool returns is scrubbed of
 them, including their URL-encoded, form-encoded and JSON-escaped forms, in case the API echoes them
-back. Secrets shorter than 8 characters are rejected, because short values cannot be redacted
+back. The upstream response is scrubbed before `select` runs on it, so an expression cannot
+reshape or probe a reflected secret. Secrets shorter than 8 characters are rejected, because short values cannot be redacted
 reliably.
+
+### Binding a secret to hosts
+
+A secret can be restricted to the hosts it may be sent to:
+
+```yaml
+secrets:
+  - OTHER_KEY                                   # unrestricted
+  - { name: API_KEY, hosts: [api.example.com] } # only ever sent to api.example.com
+```
+
+- Hosts match exactly, after normalization (case, IDNA, IP forms). `example.com` does not cover
+  `api.example.com`, and wildcards, ports and paths are refused.
+- A tool that uses a bound secret against another host is a load error.
+- The executor checks again before every request and every redirect hop:
+  - A redirect to a host that may not receive the tool's secrets is not followed, even when the
+    secret would only travel inside the redirect URL (an open redirect).
+  - When following a redirect to another origin, `Accept` and `User-Agent` are dropped too if
+    they hold a secret.
+
+A `SecretSource` can enforce its own bindings: `get(name, { host, tool })` receives the host a
+value is about to be sent to, and returns `undefined` to refuse. A spec's `hosts` can only narrow
+what the source allows. `loadSpec(text, { requireSecrets: true })` turns "not set or not allowed
+for this host" warnings into errors. Use it to validate a spec before publishing it.
 
 ## Editor support
 

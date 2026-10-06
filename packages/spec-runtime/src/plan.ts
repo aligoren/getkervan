@@ -28,6 +28,8 @@ export interface ToolPlan {
   method: string
   /** `scheme://host:port`, never templated. */
   origin: string
+  /** The origin's host name, as secret bindings compare it. */
+  host: string
   path: Template
   /** Query string written literally in the URL (no templates). */
   staticSearch: string
@@ -35,6 +37,8 @@ export interface ToolPlan {
   headers: [string, Template][]
   body: BodyTemplate | undefined
   secrets: string[]
+  /** Hosts each bound secret may be sent to (secrets without a binding are absent). */
+  secretHosts: ReadonlyMap<string, readonly string[]>
   limits: {
     timeoutMs: number
     maxResponseBytes: number
@@ -76,7 +80,7 @@ type Report = (path: IssuePath, message: string, severity?: "error" | "warning")
 export function planTool(
   tool: SpecTool,
   specDefaults: Spec["defaults"] | undefined,
-  declaredSecrets: ReadonlySet<string> | undefined,
+  declaredSecrets: ReadonlyMap<string, readonly string[] | undefined> | undefined,
   at: IssuePath,
   report: Report,
 ): ToolPlan | undefined {
@@ -97,10 +101,12 @@ export function planTool(
     error(["input", "type"], 'The input schema must have type: "object".')
 
   const secrets = new Set<string>()
+  const secretUses: [string, IssuePath][] = []
   const checkRefs = (template: Template, path: IssuePath) => {
     for (const ref of references(template)) {
       if (ref.kind === "secret") {
         secrets.add(ref.name)
+        secretUses.push([ref.name, path])
         if (declaredSecrets && !declaredSecrets.has(ref.name)) {
           error(path, `{{secrets.${ref.name}}} is not declared in the spec's "secrets" list.`)
         }
@@ -170,7 +176,23 @@ export function planTool(
     output = { mode: "select", select: tool.output.select, schema: tool.output.schema }
   }
 
-  if (errors > 0 || !url) return undefined
+  // A bound secret may only go to its hosts. The host is literal, so this is decided here; the
+  // executor checks again before every request and redirect.
+  const host = url ? new URL(url.origin).hostname : undefined
+  const secretHosts = new Map<string, readonly string[]>()
+  for (const [name, path] of secretUses) {
+    const hosts = declaredSecrets?.get(name)
+    if (!hosts) continue
+    secretHosts.set(name, hosts)
+    if (host !== undefined && !hosts.includes(host)) {
+      error(
+        path,
+        `Secret ${name} may only be sent to ${hosts.join(", ")}; this tool calls ${host}.`,
+      )
+    }
+  }
+
+  if (errors > 0 || !url || host === undefined) return undefined
   return {
     name: tool.name,
     title: tool.title,
@@ -179,12 +201,14 @@ export function planTool(
     annotations: tool.annotations,
     method: http.method,
     origin: url.origin,
+    host,
     path: url.path,
     staticSearch: url.search,
     query,
     headers,
     body,
     secrets: [...secrets],
+    secretHosts,
     limits: {
       timeoutMs: http.timeoutMs ?? defaults?.timeoutMs ?? HTTP_DEFAULTS.timeoutMs,
       maxResponseBytes:

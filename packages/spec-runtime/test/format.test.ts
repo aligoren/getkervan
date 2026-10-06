@@ -174,7 +174,9 @@ describe("secrets at load time", () => {
     const loaded = await loadSpec(withSecret, { secrets: noSecrets })
     const warnings = loaded.warnings.map((w) => w.message)
     expect(warnings).toContain("Secret UNUSED_KEY is declared but never used.")
-    expect(warnings).toContain("Secret API_KEY is not set; tools that use it fail until it is.")
+    expect(warnings).toContain(
+      "Secret API_KEY is not set or not allowed for api.example.com; tools that use it there fail until it is.",
+    )
   })
 
   it("never puts a secret value in an error message", async () => {

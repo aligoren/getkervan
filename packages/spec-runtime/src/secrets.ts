@@ -1,13 +1,41 @@
 import { SPEC_LIMITS } from "./spec-schema.js"
 
-/** Where `{{secrets.NAME}}` values come from. Implementations must never log values. */
+/** Where a secret is about to be sent. */
+export interface SecretContext {
+  /** Host name the request goes to (normalized: lowercase, no port), e.g. `api.example.com`. */
+  host: string
+  /** The tool making the request. */
+  tool: string
+}
+
+/**
+ * Where `{{secrets.NAME}}` values come from. Implementations must never log values.
+ *
+ * The runtime always passes `context` with the host the value is about to be sent to. A source
+ * that binds secrets to hosts returns `undefined` for a host it does not allow; the call then
+ * fails without sending anything. A spec's own `hosts` list can only narrow this further.
+ */
 export interface SecretSource {
-  get(name: string): string | undefined | Promise<string | undefined>
+  get(name: string, context?: SecretContext): string | undefined | Promise<string | undefined>
 }
 
 /** Reads secrets from environment variables of the same name. */
 export function envSecrets(env: NodeJS.ProcessEnv = process.env): SecretSource {
   return { get: (name) => env[name] }
+}
+
+/**
+ * Normalizes a host name the way URLs do (lowercase, IDNA, IPv4 forms), or returns `undefined`
+ * if it is not a bare host name. Bindings compare normalized names exactly.
+ */
+export function normalizeHost(host: string): string | undefined {
+  if (!/^(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?|\[[0-9A-Fa-f:.]+\])$/.test(host)) return undefined
+  try {
+    const url = new URL(`https://${host}/`)
+    return url.port === "" && url.hostname !== "" ? url.hostname : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export const REDACTED = "[redacted]"
