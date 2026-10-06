@@ -95,7 +95,8 @@ describe("reload draining", () => {
     await project.write(serverSource("v2"))
     await expect.poll(() => callText(session, "version"), POLL).toBe("v2")
     expect(await slow).toBe("v1")
-    expect(session.stderr()).toMatch(/Waiting for 1 call\(s\) on the previous version/)
+    // The slow call, plus any polling call that was in flight at the swap.
+    expect(session.stderr()).toMatch(/Waiting for [1-9]\d* call\(s\) on the previous version/)
   })
 
   it("interrupts calls that outlive the drain timeout", { timeout: 30_000 }, async () => {
