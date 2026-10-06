@@ -91,19 +91,23 @@ describe("starting Studio", () => {
     expect(consumeSetupToken(running.database.db, token ?? "")).toBe(true)
   })
 
-  it("moves from loopback to the configured host once setup created the admin", async () => {
-    const dir = dataDir()
-    // A fixed port: both listeners use the configured one.
-    const port = await new Promise<number>((resolve) => {
+  async function freePort(): Promise<number> {
+    return new Promise<number>((resolve) => {
       const probe = createNetServer().listen(0, "127.0.0.1", () => {
-        const { port: free } = probe.address() as AddressInfo
-        probe.close(() => resolve(free))
+        const { port } = probe.address() as AddressInfo
+        probe.close(() => resolve(port))
       })
     })
+  }
+
+  /** Starts Studio on a fixed port, creates the admin, and waits for the move to `host`. */
+  async function setupThenMove(host: string, env: NodeJS.ProcessEnv = {}) {
+    const port = await freePort()
     const { running, lines } = await start({
-      KERVAN_STUDIO_DATA_DIR: dir,
+      KERVAN_STUDIO_DATA_DIR: dataDir(),
       KERVAN_STUDIO_PORT: String(port),
-      KERVAN_STUDIO_HOST: "localhost",
+      KERVAN_STUDIO_HOST: host,
+      ...env,
     })
     expect(running.boundHost).toBe("127.0.0.1")
     const origin = `http://127.0.0.1:${port}`
@@ -119,10 +123,29 @@ describe("starting Studio", () => {
     expect(setup.status).toBe(201)
     await expect
       .poll(() => lines.join("\n"), { timeout: 5000 })
-      .toContain("now listening on localhost")
-    const after = await fetch(`http://localhost:${port}/api/setup`)
+      .toMatch(/now listening on|Could not/)
+    expect(lines.join("\n")).toContain(`now listening on ${host}`)
+    return port
+  }
+
+  it("moves from loopback to the configured host once setup created the admin", async () => {
+    const port = await setupThenMove("::1")
+    const after = await fetch(`http://[::1]:${port}/api/setup`)
     expect(await after.json()).toEqual({ needed: false })
   })
+
+  // 0.0.0.0 covers 127.0.0.1 on the same port: the loopback listener must go first. (Skipped on
+  // Windows, where listening on all interfaces would prompt the firewall.)
+  it.runIf(process.platform !== "win32")(
+    "moves to all interfaces, which overlap the loopback listener",
+    async () => {
+      const port = await setupThenMove("0.0.0.0", {
+        KERVAN_STUDIO_PUBLIC_URL: "http://127.0.0.1",
+      })
+      const after = await fetch(`http://127.0.0.1:${port}/api/setup`)
+      expect(await after.json()).toEqual({ needed: false })
+    },
+  )
 
   it("prints no setup token once an admin exists", async () => {
     const dir = dataDir()
