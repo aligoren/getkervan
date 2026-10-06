@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import { ChildServer } from "../src/dev/child.js"
+import { ChildServer, killTree } from "../src/dev/child.js"
 import { devPreflight } from "../src/dev/index.js"
 import { collectSecrets, createRedactor, REDACTED } from "../src/dev/redact.js"
 import { findProjectRoot, shouldReload, watchProject } from "../src/dev/watch.js"
@@ -55,12 +55,8 @@ describe("ChildServer shutdown (no signals)", () => {
     expect(await child.stop(300)).toBe("forced")
     expect(Date.now() - started_at).toBeGreaterThanOrEqual(300)
     expect(isAlive(child.pid)).toBe(false)
-    if (process.platform === "win32") {
-      // taskkill /T takes the grandchild down too.
-      await expect.poll(() => isAlive(grandchild), POLL).toBe(false)
-    } else {
-      process.kill(grandchild, "SIGKILL")
-    }
+    // taskkill /T on Windows, the process group on POSIX: the grandchild goes too.
+    await expect.poll(() => isAlive(grandchild), POLL).toBe(false)
   })
 
   it("waits for in-flight calls before stopping when retired", { timeout: 30_000 }, async () => {
@@ -77,6 +73,29 @@ describe("ChildServer shutdown (no signals)", () => {
     const method = await child.retire(5_000)
     expect(method).toBe("graceful")
     expect(await call).toMatchObject({ content: [{ type: "text", text: "v1" }] })
+  })
+})
+
+describe("killTree", () => {
+  it("kills the process group on POSIX and falls back to the process", () => {
+    const calls: string[] = []
+    const child = {
+      pid: 4242,
+      kill: (signal?: NodeJS.Signals) => {
+        calls.push(`kill ${signal}`)
+        return true
+      },
+    }
+    killTree(child, "linux", (pid, signal) => {
+      calls.push(`group ${pid} ${signal}`)
+    })
+    expect(calls).toEqual(["group -4242 SIGKILL"])
+
+    calls.length = 0
+    killTree(child, "darwin", () => {
+      throw new Error("ESRCH")
+    })
+    expect(calls).toEqual(["kill SIGKILL"])
   })
 })
 

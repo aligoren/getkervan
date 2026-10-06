@@ -54,6 +54,9 @@ export class ChildServer {
       env: options.env,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
+      // On POSIX the child leads its own process group, so a forced stop can kill the whole
+      // group. (On Windows "detached" would open a new console; taskkill /T covers the tree.)
+      detached: process.platform !== "win32",
     })
     forwardLines(child.stderr, options.onStderr)
     const spawned = new Promise<void>((resolve, reject) => {
@@ -181,18 +184,27 @@ async function listAllTools(client: Client): Promise<Tool[]> {
   return tools
 }
 
-/** Kills a process and its children. Windows has no process groups, so ask taskkill for /T. */
-export function killTree(child: {
-  pid?: number | undefined
-  kill(signal?: NodeJS.Signals): boolean
-}) {
+/**
+ * Kills a process and its descendants: `taskkill /T /F` on Windows, which has no process groups;
+ * on POSIX, SIGKILL to the process group the child leads (it was spawned with `detached`).
+ * Descendants that moved to a group of their own (setsid, daemons) are out of reach on POSIX.
+ */
+export function killTree(
+  child: { pid?: number | undefined; kill(signal?: NodeJS.Signals): boolean },
+  platform: NodeJS.Platform = process.platform,
+  killGroup: (pid: number, signal: NodeJS.Signals) => void = process.kill,
+): void {
   if (child.pid === undefined) return
-  if (process.platform === "win32") {
+  if (platform === "win32") {
     spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
       windowsHide: true,
       stdio: "ignore",
     })
-  } else {
+    return
+  }
+  try {
+    killGroup(-child.pid, "SIGKILL")
+  } catch {
     child.kill("SIGKILL")
   }
 }

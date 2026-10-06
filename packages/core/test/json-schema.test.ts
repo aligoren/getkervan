@@ -81,6 +81,31 @@ describe("jsonSchema input and output", () => {
 })
 
 describe("rawResult", () => {
+  it("is not normalized, but the SDK still validates structuredContent", async () => {
+    const app = newApp()
+    const output = jsonSchema({
+      type: "object",
+      properties: { n: { type: "number" } },
+      required: ["n"],
+    })
+    app.tool("missing", {
+      description: "d",
+      output,
+      handler: () => rawResult({ content: [{ type: "text", text: "no structured content" }] }),
+    })
+    app.tool("invalid", {
+      description: "d",
+      output,
+      handler: () => rawResult({ content: [], structuredContent: { n: "nope" } }),
+    })
+    const client = await connect(app)
+    const missing = await client.callTool({ name: "missing", arguments: {} })
+    expect(missing.isError).toBe(true)
+    expect(textOf(missing)).toMatch(/Output validation error/)
+    const invalid = await client.callTool({ name: "invalid", arguments: {} })
+    expect(textOf(invalid)).toMatch(/Output validation error/)
+  })
+
   it("forwards a complete result from a tool with an output schema", async () => {
     const app = newApp()
     const output = jsonSchema({ type: "object", properties: { n: { type: "number" } } })

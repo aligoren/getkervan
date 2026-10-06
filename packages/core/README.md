@@ -40,12 +40,18 @@ app.tool("add", {
 | `timeoutMs` | Overrides `limits.toolTimeoutMs` |
 | `handler(input, ctx)` | Returns a string, a `CallToolResult`, or the `output` value |
 
-## JSON Schema and raw results
+## JSON Schema and raw results (experimental)
 
-`input` and `output` also accept `jsonSchema({...})`, for schemas that come from data (another
-server, a spec file) rather than code; arguments are validated against it. A tool with an `output`
-schema can return `rawResult(callToolResult)` to send a complete result unchanged (used by
-`kervan dev` to forward results).
+> `jsonSchema()` and `rawResult()` are **experimental**: their behavior may change before 1.0.
+
+- `input` and `output` also accept `jsonSchema({...})`, for schemas that come from data (another
+  server, a spec file) rather than code. Arguments are validated against it; `input` must be an
+  object schema.
+- A tool with an `output` schema can return `rawResult(callToolResult)` to send a complete result
+  unchanged (`kervan dev` uses it to forward results). It **skips Kervan's normalization**: no
+  JSON text block is added and `structuredContent` is not built for you. The SDK still validates
+  `structuredContent` against the output schema for non-error results, so a missing or invalid
+  one becomes an "Output validation error".
 
 ## Registry
 
