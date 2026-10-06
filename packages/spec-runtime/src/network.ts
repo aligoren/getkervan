@@ -39,6 +39,8 @@ class LookupQueueTimeout extends Error {}
  * cancelled, so a slow name server could otherwise occupy every thread (also used by the file
  * system and crypto). A slot is released only when the lookup itself finishes, not when a caller
  * stops waiting; callers queue, and leave the queue when their signal aborts.
+ *
+ * @experimental Exposed for `NetworkPolicy.lookupGate`; the shape may change before 1.0.
  */
 export class LookupGate {
   readonly limit: number

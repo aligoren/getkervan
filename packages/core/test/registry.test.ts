@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { InMemoryToolRegistry, type KervanDefinitionError, sameEntries, z } from "../src/index.js"
+import { InMemoryToolRegistry, type KervanDefinitionError, z } from "../src/index.js"
+import { sameEntries } from "../src/registry.js"
 
 const def = (description = "d") => ({ description, handler: () => "ok" })
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))

@@ -1,6 +1,7 @@
 import { createApp, InMemoryToolRegistry } from "@kervan/core"
 import { describe, expect, it } from "vitest"
-import { applySpec, loadSpec, parseTemplate, SecretVault, TemplateError } from "../src/index.js"
+import { applySpec, loadSpec, SecretVault } from "../src/index.js"
+import { parseTemplate, TemplateError } from "../src/template.js"
 
 describe("template grammar", () => {
   it("parses input paths and secrets, with whitespace", () => {

@@ -32,7 +32,6 @@ export {
   type MutableToolRegistry,
   type ResolveResult,
   type ServerResolver,
-  sameEntries,
   type ToolEntry,
   type ToolRegistry,
 } from "./registry.js"

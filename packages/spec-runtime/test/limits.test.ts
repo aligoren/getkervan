@@ -3,13 +3,8 @@ import type { AddressInfo } from "node:net"
 import { createApp } from "@kervan/core"
 import { createTestClient } from "@kervan/transport/testing"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import {
-  applySpec,
-  checkSchemaLimits,
-  loadSpec,
-  SCHEMA_LIMITS,
-  SpecLoadError,
-} from "../src/index.js"
+import { applySpec, loadSpec, SCHEMA_LIMITS, SpecLoadError } from "../src/index.js"
+import { checkSchemaLimits } from "../src/schema-limits.js"
 
 const nested = (depth: number): Record<string, unknown> =>
   depth === 0 ? { type: "string" } : { type: "object", properties: { a: nested(depth - 1) } }

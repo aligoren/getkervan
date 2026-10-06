@@ -11,13 +11,7 @@ export {
   createProject,
   type PackageManager,
 } from "./create.js"
-export {
-  type RuntimeInfo,
-  supportsTypeStripping,
-  TYPE_STRIPPING_ENGINES,
-  typeStrippingProblem,
-  windowsLibuvWarning,
-} from "./node-version.js"
+export type { RuntimeInfo } from "./node-version.js"
 
 const HELP = `Usage: kervan <command> [options]
 

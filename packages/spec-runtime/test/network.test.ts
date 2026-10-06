@@ -6,15 +6,19 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { sendHttp } from "../src/http.js"
 import {
   applySpec,
-  checkAddress,
+  LookupGate,
   loadSpec,
   NetworkPolicyError,
-  pinnedLookup,
   type ResolvedAddress,
   type Resolver,
-  resolveTarget,
 } from "../src/index.js"
-import { defaultLookupLimit, isPinnedAddress, LookupGate } from "../src/network.js"
+import {
+  checkAddress,
+  defaultLookupLimit,
+  isPinnedAddress,
+  pinnedLookup,
+  resolveTarget,
+} from "../src/network.js"
 import { startUpstream, type Upstream } from "./upstream.js"
 
 let upstream: Upstream

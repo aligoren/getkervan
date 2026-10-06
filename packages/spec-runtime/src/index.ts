@@ -5,8 +5,9 @@ import { planTool, type SpecIssue } from "./plan.js"
 import { envSecrets, SecretVault } from "./secrets.js"
 import { type SpecTool, specToolSchema } from "./spec-schema.js"
 
-export { type CompiledDefinition, type RuntimeOptions, redactMiddleware } from "./compile.js"
-export { type HttpLimits, isJsonContentType } from "./http.js"
+// Public API. The security building blocks (address checks, pinned lookups, template parsing,
+// schema limits) stay internal: their behavior is tested, their signatures are not a contract.
+export type { CompiledDefinition } from "./compile.js"
 export {
   type CompiledTool,
   formatIssue,
@@ -16,18 +17,14 @@ export {
   SpecLoadError,
 } from "./load.js"
 export {
-  type AddressVerdict,
-  checkAddress,
+  LookupGate,
   type NetworkPolicy,
   NetworkPolicyError,
-  pinnedLookup,
   type ResolvedAddress,
-  type ResolvedTarget,
   type Resolver,
-  resolveTarget,
 } from "./network.js"
 export type { SpecIssue } from "./plan.js"
-export { checkSchemaLimits, SCHEMA_LIMITS } from "./schema-limits.js"
+export { SCHEMA_LIMITS } from "./schema-limits.js"
 export { envSecrets, REDACTED, SecretError, type SecretSource, SecretVault } from "./secrets.js"
 export {
   HTTP_DEFAULTS,
@@ -35,9 +32,7 @@ export {
   type Spec,
   type SpecTool,
   specJsonSchema,
-  specSchema,
 } from "./spec-schema.js"
-export { parseTemplate, TemplateError } from "./template.js"
 
 /**
  * Adds a loaded spec's tools to a registry, or updates it after a reload: tools whose spec did not
@@ -72,6 +67,8 @@ export function applySpec(
  * kervan.yaml tool has, with the same validation.
  *
  *   app.tool(...httpTool({ name: "get_weather", description: "...", http: {...}, output: {...} }))
+ *
+ * @experimental The signature may change before 1.0.
  */
 export function httpTool(
   tool: unknown,
