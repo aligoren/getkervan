@@ -30,11 +30,6 @@
     "ai",
     "llm"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/aligoren/kervan.git",
-    "directory": "packages/core"
-  },
   "scripts": {
     "check:pack": "publint && attw --pack . --profile esm-only",
     "prepublishOnly": "node ../../scripts/guard-publish.mjs"

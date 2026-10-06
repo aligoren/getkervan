@@ -38,11 +38,6 @@
     "hono",
     "cloudflare-workers"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/aligoren/kervan.git",
-    "directory": "packages/transport"
-  },
   "scripts": {
     "check:pack": "publint && attw --pack . --profile esm-only",
     "prepublishOnly": "node ../../scripts/guard-publish.mjs"

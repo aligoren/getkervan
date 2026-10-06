@@ -14,10 +14,15 @@ export interface RateLimitOptions {
 
 export const DEFAULT_RATE_LIMIT = { windowMs: 60_000, max: 300 } as const
 
+export interface RateLimiter extends MiddlewareHandler {
+  /** Number of keys currently tracked. Expired keys are swept at most once per window, on a request. */
+  size(): number
+}
+
 /** In-memory fixed-window limiter. State is per process, so it does not coordinate across instances. */
 export function rateLimiter(
   options: RateLimitOptions & Required<Pick<RateLimitOptions, "keyGenerator">>,
-): MiddlewareHandler {
+): RateLimiter {
   const windowMs = options.windowMs ?? DEFAULT_RATE_LIMIT.windowMs
   const max = options.max ?? DEFAULT_RATE_LIMIT.max
   if (!(windowMs > 0) || !(max >= 1)) {
@@ -26,7 +31,7 @@ export function rateLimiter(
   const windows = new Map<string, { count: number; resetAt: number }>()
   let nextSweep = 0
 
-  return async (c, next) => {
+  const middleware: MiddlewareHandler = async (c, next) => {
     const now = Date.now()
     if (now >= nextSweep) {
       for (const [key, window] of windows) if (window.resetAt <= now) windows.delete(key)
@@ -48,4 +53,5 @@ export function rateLimiter(
     }
     return next()
   }
+  return Object.assign(middleware, { size: () => windows.size })
 }
