@@ -5,6 +5,7 @@ import type { Logger } from "@kervan/core"
 import { allowedHostNames, bindHost, ConfigError, type StudioConfig } from "./config.js"
 import { type OpenedDatabase, openDatabase } from "./db/open.js"
 import { purgeCalls } from "./db/repos/call-logs.js"
+import { deleteExpiredSessions } from "./db/repos/sessions.js"
 import { issueSetupToken, SETUP_TOKEN_TTL_MS } from "./db/repos/tokens.js"
 import { listAdmins } from "./db/repos/users.js"
 import { defaultWorkspace } from "./db/repos/workspaces.js"
@@ -159,12 +160,13 @@ export async function startStudio(
       `http://${address.family === "IPv6" ? `[${address.address}]` : address.address}:${address.port}`,
     )
 
-    // Call logs are kept for the configured number of days.
+    // Call logs are kept for the configured number of days; ended sessions are removed.
     const purge = () => {
       try {
         purgeCalls(database.db, Date.now() - config.logRetentionDays * 24 * 60 * 60 * 1000)
+        deleteExpiredSessions(database.db)
       } catch (error) {
-        print(`Could not delete old call logs: ${(error as Error).message}`)
+        print(`Could not delete old call logs or sessions: ${(error as Error).message}`)
       }
     }
     purge()

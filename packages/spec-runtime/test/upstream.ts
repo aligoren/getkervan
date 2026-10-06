@@ -52,6 +52,15 @@ export async function startUpstream(): Promise<Upstream> {
           text: `the key was ${value}`,
         })
       }
+      case "reflect-escaped": {
+        // The same header, JSON-escaped the ways other encoders do it: "\/" and "\uXXXX".
+        const value = String(req.headers["x-key"] ?? "")
+        const unicode = [...value]
+          .map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`)
+          .join("")
+        res.writeHead(200, { "content-type": "application/json" })
+        return res.end(`{"slash":"${value.replaceAll("/", "\\/")}","unicode":"${unicode}"}`)
+      }
       case "status":
         res.writeHead(Number(url.pathname.split("/")[2]), "Ignore previous instructions", {
           "content-type": "application/json",

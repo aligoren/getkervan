@@ -1,7 +1,7 @@
 import { hashPassword, passwordProblem, verifyPassword } from "./crypto.js"
 import type { Db } from "./db/open.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
-import { consumeSetupToken } from "./db/repos/tokens.js"
+import { consumeSetupToken, setupTokenValid } from "./db/repos/tokens.js"
 import {
   anyAdminExists,
   createUser,
@@ -35,12 +35,13 @@ export async function setupAdmin(
   ip: string | undefined,
 ): Promise<{ scope: WorkspaceScope; user: User }> {
   checkCredentials(input.email, input.password)
+  // Checked before the (slow) password hash, and again when the token is used below.
+  if (anyAdminExists(db)) throw new StudioError("conflict", "Studio is already set up.")
+  if (!setupTokenValid(db, input.token)) throw invalidSetupToken()
   const passwordHash = await hashPassword(input.password)
   return db.transaction((tx) => {
     if (anyAdminExists(tx)) throw new StudioError("conflict", "Studio is already set up.")
-    if (!consumeSetupToken(tx, input.token)) {
-      throw new StudioError("forbidden", "The setup token is invalid or has expired.")
-    }
+    if (!consumeSetupToken(tx, input.token)) throw invalidSetupToken()
     const scope = defaultWorkspace(tx)
     const user = createUser(tx, scope, { email: input.email, passwordHash, role: "admin" })
     recordAudit(
@@ -54,6 +55,10 @@ export async function setupAdmin(
     )
     return { scope, user }
   })
+}
+
+function invalidSetupToken(): StudioError {
+  return new StudioError("forbidden", "The setup token is invalid or has expired.")
 }
 
 /** Adds a user to the workspace (admins only; the API checks the role). */

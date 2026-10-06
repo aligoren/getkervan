@@ -40,7 +40,7 @@ const source: SecretSource = {
 }
 
 /** One tool that sends the key to the bound host's /reflect endpoint (it echoes X-Key back). */
-const reflectSpec = (output: string) => `specVersion: 1
+const reflectSpec = (output: string, path = "reflect") => `specVersion: 1
 name: review
 version: 0.0.0
 secrets: [{ name: API_KEY, hosts: ['bound.test:${port}'] }]
@@ -49,13 +49,13 @@ tools:
   - name: call
     description: Sends the key to the bound host
     http:
-      url: http://bound.test:${port}/reflect
+      url: http://bound.test:${port}/${path}
       headers: { X-Key: "{{secrets.API_KEY}}" }
     output: ${output}`
 
-async function call(output: string): Promise<string> {
+async function call(output: string, path?: string): Promise<string> {
   // The local test API speaks http; secrets over http need the development opt-in.
-  const loaded = await loadSpec(reflectSpec(output), {
+  const loaded = await loadSpec(reflectSpec(output, path), {
     secrets: source,
     network,
     allowSecretsOverHttp: true,
@@ -109,5 +109,15 @@ describe("review: redaction survives the spec author's own output shaping", () =
     const keep = '{"raw":"'.length + 12
     const text = await call(`{ raw: true, maxOutputChars: ${keep} }`)
     expect(text).not.toContain(SECRET.slice(0, 12))
+  })
+})
+
+describe("review 2: raw JSON output", () => {
+  // JSON has many spellings of one string. The upstream's encoder chooses them, so a raw result
+  // must be redacted by meaning, not only by the few spellings text redaction knows.
+  it("does not return the secret spelled with JSON escapes the vault does not list", async () => {
+    const text = await call("{ raw: true }", "reflect-escaped")
+    expect(text).toContain("[redacted]")
+    expect(JSON.stringify(JSON.parse(text))).not.toContain(SECRET)
   })
 })

@@ -43,8 +43,9 @@ On first start, Studio:
     gateway in place.
   - Any version can be exported as `kervan.yaml`.
 - **Playground:** connects a real MCP client to the gateway with a 15-minute token for the
-  selected version (drafts too). It lists and calls tools, and shows the raw requests and
-  responses. Everything a tool or upstream returns is shown as text.
+  selected version (drafts too). The token ends with the session that asked for it (sign-out
+  ends it). It lists and calls tools, and shows the raw requests and responses. Everything a
+  tool or upstream returns is shown as text.
 - **Versions:** compare any two versions line by line. Publish an older one to roll back:
   connected clients get `list_changed`, and the audit log records a rollback.
 - **Secrets (admins):** values are encrypted and write-only. Each secret has allowed hosts

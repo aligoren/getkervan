@@ -3,8 +3,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import { createServer } from "../src/db/repos/servers.js"
 import { saveVersion } from "../src/db/repos/versions.js"
 import { createWorkspace } from "../src/db/repos/workspaces.js"
-import { DRAFT_TTL_MS } from "../src/gateway.js"
-import { PLAYGROUND_TOKEN_TTL_MS } from "../src/playground.js"
+import { DRAFT_TTL_MS, MAX_DRAFTS } from "../src/gateway.js"
+import {
+  PLAYGROUND_TOKEN_TTL_MS,
+  type PlaygroundGrant,
+  PlaygroundTokens,
+} from "../src/playground.js"
 import { type ApiStudio, apiStudio, ORIGIN } from "./api-helpers.js"
 import { echoTool, MODERN, resultText, spec, startUpstream, type Upstream } from "./helpers.js"
 
@@ -137,10 +141,26 @@ describe("the playground", () => {
     expect((await call(`/s/${b}/mcp`, `kvp_${forged}.${signature}`)).status).toBe(401)
 
     const expired = s.studio.playground.issue(
-      { workspaceId: s.scope.workspaceId, serverId: a, versionId: va, userId: "u" },
+      {
+        workspaceId: s.scope.workspaceId,
+        serverId: a,
+        versionId: va,
+        userId: "u",
+        sessionHash: "h",
+      },
       Date.now() - PLAYGROUND_TOKEN_TTL_MS - 1,
     )
     expect((await call(`/s/${a}/mcp`, expired.token)).status).toBe(401)
+  })
+
+  it("are not accepted without the session they belong to, even when signed", () => {
+    const tokens = new PlaygroundTokens()
+    const grant = { workspaceId: "w", serverId: "s", versionId: "v", userId: "u" }
+    const unbound = tokens.issue(grant as Omit<PlaygroundGrant, "expiresAt">).token
+    expect(tokens.verify(unbound)).toBeUndefined()
+    expect(tokens.verify(tokens.issue({ ...grant, sessionHash: "h" }).token)).toMatchObject({
+      sessionHash: "h",
+    })
   })
 
   it("only issues tokens for the user's own workspace", async () => {
@@ -198,5 +218,41 @@ describe("the playground", () => {
     expect(s.studio.gateway.loadedDrafts).toBe(1)
     s.studio.gateway.sweepDrafts(Date.now() + DRAFT_TTL_MS)
     expect(s.studio.gateway.loadedDrafts).toBe(0)
+  })
+
+  it("keeps at most MAX_DRAFTS drafts loaded, unloading the least recently used", async () => {
+    const { s, create, save, token } = await setup()
+    const id = await create("many")
+    const list = async (versionId: string) =>
+      s.request("POST", `/s/${id}/mcp`, {
+        headers: {
+          authorization: `Bearer ${String((await token(id, versionId)).json.token)}`,
+          accept: "application/json, text/event-stream",
+          "mcp-protocol-version": MODERN,
+          "mcp-method": "tools/list",
+        },
+        body: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/list",
+          params: {
+            _meta: {
+              "io.modelcontextprotocol/protocolVersion": MODERN,
+              "io.modelcontextprotocol/clientCapabilities": {},
+            },
+          },
+        },
+      })
+    const versions: string[] = []
+    for (let i = 0; i <= MAX_DRAFTS; i++) {
+      versions.push(await save(id, spec(echoTool(`https://api.example.com/${i}`, `tool_${i}`))))
+    }
+    for (const version of versions) expect((await list(version)).status).toBe(200)
+    expect(s.studio.gateway.loadedDrafts).toBe(MAX_DRAFTS)
+    // The first one was unloaded, and loads again when used.
+    const again = await list(versions[0] ?? "")
+    expect(again.status).toBe(200)
+    expect(again.text).toContain("tool_0")
+    expect(s.studio.gateway.loadedDrafts).toBe(MAX_DRAFTS)
   })
 })

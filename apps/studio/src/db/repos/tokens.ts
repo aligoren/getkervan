@@ -44,3 +44,21 @@ export function consumeSetupToken(db: Db, token: string, now = Date.now()): bool
     .run()
   return result.changes === 1
 }
+
+/** Whether a setup token is valid, without using it (a cheap check before hashing a password). */
+export function setupTokenValid(db: Db, token: string, now = Date.now()): boolean {
+  if (token.length === 0 || token.length > 100) return false
+  const row = db
+    .select({ hash: oneTimeTokens.hash })
+    .from(oneTimeTokens)
+    .where(
+      and(
+        eq(oneTimeTokens.hash, sha256(token)),
+        eq(oneTimeTokens.purpose, "setup"),
+        isNull(oneTimeTokens.usedAt),
+        gt(oneTimeTokens.expiresAt, now),
+      ),
+    )
+    .get()
+  return row !== undefined
+}

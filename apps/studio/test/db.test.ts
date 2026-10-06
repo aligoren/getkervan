@@ -15,9 +15,22 @@ import { sha256 } from "../src/crypto.js"
 import { DatabaseError, MIGRATIONS_FOLDER, openDatabase } from "../src/db/open.js"
 import { recordAudit } from "../src/db/repos/audit.js"
 import { createServer } from "../src/db/repos/servers.js"
-import { consumeSetupToken, issueSetupToken, SETUP_TOKEN_TTL_MS } from "../src/db/repos/tokens.js"
+import {
+  createSession,
+  SESSION_ABSOLUTE_MS,
+  SESSION_IDLE_MS,
+  sessionAlive,
+} from "../src/db/repos/sessions.js"
+import {
+  consumeSetupToken,
+  issueSetupToken,
+  SETUP_TOKEN_TTL_MS,
+  setupTokenValid,
+} from "../src/db/repos/tokens.js"
+import { createUser } from "../src/db/repos/users.js"
 import { saveVersion } from "../src/db/repos/versions.js"
 import { createWorkspace, defaultWorkspace } from "../src/db/repos/workspaces.js"
+import { sessions } from "../src/db/schema.js"
 
 const temps: string[] = []
 afterEach(() => {
@@ -148,9 +161,14 @@ describe("setup tokens", () => {
       expect(stored).toContain(sha256(token))
 
       expect(consumeSetupToken(db, "wrong", now)).toBe(false)
+      // Checking does not use it up; an expired token does not check.
+      expect(setupTokenValid(db, "wrong", now)).toBe(false)
+      expect(setupTokenValid(db, token, now + SETUP_TOKEN_TTL_MS)).toBe(false)
+      expect(setupTokenValid(db, token, now + 1)).toBe(true)
       expect(consumeSetupToken(db, token, now + SETUP_TOKEN_TTL_MS)).toBe(false)
       expect(consumeSetupToken(db, token, now + 1)).toBe(true)
       expect(consumeSetupToken(db, token, now + 2)).toBe(false)
+      expect(setupTokenValid(db, token, now + 2)).toBe(false)
     } finally {
       close()
     }
@@ -163,6 +181,34 @@ describe("setup tokens", () => {
       const second = issueSetupToken(db, 2000).token
       expect(consumeSetupToken(db, first, 3000)).toBe(false)
       expect(consumeSetupToken(db, second, 3000)).toBe(true)
+    } finally {
+      close()
+    }
+  })
+})
+
+describe("session liveness (for playground tokens)", () => {
+  it("is false once the session ended, idled out, or for another user", () => {
+    const { db, close } = openDatabase(":memory:")
+    try {
+      const scope = defaultWorkspace(db)
+      const user = (email: string) =>
+        createUser(db, scope, { email, passwordHash: "unused", role: "member" }).id
+      const alice = user("alice@example.test")
+      const bob = user("bob@example.test")
+      const now = 1_000_000
+      const hash = sha256(createSession(db, scope, alice, now).id)
+      expect(sessionAlive(db, hash, alice, now + 1)).toBe(true)
+      expect(sessionAlive(db, hash, bob, now + 1)).toBe(false)
+      expect(sessionAlive(db, "unknown", alice, now + 1)).toBe(false)
+      expect(sessionAlive(db, hash, alice, now + SESSION_IDLE_MS)).toBe(false)
+      // Active until just before the absolute limit: still ends there.
+      const end = now + SESSION_ABSOLUTE_MS
+      db.update(sessions)
+        .set({ lastSeenAt: end - 1 })
+        .run()
+      expect(sessionAlive(db, hash, alice, end - 1)).toBe(true)
+      expect(sessionAlive(db, hash, alice, end)).toBe(false)
     } finally {
       close()
     }

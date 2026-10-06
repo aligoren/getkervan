@@ -23,6 +23,7 @@ import type { Db } from "./db/open.js"
 import { findActiveApiKey, touchApiKey } from "./db/repos/api-keys.js"
 import { payloadText, recordCall } from "./db/repos/call-logs.js"
 import { getServer } from "./db/repos/servers.js"
+import { sessionAlive } from "./db/repos/sessions.js"
 import { getVersion } from "./db/repos/versions.js"
 import { type WorkspaceScope, workspaceScope } from "./db/scope.js"
 import { FixedWindowLimiter } from "./limiter.js"
@@ -50,6 +51,10 @@ export interface GatewayOptions {
 
 /** How long an unused playground draft stays loaded. */
 export const DRAFT_TTL_MS = 15 * 60 * 1000
+/** At most this many drafts are loaded; loading another unloads the least recently used. */
+export const MAX_DRAFTS = 32
+/** Event streams one API key (or one user's playground) may hold open at once. */
+export const MAX_STREAMS_PER_CALLER = 32
 
 /** A version loaded for the playground, which may not be published. */
 interface Draft {
@@ -69,6 +74,8 @@ interface Caller {
   serverId: string
   /** Set for playground tokens: the version (published or draft) they may call. */
   versionId?: string
+  /** Set for playground tokens: when the token (and any stream it opened) ends. */
+  expiresAt?: number
 }
 
 /** One published server: a registry that lives as long as the server, updated in place. */
@@ -174,13 +181,35 @@ export class Gateway {
       await response.body.cancel()
       return unauthorized()
     }
+    let open = 0
+    for (const stream of this.#streams) if (stream.keyId === caller.id) open++
+    if (open >= MAX_STREAMS_PER_CALLER) {
+      await response.body.cancel()
+      return Response.json(
+        {
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "Too many open streams for this key" },
+          id: null,
+        },
+        { status: 429 },
+      )
+    }
     const entry = { keyId: caller.id, serverId: caller.serverId, abort: new AbortController() }
     this.#streams.add(entry)
+    // A playground stream ends when its token expires, like the token's other requests.
+    const expiry =
+      caller.expiresAt === undefined
+        ? undefined
+        : setTimeout(() => entry.abort.abort(), Math.max(0, caller.expiresAt - Date.now()))
+    expiry?.unref()
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>()
     response.body
       .pipeTo(writable, { signal: entry.abort.signal })
       .catch(() => {})
-      .finally(() => this.#streams.delete(entry))
+      .finally(() => {
+        clearTimeout(expiry)
+        this.#streams.delete(entry)
+      })
     return new Response(readable, { status: response.status, headers: response.headers })
   }
 
@@ -307,12 +336,15 @@ export class Gateway {
     if (!presented) return undefined
     if (presented.startsWith("kvp_")) {
       const grant = this.#options.playground?.verify(presented)
-      if (!grant) return undefined
+      if (!grant || !sessionAlive(this.#options.db, grant.sessionHash, grant.userId)) {
+        return undefined
+      }
       return {
         id: `playground:${grant.userId}`,
         scope: workspaceScope(grant.workspaceId),
         serverId: grant.serverId,
         versionId: grant.versionId,
+        expiresAt: grant.expiresAt,
       }
     }
     const key = findActiveApiKey(this.#options.db, presented)
@@ -386,6 +418,7 @@ export class Gateway {
         lastUsed: Date.now(),
         ready: this.#loadDraft(scope, serverId, versionId, registry, vault),
       }
+      this.#evictDraft()
       this.#drafts.set(key, draft)
     }
     draft.lastUsed = Date.now()
@@ -394,6 +427,15 @@ export class Gateway {
       return null
     }
     return draft.registry
+  }
+
+  #evictDraft(): void {
+    if (this.#drafts.size < MAX_DRAFTS) return
+    let oldest: [string, Draft] | undefined
+    for (const entry of this.#drafts) {
+      if (!oldest || entry[1].lastUsed < oldest[1].lastUsed) oldest = entry
+    }
+    if (oldest) this.#drafts.delete(oldest[0])
   }
 
   async #loadDraft(

@@ -7,12 +7,15 @@ export interface PlaygroundGrant {
   serverId: string
   versionId: string
   userId: string
+  /** SHA-256 of the session that asked for the token: the token ends with that session. */
+  sessionHash: string
   expiresAt: number
 }
 
 /**
  * Short-lived tokens that let a signed-in user's browser call one version of one server (a draft
- * too) through the gateway. Signed with a key that exists only in this process: a restart
+ * too) through the gateway. The gateway also checks that the issuing session is still live, so
+ * signing out (or `reset-admin`) ends them before they expire. Signed with a key that exists only in this process: a restart
  * invalidates every token, which is fine for 15-minute tokens.
  */
 export class PlaygroundTokens {
@@ -39,7 +42,13 @@ export class PlaygroundTokens {
       const grant = JSON.parse(
         Buffer.from(payload, "base64url").toString("utf8"),
       ) as PlaygroundGrant
-      const fields = [grant.workspaceId, grant.serverId, grant.versionId, grant.userId]
+      const fields = [
+        grant.workspaceId,
+        grant.serverId,
+        grant.versionId,
+        grant.userId,
+        grant.sessionHash,
+      ]
       if (!fields.every((field) => typeof field === "string")) return undefined
       if (typeof grant.expiresAt !== "number" || now >= grant.expiresAt) return undefined
       return grant

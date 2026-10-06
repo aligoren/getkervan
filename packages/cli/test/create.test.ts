@@ -172,5 +172,6 @@ describe("command line", () => {
     )
     expect(runBin(bin, ["launch"], parent).stderr).toMatch(/Unknown command "launch"/)
     expect(runBin(bin, ["--version"], parent).stdout.trim()).toBe("0.1.0")
-  })
+    // Four process starts: slow on a busy Windows machine.
+  }, 30_000)
 })

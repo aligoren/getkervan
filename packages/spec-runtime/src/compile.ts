@@ -151,8 +151,9 @@ async function executePlan(
       throw new ToolError(`Upstream returned content type ${type}; raw output needs text or JSON.`)
     }
     // Redact before cutting, so a cut can never leave part of a secret behind.
+    const body = response.body.toString("utf8")
     return truncate(
-      runtime.vault.redact(response.body.toString("utf8")),
+      redactRaw(runtime.vault, body, isJsonContentType(response.contentType)),
       plan.limits.maxOutputChars,
     )
   }
@@ -381,6 +382,26 @@ function scalar(value: unknown, name: string): string {
   throw new ToolError(
     `Every value of query parameter "${name}" must be a string, number or boolean.`,
   )
+}
+
+/**
+ * Redacts a raw upstream body. JSON can spell one string many ways (`\/`, `A`), and text
+ * redaction only knows a few of them, so a JSON body is also decoded and redacted value by value.
+ * When that finds a secret the text missed, the redacted JSON is returned re-encoded instead of
+ * the upstream's own text.
+ */
+function redactRaw(vault: SecretVault, body: string, json: boolean): string {
+  const text = vault.redact(body)
+  if (!json) return text
+  let data: unknown
+  try {
+    data = JSON.parse(body)
+  } catch {
+    return text
+  }
+  const encoded = JSON.stringify(data)
+  const redacted = JSON.stringify(vault.redactValue(data))
+  return redacted === encoded ? text : vault.redact(redacted)
 }
 
 function truncate(text: string, max: number): string {

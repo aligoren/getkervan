@@ -5,7 +5,10 @@ import { afterEach, describe, expect, it } from "vitest"
 import { runStudioCli } from "../src/cli.js"
 import { loadConfig } from "../src/config.js"
 import { openDatabase } from "../src/db/open.js"
+import { listCalls, recordCall } from "../src/db/repos/call-logs.js"
 import { createServer } from "../src/db/repos/servers.js"
+import { countSessions, createSession, SESSION_ABSOLUTE_MS } from "../src/db/repos/sessions.js"
+import { createUser } from "../src/db/repos/users.js"
 import { createWorkspace, defaultWorkspace } from "../src/db/repos/workspaces.js"
 import { secrets as secretsTable } from "../src/db/schema.js"
 import { envKeyProvider, KeyError, staticKeyProvider } from "../src/keys.js"
@@ -215,5 +218,42 @@ describe("master keys from the environment", () => {
         keys: staticKeyProvider({ version: 1, key: KEY_B }),
       }),
     ).rejects.toThrow(VaultError)
+  })
+})
+
+describe("startup housekeeping", () => {
+  it("deletes call logs past the retention period and sessions that have ended", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "kervan-purge-"))
+    cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
+    const database = openDatabase(path.join(dir, DATABASE_FILE))
+    const scope = defaultWorkspace(database.db)
+    const server = createServer(database.db, scope, { slug: "s", name: "S" })
+    const user = createUser(database.db, scope, {
+      email: "old@example.test",
+      passwordHash: "unused",
+      role: "admin",
+    })
+    const day = 24 * 60 * 60 * 1000
+    const call = {
+      serverId: server.id,
+      versionId: null,
+      tool: "t",
+      status: "ok" as const,
+      durationMs: 1,
+    }
+    recordCall(database.db, scope, { ...call, tool: "old" }, Date.now() - 31 * day)
+    recordCall(database.db, scope, { ...call, tool: "recent" }, Date.now() - day)
+    createSession(database.db, scope, user.id, Date.now() - SESSION_ABSOLUTE_MS - 1)
+    createSession(database.db, scope, user.id)
+    database.close()
+
+    const running = await startStudio(
+      loadConfig({ KERVAN_STUDIO_DATA_DIR: dir, KERVAN_STUDIO_PORT: "0" }),
+      { print: () => {}, resolveSelf: async () => [], keys: keysA },
+    )
+    cleanups.push(() => running.close())
+    const db = running.database.db
+    expect(listCalls(db, scope, server.id).map((c) => c.tool)).toEqual(["recent"])
+    expect(countSessions(db, scope, user.id)).toBe(1)
   })
 })

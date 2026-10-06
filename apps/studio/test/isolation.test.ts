@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
+import { sha256 } from "../src/crypto.js"
 import { createApiKey, listApiKeys, revokeApiKey } from "../src/db/repos/api-keys.js"
 import { listAudit, recordAudit } from "../src/db/repos/audit.js"
 import {
@@ -7,8 +8,12 @@ import {
   listServers,
   setPublishedVersion,
 } from "../src/db/repos/servers.js"
+import { createSession } from "../src/db/repos/sessions.js"
+import { createUser } from "../src/db/repos/users.js"
 import { getVersion, listVersions, saveVersion } from "../src/db/repos/versions.js"
 import { createWorkspace } from "../src/db/repos/workspaces.js"
+import { MAX_STREAMS_PER_CALLER } from "../src/gateway.js"
+import { PLAYGROUND_TOKEN_TTL_MS } from "../src/playground.js"
 import { StudioError } from "../src/studio.js"
 import {
   connect,
@@ -208,6 +213,54 @@ describe("the gateway keeps servers apart", () => {
     await t.studio.deleteServer(a.scope, a.server.id, user())
     // Only the deleted server's stream ends.
     expect(gateway.openStreams).toBe(1)
+  })
+
+  it("limits how many streams one key holds open", async () => {
+    const { a } = await twoWorkspaces()
+    const gateway = t.studio.gateway
+    for (let i = 0; i < MAX_STREAMS_PER_CALLER; i++) {
+      const client = await connect(a.mcpUrl, a.key)
+      closers.push(() => client.close())
+      await client.listen({ toolsListChanged: true })
+    }
+    for (let i = 0; i < 100 && gateway.openStreams < MAX_STREAMS_PER_CALLER; i++) await sleep(20)
+    expect(gateway.openStreams).toBe(MAX_STREAMS_PER_CALLER)
+    const extra = await connect(a.mcpUrl, a.key)
+    closers.push(() => extra.close())
+    await expect(extra.listen({ toolsListChanged: true })).rejects.toThrow()
+    expect(gateway.openStreams).toBe(MAX_STREAMS_PER_CALLER)
+    // Ordinary requests still work.
+    expect((await extra.listTools()).tools.map((tool) => tool.name)).toEqual(["a_tool"])
+  })
+
+  it("ends a playground stream when its token expires", async () => {
+    const { a } = await twoWorkspaces()
+    const db = t.database.db
+    const gateway = t.studio.gateway
+    const owner = createUser(db, a.scope, {
+      email: "player@example.test",
+      passwordHash: "unused",
+      role: "member",
+    })
+    const session = createSession(db, a.scope, owner.id)
+    // A token with about two seconds left.
+    const { token } = t.studio.playground.issue(
+      {
+        workspaceId: a.scope.workspaceId,
+        serverId: a.server.id,
+        versionId: a.version.id,
+        userId: owner.id,
+        sessionHash: sha256(session.id),
+      },
+      Date.now() - PLAYGROUND_TOKEN_TTL_MS + 2000,
+    )
+    const client = await connect(a.mcpUrl, token)
+    closers.push(() => client.close())
+    await client.listen({ toolsListChanged: true })
+    for (let i = 0; i < 50 && gateway.openStreams < 1; i++) await sleep(20)
+    expect(gateway.openStreams).toBe(1)
+    for (let i = 0; i < 100 && gateway.openStreams > 0; i++) await sleep(50)
+    expect(gateway.openStreams).toBe(0)
   })
 
   it("stops serving a deleted server at once", async () => {

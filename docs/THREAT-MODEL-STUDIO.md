@@ -90,6 +90,9 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Tool results and `ToolError` messages are then redacted again, in raw, URL-encoded,
   form-encoded and JSON-escaped forms. Studio's logger redacts every known value from messages
   and serialized data.
+- A `raw: true` JSON body is also decoded and redacted value by value, because JSON can spell a
+  string in ways text redaction does not list (`\/`, `\u0041`). If that finds a secret, the
+  redacted JSON is returned re-encoded instead of the upstream's text.
 - **A secret never travels over plain http.** A spec author can set `allowInsecureHttp`, but
   a tool that uses secrets is refused at load time and again before sending. This is the
   framework's default, so `kervan run` enforces it too. Tools without secrets may still use
@@ -171,11 +174,15 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 
 ### T7: Login brute force (4b)
 
-- Failed logins are counted per account and per client IP:
+- Failed logins are counted per account and per client IP (IPv6: per /64):
   - 5 failures for an account, or 20 from an IP, within 15 minutes lock it for 15 minutes (429
     with `Retry-After`), even for the right password;
+  - an attempt reserves its place before the password check, so a burst of concurrent guesses
+    gets no more checks than the limit allows (tested with 30 at once);
   - unknown accounts lock the same way, so the lock reveals nothing;
-  - setup-token guesses are limited per IP too.
+  - setup-token guesses are counted per IP only, in their own namespace: nobody can lock setup
+    for the operator, and failed logins for an account named "setup" do not count. The token
+    is checked before the password is hashed.
 - A wrong password and an unknown account get the same answer. An unknown account still costs
   a password check against a dummy hash.
 - Passwords need at least 12 characters, are hashed with scrypt (N=2^15, r=8, p=1) and are
@@ -210,6 +217,10 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   refuse.
 - Drafts unused for 15 minutes are unloaded.
 - The token is never written to the page or the raw traffic log.
+- A token is bound to the session that asked for it. The gateway checks that this session is
+  still live, so signing out, an idle or absolute session timeout and `reset-admin` end the
+  token at once. An event stream it opened ends when the token expires.
+- At most 32 drafts are loaded; loading another unloads the least recently used.
 
 ### T9: Taking over a fresh installation (4a)
 
@@ -250,7 +261,9 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   - per API key at the gateway;
   - the gateway's request body is limited to 1 MiB;
   - JSON-RPC batches are refused, so one request is at most one call against the per-key
-    limit.
+    limit;
+  - one API key (or one user's playground) holds at most 32 event streams open.
+- Ended sessions and call logs past their retention are deleted at startup and hourly.
 - Spec tools keep the runtime limits: timeouts, response sizes, per-tool rate limits and the DNS
   lookup cap.
 
@@ -347,6 +360,16 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   addresses, or new ones after a DNS change.
 - **Loopback-only setup does not help when a reverse proxy runs on the same machine**, because
   the proxy forwards to loopback. The single-use setup token is what protects a fresh install.
+- **No way to deactivate a user yet.** An admin can reset a password (which ends the user's
+  sessions and playground tokens) but cannot remove an account.
+- **Unbounded version history.** Every save is kept; there is no cap or pruning per server.
+  Members are trusted not to fill the disk.
+- **The gateway's `Origin` check compares host names**, not scheme and port. Browsers cannot
+  send the API key cross-origin without CORS, which the gateway does not grant.
+- **Members can read bindings** (secret names and hosts, never values) through the export, so
+  they can write specs that use them.
+- **An open playground stream survives sign-out** until its token expires (at most 15
+  minutes); new requests with the token are refused at once.
 - **Encodings the vault does not know.** If a bound upstream reflects a secret in another
   encoding (for example base64 or HTML entities), it is not redacted. Bind secrets to APIs you
   trust not to echo them.

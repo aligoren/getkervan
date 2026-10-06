@@ -90,6 +90,19 @@ export function findSession(db: Db, id: string, now = Date.now()): ActiveSession
   }
 }
 
+/**
+ * Whether a session is still live for a user, by its hash (for credentials derived from a
+ * session, like playground tokens). Does not count as activity.
+ */
+export function sessionAlive(db: Db, idHash: string, userId: string, now = Date.now()): boolean {
+  const row = db
+    .select({ lastSeenAt: sessions.lastSeenAt, expiresAt: sessions.expiresAt })
+    .from(sessions)
+    .where(and(eq(sessions.idHash, idHash), eq(sessions.userId, userId)))
+    .get()
+  return row !== undefined && now < row.expiresAt && now - row.lastSeenAt < SESSION_IDLE_MS
+}
+
 export function deleteSession(db: Db, idHash: string): void {
   db.delete(sessions).where(eq(sessions.idHash, idHash)).run()
 }

@@ -175,15 +175,17 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
 
   api.post("/setup", async (c) => {
     const ip = c.get("clientIp")
-    const wait = throttle.retryAfter("setup", ip)
-    if (wait > 0) return tooMany(c, wait)
     const body = await parse(c, setupBody)
+    const attempt = throttle.setup(ip)
+    if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
     try {
       const { user } = await setupAdmin(db, body, ip)
+      attempt.done(true)
       options.onAdminCreated?.()
       return c.json(startSession(c, user), 201)
     } catch (error) {
-      if (error instanceof StudioError && error.code === "forbidden") throttle.failed("setup", ip)
+      // Only a wrong token counts as a failed guess.
+      attempt.done(!(error instanceof StudioError && error.code === "forbidden"))
       throw error
     }
   })
@@ -191,12 +193,19 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
   api.post("/login", async (c) => {
     const ip = c.get("clientIp")
     const body = await parse(c, credentials)
-    const wait = throttle.retryAfter(body.email, ip)
-    if (wait > 0) return tooMany(c, wait)
+    // The attempt is reserved before the slow password check, so concurrent guesses count too.
+    const attempt = throttle.login(body.email, ip)
+    if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
     const scope = defaultWorkspace(db)
-    const user = await verifyLogin(db, scope, body.email, body.password)
+    let user: Awaited<ReturnType<typeof verifyLogin>>
+    try {
+      user = await verifyLogin(db, scope, body.email, body.password)
+    } catch (error) {
+      attempt.done(false)
+      throw error
+    }
+    attempt.done(user !== undefined)
     if (!user) {
-      throttle.failed(body.email, ip)
       recordAudit(
         db,
         scope,
@@ -209,7 +218,6 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
       // The same answer whether or not the account exists.
       return c.json({ error: "Wrong email or password." }, 401)
     }
-    throttle.succeeded(body.email)
     const started = startSession(c, user)
     recordAudit(db, scope, { type: "user", id: user.id, ip }, { action: "login.success" })
     return c.json(started)
@@ -291,13 +299,12 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
 
   api.post("/servers/:id/versions/:vid/playground", signedIn(), (c) => {
     const session = c.get("session")
+    if (!session) throw new StudioError("forbidden", "Sign in first.")
     const serverId = c.req.param("id")
-    const grant = studio.playgroundToken(
-      scopeOf(c),
-      serverId,
-      c.req.param("vid"),
-      session?.user.id ?? "",
-    )
+    const grant = studio.playgroundToken(scopeOf(c), serverId, c.req.param("vid"), {
+      userId: session.user.id,
+      sessionHash: session.idHash,
+    })
     return c.json({ ...grant, mcpPath: `/s/${serverId}/mcp` })
   })
 

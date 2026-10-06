@@ -72,6 +72,10 @@ characters), which can also reshape them (`items[].{id: id, name: name}`), or op
 `raw: true`. Output is cut at `maxOutputChars` (20,000 by default). With `output.schema`, the
 selected value becomes `structuredContent` and is validated.
 
+Secret values are redacted from output before `select` runs. A raw JSON body is also decoded and
+redacted value by value; if that finds a secret spelled with JSON escapes (`\/`, `\u0041`), the
+redacted JSON is returned re-encoded instead of the upstream's text.
+
 JMESPath is evaluated by `@jmespath-community/jmespath` (MPL-2.0), an interpreter with no code
 execution; Kervan registers no custom functions.
 

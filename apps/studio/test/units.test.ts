@@ -1,5 +1,6 @@
 import { FORBIDDEN } from "@kervan/core"
 import { afterEach, describe, expect, it } from "vitest"
+import { type Attempt, LoginThrottle } from "../src/api/throttle.js"
 import { hashPassword, passwordProblem, verifyPassword } from "../src/crypto.js"
 import { createWorkspace } from "../src/db/repos/workspaces.js"
 import { studioLogger } from "../src/logger.js"
@@ -125,6 +126,57 @@ describe("deny list entries", () => {
       expect(addressRangeProblem(entry)).toBeDefined()
     },
   )
+})
+
+describe("login throttle", () => {
+  const WINDOW = 60_000
+  const finish = (attempt: Attempt, succeeded: boolean) => {
+    if (!("done" in attempt)) throw new Error(`throttled: retry after ${attempt.retryAfter}s`)
+    attempt.done(succeeded)
+  }
+  const make = (accountFailures: number, ipFailures: number) => {
+    const clock = { now: 0 }
+    const throttle = new LoginThrottle({
+      accountFailures,
+      ipFailures,
+      windowMs: WINDOW,
+      clock: () => clock.now,
+    })
+    return { throttle, clock }
+  }
+
+  it("counts an attempt once, however often it is finished", () => {
+    const { throttle } = make(2, 100)
+    const attempt = throttle.login("a@example.test", "192.0.2.1")
+    finish(attempt, false)
+    finish(attempt, false)
+    expect("done" in throttle.login("a@example.test", "192.0.2.1")).toBe(true)
+  })
+
+  it("clears the account's failures on success, but not the IP's", () => {
+    const { throttle } = make(2, 3)
+    finish(throttle.login("a@example.test", "192.0.2.1"), false)
+    finish(throttle.login("a@example.test", "192.0.2.1"), true)
+    finish(throttle.login("a@example.test", "192.0.2.1"), false)
+    expect("done" in throttle.login("a@example.test", "192.0.2.9")).toBe(true)
+    finish(throttle.login("c@example.test", "192.0.2.1"), false)
+    // Three failures from the IP: locked, though the account had a success in between.
+    expect(throttle.login("b@example.test", "192.0.2.1")).toEqual({ retryAfter: 60 })
+  })
+
+  it("forgets failures after the window, and sweeps idle counters at most once per window", () => {
+    const { throttle, clock } = make(2, 100)
+    finish(throttle.login("a@example.test", "192.0.2.1"), false)
+    clock.now = WINDOW / 2
+    finish(throttle.login("b@example.test", "192.0.2.2"), true)
+    expect(throttle.size).toBe(4)
+    clock.now = WINDOW
+    finish(throttle.login("c@example.test", "192.0.2.3"), true)
+    // a's counters were idle for a whole window and are gone; b's are younger and stay.
+    expect(throttle.size).toBe(4)
+    finish(throttle.login("a@example.test", "192.0.2.1"), false)
+    expect("done" in throttle.login("a@example.test", "192.0.2.1")).toBe(true)
+  })
 })
 
 describe("passwords", () => {

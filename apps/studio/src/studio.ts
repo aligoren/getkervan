@@ -277,10 +277,15 @@ export class Studio {
     scope: WorkspaceScope,
     serverId: string,
     versionId: string,
-    userId: string,
+    session: { userId: string; sessionHash: string },
   ): { token: string; expiresAt: number } {
     if (!getVersion(this.db, scope, serverId, versionId)) throw notFound()
-    return this.playground.issue({ workspaceId: scope.workspaceId, serverId, versionId, userId })
+    return this.playground.issue({
+      workspaceId: scope.workspaceId,
+      serverId,
+      versionId,
+      ...session,
+    })
   }
 
   /** A server's secrets: names, bindings and which published tools use them. Never values. */
