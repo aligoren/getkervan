@@ -113,7 +113,18 @@ describe("kervan run", () => {
     const dir = await workspace()
     const { client } = await connect(dir, ["run", "kervan.yaml", "--env-file", ".env"])
     const result = await client.callTool({ name: "hello", arguments: {} })
-    expect(textOf(result)).toMatch(/was blocked: it resolves to a loopback address/)
+    expect(textOf(result)).toMatch(
+      /was blocked: it resolves to a disallowed address \((loopback address|address of this machine)\)/,
+    )
+  })
+
+  it("lets --deny-network win over --allow-private-network", { timeout: 30_000 }, async () => {
+    const dir = await workspace()
+    const { client } = await connect(dir, [...runArgs, "--deny-network", "127.0.0.1"])
+    const result = await client.callTool({ name: "hello", arguments: {} })
+    expect(textOf(result)).toMatch(
+      /was blocked: it resolves to a disallowed address \(address on the deny list\)/,
+    )
   })
 
   it("never prints the secret on errors", { timeout: 30_000 }, async () => {

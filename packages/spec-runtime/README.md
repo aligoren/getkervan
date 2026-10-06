@@ -109,12 +109,32 @@ Every request, and every redirect hop, goes through the same checks, and each fa
    checked again when it connects.
 5. Redirects are not followed unless `followRedirects` allows it. Each hop is resolved and checked
    again; `https` to `http` downgrades, credentials in the location and other schemes are refused;
-   when the origin changes, headers carrying secrets plus `Authorization`, `Cookie` and
-   `Proxy-Authorization` are dropped, and a request body is never sent to another origin.
+   when the origin changes, **every header from the spec is dropped except `Accept` and
+   `User-Agent`** (templated or literal, any of them may be a credential), and a request body is
+   never sent to another origin.
+6. **This machine's own addresses** (every address of `os.networkInterfaces()`, public ones
+   included) are refused, because services listening on all interfaces are reachable through
+   them. If the list cannot be read, requests are refused.
+7. At most a few DNS lookups run at once, process-wide (half of libuv's thread pool, see below);
+   others queue and give up when the request times out.
 
-For local development, `kervan run --allow-private-network` (refused with `NODE_ENV=production`)
-or the `network.allowPrivate` option in code allows internal addresses. A spec file cannot turn
-this on.
+Blocked requests report the reason but never the resolved address, which could reveal internal
+DNS names.
+
+The order of the rules is: `network.denyList` (always refused), `network.allowPrivate` (explicitly
+allowed), this machine's addresses, then the public-unicast checks. For local development,
+`kervan run --allow-private-network` (refused with `NODE_ENV=production`) or `network.allowPrivate`
+in code allows internal addresses; `--deny-network <cidr>` or `network.denyList` blocks more. A
+spec file can set neither.
+
+### DNS lookups and `UV_THREADPOOL_SIZE`
+
+`dns.lookup` runs on libuv's thread pool, which also serves file system and crypto work, and a
+lookup cannot be cancelled: a name server that never answers keeps its thread busy until the
+operating system gives up. Kervan therefore lets at most half of the pool (2 of the default 4
+threads) resolve names at once; a lookup's slot is freed only when the lookup itself ends, and
+queued requests fail with "timed out waiting for a DNS lookup slot". To allow more concurrent
+lookups, start Node.js with a larger pool, e.g. `UV_THREADPOOL_SIZE=16` (8 lookups).
 
 ## Schemas written in a spec
 

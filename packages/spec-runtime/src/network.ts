@@ -1,5 +1,6 @@
 import { lookup as dnsLookup } from "node:dns/promises"
 import { isIP, type LookupFunction } from "node:net"
+import { networkInterfaces } from "node:os"
 import { ToolError } from "@kervan/core"
 import ipaddr from "ipaddr.js"
 
@@ -17,8 +18,107 @@ export interface NetworkPolicy {
    * `["127.0.0.1/32"]` for local development. Only settable from code or the CLI, never a spec.
    */
   allowPrivate?: readonly string[]
+  /** Addresses or CIDR ranges that are always refused, even if `allowPrivate` lists them. */
+  denyList?: readonly string[]
+  /**
+   * This machine's own addresses, refused by default because services listening on all
+   * interfaces are reachable through them even when they are public. Default: every address of
+   * `os.networkInterfaces()`.
+   */
+  localAddresses?: () => readonly string[]
   resolve?: Resolver
+  /** Caps concurrent DNS lookups. Default: the process-wide gate (see `LookupGate`). */
+  lookupGate?: LookupGate
 }
+
+/** Raised when a queued DNS lookup gives up waiting for a free slot. */
+class LookupQueueTimeout extends Error {}
+
+/**
+ * Caps how many DNS lookups are in flight. `dns.lookup` runs on libuv's thread pool and cannot be
+ * cancelled, so a slow name server could otherwise occupy every thread (also used by the file
+ * system and crypto). A slot is released only when the lookup itself finishes, not when a caller
+ * stops waiting; callers queue, and leave the queue when their signal aborts.
+ */
+export class LookupGate {
+  readonly limit: number
+  #active = 0
+  readonly #queue: { start: () => void; fail: (error: unknown) => void }[] = []
+
+  constructor(limit: number) {
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new NetworkPolicyError("The DNS lookup limit must be a positive integer.")
+    }
+    this.limit = limit
+  }
+
+  get active(): number {
+    return this.#active
+  }
+
+  get queued(): number {
+    return this.#queue.length
+  }
+
+  /**
+   * Waits for a free slot (rejecting if `signal` aborts first), then starts `lookup`. Resolves
+   * with the running lookup, wrapped so the caller can wait for it separately.
+   */
+  async start<T>(lookup: () => Promise<T>, signal?: AbortSignal): Promise<{ result: Promise<T> }> {
+    await this.#acquire(signal)
+    let result: Promise<T>
+    try {
+      result = lookup()
+    } catch (error) {
+      this.#release()
+      throw error
+    }
+    result.then(
+      () => this.#release(),
+      () => this.#release(),
+    )
+    return { result }
+  }
+
+  #acquire(signal: AbortSignal | undefined): Promise<void> {
+    if (signal?.aborted) return Promise.reject(new LookupQueueTimeout())
+    if (this.#active < this.limit) {
+      this.#active++
+      return Promise.resolve()
+    }
+    return new Promise((resolve, reject) => {
+      const entry = {
+        start: () => {
+          signal?.removeEventListener("abort", onAbort)
+          this.#active++
+          resolve()
+        },
+        fail: reject,
+      }
+      const onAbort = () => {
+        const index = this.#queue.indexOf(entry)
+        if (index !== -1) this.#queue.splice(index, 1)
+        reject(new LookupQueueTimeout())
+      }
+      signal?.addEventListener("abort", onAbort, { once: true })
+      this.#queue.push(entry)
+    })
+  }
+
+  #release(): void {
+    this.#active--
+    this.#queue.shift()?.start()
+  }
+}
+
+/** Half of libuv's thread pool (`UV_THREADPOOL_SIZE`, default 4), at least 1. */
+export function defaultLookupLimit(env: NodeJS.ProcessEnv = process.env): number {
+  const pool = Number(env.UV_THREADPOOL_SIZE)
+  const size = Number.isInteger(pool) && pool >= 1 ? Math.min(pool, 1024) : 4
+  return Math.max(1, Math.floor(size / 2))
+}
+
+const processLookupGate = new LookupGate(defaultLookupLimit())
 
 export class NetworkPolicyError extends Error {
   override name = "NetworkPolicyError"
@@ -68,16 +168,37 @@ const BLOCKED_CIDRS = [
 
 type Cidr = [ipaddr.IPv4 | ipaddr.IPv6, number]
 
-function parseAllowList(entries: readonly string[] | undefined): Cidr[] {
+function parseCidrList(entries: readonly string[] | undefined, option: string): Cidr[] {
   return (entries ?? []).map((entry) => {
     try {
       if (entry.includes("/")) return ipaddr.parseCIDR(entry)
       const address = ipaddr.parse(entry)
       return [address, address.kind() === "ipv4" ? 32 : 128] as Cidr
     } catch {
-      throw new NetworkPolicyError(`"${entry}" in allowPrivate is not an IP address or CIDR range.`)
+      throw new NetworkPolicyError(`"${entry}" in ${option} is not an IP address or CIDR range.`)
     }
   })
+}
+
+function systemAddresses(): string[] {
+  return Object.values(networkInterfaces()).flatMap((list) => (list ?? []).map((i) => i.address))
+}
+
+/** This machine's addresses as exact ranges. Throws if they cannot be listed or parsed. */
+function localRanges(policy: NetworkPolicy): Cidr[] {
+  return (policy.localAddresses ?? systemAddresses)().map((address) => {
+    // Interface addresses may carry a zone (fe80::1%eth0); the address itself is what counts.
+    const bare = address.split("%")[0] ?? ""
+    const parsed = ipaddr.process(bare)
+    return [parsed, parsed.kind() === "ipv4" ? 32 : 128] as Cidr
+  })
+}
+
+/** Ranges the checks use; built once per request. */
+export interface AddressRules {
+  allow?: readonly Cidr[]
+  deny?: readonly Cidr[]
+  local?: readonly Cidr[]
 }
 
 function inRanges(address: ipaddr.IPv4 | ipaddr.IPv6, ranges: readonly Cidr[]): boolean {
@@ -90,7 +211,7 @@ export type AddressVerdict = { allowed: true } | { allowed: false; reason: strin
  * Decides whether a resolved address may be contacted. Fails closed: anything that is not a
  * strictly valid IP, or that any check cannot classify as public unicast, is refused.
  */
-export function checkAddress(address: string, allowPrivate: readonly Cidr[] = []): AddressVerdict {
+export function checkAddress(address: string, rules: AddressRules = {}): AddressVerdict {
   try {
     if (isIP(address) === 0) return { allowed: false, reason: "not a valid IP address" }
     // A zone ID (fe80::1%eth0) selects an interface; no address we may contact needs one.
@@ -98,7 +219,12 @@ export function checkAddress(address: string, allowPrivate: readonly Cidr[] = []
     const raw = ipaddr.parse(address)
     // Unwrap IPv4-mapped IPv6 (::ffff:a.b.c.d), so both forms are judged as the same address.
     const parsed = ipaddr.process(address)
-    if (inRanges(parsed, allowPrivate) || inRanges(raw, allowPrivate)) return { allowed: true }
+    const matches = (ranges: readonly Cidr[] | undefined) =>
+      ranges !== undefined && (inRanges(parsed, ranges) || inRanges(raw, ranges))
+    // Order: explicit deny, explicit allow, this machine, then the public-unicast checks.
+    if (matches(rules.deny)) return { allowed: false, reason: "address on the deny list" }
+    if (matches(rules.allow)) return { allowed: true }
+    if (matches(rules.local)) return { allowed: false, reason: "address of this machine" }
     const range = parsed.range()
     if (range !== "unicast") return { allowed: false, reason: `${range} address` }
     if (inRanges(parsed, BLOCKED_CIDRS) || inRanges(raw, BLOCKED_CIDRS)) {
@@ -134,8 +260,17 @@ export async function resolveTarget(
   signal?: AbortSignal,
 ): Promise<ResolvedTarget> {
   const host = url.hostname
-  const allow = parseAllowList(policy.allowPrivate)
   const block = (reason: string) => new ToolError(`Request to ${url.host} was blocked: ${reason}.`)
+  const rules: AddressRules = {
+    allow: parseCidrList(policy.allowPrivate, "allowPrivate"),
+    deny: parseCidrList(policy.denyList, "denyList"),
+  }
+  try {
+    rules.local = localRanges(policy)
+  } catch {
+    // Without the list, an address of this machine could slip through: refuse instead.
+    throw block("this machine's own addresses could not be determined")
+  }
 
   // URL keeps IPv6 literals in brackets.
   const literal = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host
@@ -144,8 +279,21 @@ export async function resolveTarget(
     addresses = [{ address: literal, family: isIP(literal) === 6 ? 6 : 4 }]
   } else {
     if (host === "" || /[^a-z0-9.-]/i.test(host)) throw block("the host name is not valid")
+    const resolver = policy.resolve ?? defaultResolver
+    const gate = policy.lookupGate ?? processLookupGate
+    let running: { result: Promise<ResolvedAddress[]> }
     try {
-      addresses = await abortable((policy.resolve ?? defaultResolver)(host), signal)
+      running = await gate.start(() => resolver(host), signal)
+    } catch (error) {
+      if (error instanceof LookupQueueTimeout) {
+        throw new ToolError(
+          `Request to ${url.host} timed out waiting for a DNS lookup slot (${gate.limit} in use).`,
+        )
+      }
+      throw block("the host name could not be resolved")
+    }
+    try {
+      addresses = await abortable(running.result, signal)
     } catch {
       if (signal?.aborted) {
         const timedOut = (signal.reason as { name?: unknown } | undefined)?.name === "TimeoutError"
@@ -160,8 +308,9 @@ export async function resolveTarget(
     throw block("the host name resolved to no addresses")
   }
   for (const { address } of addresses) {
-    const verdict = checkAddress(address, allow)
-    if (!verdict.allowed) throw block(`it resolves to a ${verdict.reason}`)
+    const verdict = checkAddress(address, rules)
+    // The address itself is left out: it could reveal internal DNS names to the model.
+    if (!verdict.allowed) throw block(`it resolves to a disallowed address (${verdict.reason})`)
   }
   return { hostname: host, addresses, lookup: pinnedLookup(literal, addresses) }
 }

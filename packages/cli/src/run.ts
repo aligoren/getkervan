@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import { serveHttp, serveStdio } from "@kervan/transport/node"
 import { findProjectRoot, watchProject } from "./dev/watch.js"
-import { ALLOW_ALL_NETWORKS, loadEnvFiles, SpecHost } from "./spec-host.js"
+import { cliNetworkPolicy, loadEnvFiles, SpecHost } from "./spec-host.js"
 
 export interface RunOptions {
   spec: string
@@ -13,6 +13,8 @@ export interface RunOptions {
   envFiles: string[]
   watch: boolean
   allowPrivateNetwork: boolean
+  /** Addresses or CIDR ranges tools may never reach (`--deny-network`). */
+  denyNetwork: string[]
   cwd: string
   env: NodeJS.ProcessEnv
   stdin: NodeJS.ReadableStream
@@ -57,6 +59,7 @@ export async function runSpec(options: RunOptions): Promise<number> {
   }
   const file = path.resolve(options.cwd, options.spec)
 
+  const network = cliNetworkPolicy(options)
   let host: SpecHost
   try {
     const env = await loadEnvFiles(options.envFiles, options.env, options.cwd)
@@ -64,7 +67,7 @@ export async function runSpec(options: RunOptions): Promise<number> {
       file,
       env,
       print,
-      ...(options.allowPrivateNetwork ? { network: { allowPrivate: ALLOW_ALL_NETWORKS } } : {}),
+      ...(network ? { network } : {}),
     })
   } catch (error) {
     print(`Error: ${(error as Error).message}`)

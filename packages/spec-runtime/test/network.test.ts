@@ -14,7 +14,7 @@ import {
   type Resolver,
   resolveTarget,
 } from "../src/index.js"
-import { isPinnedAddress } from "../src/network.js"
+import { defaultLookupLimit, isPinnedAddress, LookupGate } from "../src/network.js"
 import { startUpstream, type Upstream } from "./upstream.js"
 
 let upstream: Upstream
@@ -207,8 +207,12 @@ describe("resolveTarget", () => {
   it("blocks localhost resolving to both loopbacks", async () => {
     const resolve = fixed(v6("::1"), v4("127.0.0.1"))
     await expect(resolveTarget(new URL("http://localhost/"), { resolve })).rejects.toThrow(
-      /loopback/,
+      /loopback|address of this machine/,
     )
+    // With this machine's addresses left out, the loopback check itself must still block.
+    await expect(
+      resolveTarget(new URL("http://localhost/"), { resolve, localAddresses: () => [] }),
+    ).rejects.toThrow(/loopback/)
   })
 
   it("rejects host names with unexpected characters", async () => {
@@ -440,18 +444,23 @@ ${tool}`,
     expect(echoed.headers["x-plain"]).toBe("kept")
   })
 
-  it("drops secret and credential headers when the host changes", async () => {
-    const client = await serve(
-      redirectTool(`http://other.test:${port}/echo/elsewhere`).replaceAll("PORT", String(port)),
-      resolver,
+  it("drops every spec header except Accept and User-Agent when the host changes", async () => {
+    const tool = redirectTool(`http://other.test:${port}/echo/elsewhere`, "").replace(
+      "X-Plain: kept }",
+      'X-Plain: literal-api-key-123, User-Agent: kervan-test, Accept: "application/json" }',
     )
+    const client = await serve(tool.replaceAll("PORT", String(port)), resolver)
     const echoed = JSON.parse(text(await client.callTool({ name: "hop", arguments: {} })))
     expect(echoed.path).toBe("/echo/elsewhere")
     expect(echoed.headers.host).toBe(`other.test:${port}`)
+    // Templated secrets, standard credentials and literal values all stay behind.
     expect(echoed.headers).not.toHaveProperty("x-key")
     expect(echoed.headers).not.toHaveProperty("authorization")
-    expect(echoed.headers["x-plain"]).toBe("kept")
+    expect(echoed.headers).not.toHaveProperty("x-plain")
+    expect(echoed.headers["user-agent"]).toBe("kervan-test")
+    expect(echoed.headers.accept).toBe("application/json")
     const last = upstream.requests.at(-1)
+    expect(last?.headers).not.toHaveProperty("x-plain")
     expect(last?.headers).not.toHaveProperty("x-key")
   })
 
@@ -527,5 +536,188 @@ ${tool}`,
       method: "GET",
       body: null,
     })
+  })
+})
+
+describe("this machine's addresses", () => {
+  it("blocks an address of this machine even when it is public", async () => {
+    const policy = { localAddresses: () => ["8.8.4.4"], resolve: fixed(v4("8.8.4.4")) }
+    await expect(resolveTarget(new URL("https://self.example/"), policy)).rejects.toThrow(
+      /address of this machine/,
+    )
+    await expect(
+      resolveTarget(new URL("https://other.example/"), {
+        ...policy,
+        resolve: fixed(v4("8.8.8.8")),
+      }),
+    ).resolves.toBeDefined()
+  })
+
+  it("blocks every real interface address by default", async () => {
+    const { networkInterfaces } = await import("node:os")
+    const addresses = Object.values(networkInterfaces())
+      .flatMap((list) => list ?? [])
+      .map((i) => i.address.split("%")[0] ?? "")
+    expect(addresses.length).toBeGreaterThan(0)
+    for (const address of addresses) {
+      const family = address.includes(":") ? v6(address) : v4(address)
+      await expect(
+        resolveTarget(new URL("https://self.example/"), { resolve: fixed(family) }),
+        address,
+      ).rejects.toThrow(/was blocked/)
+    }
+  })
+
+  it.each([
+    [
+      "the list cannot be read",
+      () => {
+        throw new Error("permission denied")
+      },
+    ],
+    ["an entry cannot be parsed", () => ["not-an-address"]],
+  ])("fails closed when %s", async (_label, localAddresses) => {
+    await expect(
+      resolveTarget(new URL("https://api.example.com/"), {
+        localAddresses,
+        resolve: fixed(v4("8.8.8.8")),
+      }),
+    ).rejects.toThrow(/own addresses could not be determined/)
+  })
+
+  it("matches interface addresses with a zone and mapped forms", async () => {
+    const policy = { localAddresses: () => ["2606:4700::5%eth0", "8.8.4.4"] }
+    for (const address of [v6("2606:4700::5"), v6("::ffff:8.8.4.4")]) {
+      await expect(
+        resolveTarget(new URL("https://self.example/"), { ...policy, resolve: fixed(address) }),
+      ).rejects.toThrow(/was blocked/)
+    }
+  })
+})
+
+describe("denyList", () => {
+  it("blocks listed ranges, even public ones", async () => {
+    const policy = { denyList: ["8.8.8.0/24"], localAddresses: () => [] }
+    await expect(
+      resolveTarget(new URL("https://dns.example/"), { ...policy, resolve: fixed(v4("8.8.8.8")) }),
+    ).rejects.toThrow(/deny list/)
+    await expect(
+      resolveTarget(new URL("https://dns.example/"), { ...policy, resolve: fixed(v4("8.8.4.4")) }),
+    ).resolves.toBeDefined()
+  })
+
+  it("wins over allowPrivate", async () => {
+    await expect(
+      resolveTarget(new URL("http://local.test/"), {
+        allowPrivate: ["127.0.0.0/8"],
+        denyList: ["127.0.0.2"],
+        resolve: fixed(v4("127.0.0.2")),
+      }),
+    ).rejects.toThrow(/deny list/)
+  })
+
+  it("applies to IPv4-mapped forms and IP literals", async () => {
+    const policy = { denyList: ["1.1.1.1"], localAddresses: () => [] }
+    await expect(
+      resolveTarget(new URL("https://x.example/"), {
+        ...policy,
+        resolve: fixed(v6("::ffff:1.1.1.1")),
+      }),
+    ).rejects.toThrow(/was blocked/)
+    await expect(resolveTarget(new URL("https://1.1.1.1/"), policy)).rejects.toThrow(/deny list/)
+  })
+
+  it("rejects malformed entries", async () => {
+    await expect(
+      resolveTarget(new URL("https://x.example/"), {
+        denyList: ["10.0.0.0/99"],
+        resolve: fixed(v4("8.8.8.8")),
+      }),
+    ).rejects.toBeInstanceOf(NetworkPolicyError)
+  })
+})
+
+describe("DNS lookup gate", () => {
+  function hangingResolver() {
+    const pending: (() => void)[] = []
+    const resolve: Resolver = () =>
+      new Promise((done) => {
+        pending.push(() => done([v4("8.8.8.8")]))
+      })
+    return { resolve, finishOne: () => pending.shift()?.(), pending }
+  }
+
+  it("caps lookups in flight and times out queued callers", async () => {
+    const gate = new LookupGate(2)
+    const dns = hangingResolver()
+    const policy = { resolve: dns.resolve, lookupGate: gate, localAddresses: () => [] }
+    const first = resolveTarget(new URL("https://a.example/"), policy)
+    const second = resolveTarget(new URL("https://b.example/"), policy)
+    await new Promise((r) => setTimeout(r, 10))
+    expect(gate.active).toBe(2)
+
+    const third = resolveTarget(new URL("https://c.example/"), policy, AbortSignal.timeout(50))
+    await expect(third).rejects.toThrow(/timed out waiting for a DNS lookup slot \(2 in use\)/)
+    expect(gate.queued).toBe(0)
+    expect(dns.pending).toHaveLength(2)
+
+    dns.finishOne()
+    dns.finishOne()
+    await expect(first).resolves.toBeDefined()
+    await expect(second).resolves.toBeDefined()
+    expect(gate.active).toBe(0)
+  })
+
+  it("keeps a slot busy until the lookup itself ends, not until the caller gives up", async () => {
+    const gate = new LookupGate(1)
+    const dns = hangingResolver()
+    const policy = { resolve: dns.resolve, lookupGate: gate, localAddresses: () => [] }
+    await expect(
+      resolveTarget(new URL("https://slow.example/"), policy, AbortSignal.timeout(30)),
+    ).rejects.toThrow(/timed out while resolving/)
+    expect(gate.active).toBe(1)
+
+    const queued = resolveTarget(new URL("https://next.example/"), policy)
+    await new Promise((r) => setTimeout(r, 10))
+    expect(gate.queued).toBe(1)
+    dns.finishOne() // the abandoned lookup finally ends
+    await new Promise((r) => setTimeout(r, 10))
+    expect(gate.queued).toBe(0)
+    dns.finishOne()
+    await expect(queued).resolves.toBeDefined()
+    expect(gate.active).toBe(0)
+  })
+
+  it.each([
+    [{}, 2],
+    [{ UV_THREADPOOL_SIZE: "8" }, 4],
+    [{ UV_THREADPOOL_SIZE: "1" }, 1],
+    [{ UV_THREADPOOL_SIZE: "nope" }, 2],
+    [{ UV_THREADPOOL_SIZE: "0" }, 2],
+  ])("sizes the default gate from %j", (env, expected) => {
+    expect(defaultLookupLimit(env)).toBe(expected)
+  })
+
+  it("rejects invalid limits", () => {
+    expect(() => new LookupGate(0)).toThrow(NetworkPolicyError)
+    expect(() => new LookupGate(1.5)).toThrow(NetworkPolicyError)
+  })
+
+  it("does not gate IP literals", async () => {
+    const gate = new LookupGate(1)
+    const dns = hangingResolver()
+    void resolveTarget(new URL("https://busy.example/"), {
+      resolve: dns.resolve,
+      lookupGate: gate,
+      localAddresses: () => [],
+    })
+    await expect(
+      resolveTarget(
+        new URL("https://8.8.8.8/"),
+        { lookupGate: gate, localAddresses: () => [] },
+        AbortSignal.timeout(50),
+      ),
+    ).resolves.toBeDefined()
+    dns.finishOne()
   })
 })

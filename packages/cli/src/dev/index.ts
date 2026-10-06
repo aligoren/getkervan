@@ -8,7 +8,7 @@ import {
   typeStrippingProblem,
   windowsLibuvWarning,
 } from "../node-version.js"
-import { ALLOW_ALL_NETWORKS, loadEnvFiles, SpecHost } from "../spec-host.js"
+import { cliNetworkPolicy, loadEnvFiles, SpecHost } from "../spec-host.js"
 import { DevHost } from "./host.js"
 import { collectSecrets, createRedactor, type Redactor } from "./redact.js"
 import { startRepl } from "./repl.js"
@@ -29,6 +29,8 @@ export interface DevOptions {
   envFiles: string[]
   /** Specs only: let tools reach private and loopback addresses (`--allow-private-network`). */
   allowPrivateNetwork: boolean
+  /** Specs only: addresses or CIDR ranges tools may never reach (`--deny-network`). */
+  denyNetwork: string[]
   stdin: NodeJS.ReadableStream
   stdout: NodeJS.WritableStream
   stderr: NodeJS.WritableStream
@@ -85,12 +87,13 @@ export async function runDev(options: DevOptions): Promise<number> {
   let host: DevBackend
   let redact: Redactor
   if (isSpecFile(entry)) {
+    const network = cliNetworkPolicy(options)
     try {
       const spec = await SpecHost.start({
         file: entry,
         env,
         print,
-        ...(options.allowPrivateNetwork ? { network: { allowPrivate: ALLOW_ALL_NETWORKS } } : {}),
+        ...(network ? { network } : {}),
       })
       host = spec
       redact = spec.redact
@@ -191,6 +194,7 @@ export function defaultDevOptions(entry: string): DevOptions {
     runtime: currentRuntime(),
     envFiles: [],
     allowPrivateNetwork: false,
+    denyNetwork: [],
     stdin: process.stdin,
     stdout: process.stdout,
     stderr: process.stderr,

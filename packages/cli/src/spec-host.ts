@@ -16,6 +16,18 @@ import { collectSecrets, createRedactor, type Redactor } from "./dev/redact.js"
 /** Every address, for `--allow-private-network` (development only). */
 export const ALLOW_ALL_NETWORKS = ["0.0.0.0/0", "::/0"]
 
+/** The SSRF policy for `--allow-private-network` and `--deny-network`. */
+export function cliNetworkPolicy(options: {
+  allowPrivateNetwork: boolean
+  denyNetwork: readonly string[]
+}): NetworkPolicy | undefined {
+  if (!options.allowPrivateNetwork && options.denyNetwork.length === 0) return undefined
+  return {
+    ...(options.allowPrivateNetwork ? { allowPrivate: ALLOW_ALL_NETWORKS } : {}),
+    ...(options.denyNetwork.length > 0 ? { denyList: options.denyNetwork } : {}),
+  }
+}
+
 export interface SpecHostOptions {
   file: string
   env: NodeJS.ProcessEnv

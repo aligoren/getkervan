@@ -45,6 +45,7 @@ kervan run kervan.yaml --env-file .env --watch
 | `--env-file <path>` | Variables for `{{secrets.X}}` (repeatable). Variables already set win. |
 | `--watch` | Reload the spec when it changes; an invalid edit keeps the last good version. |
 | `--allow-private-network` | Let tools reach internal addresses. Development only; refused with `NODE_ENV=production`. |
+| `--deny-network <cidr>` | An address or range tools may never reach (repeatable); wins over `--allow-private-network`. |
 
 An invalid spec stops `run` with the file, line and column of every problem. Secret values never
 appear in the output. Note: Node.js itself checks `--env-file` arguments, even after the script

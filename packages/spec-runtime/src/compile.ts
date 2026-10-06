@@ -245,15 +245,17 @@ async function sendFollowingRedirects(
     for (const [name, value] of Object.entries(call.headers)) {
       const lower = name.toLowerCase()
       if (toGet && lower === "content-type") continue
-      if (crossOrigin && (CREDENTIAL_HEADERS.has(lower) || plan.secretHeaders.includes(lower)))
-        continue
+      // Another origin gets none of the spec's headers: any of them may carry a credential,
+      // templated or written literally.
+      if (crossOrigin && !CROSS_ORIGIN_HEADERS.has(lower)) continue
       headers[name] = value
     }
     call = { method, url: next, headers, ...(body === undefined ? {} : { body }) }
   }
 }
 
-const CREDENTIAL_HEADERS = new Set(["authorization", "cookie", "proxy-authorization"])
+/** The only headers kept when a redirect leaves the original origin. */
+const CROSS_ORIGIN_HEADERS = new Set(["accept", "user-agent"])
 
 /** Per-tool limits on outgoing calls: a fixed one-minute window and a concurrency cap. */
 class CallLimiter {

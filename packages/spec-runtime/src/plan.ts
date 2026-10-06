@@ -43,8 +43,6 @@ export interface ToolPlan {
     allowInsecureHttp: boolean
   }
   rateLimit: { perMinute: number; concurrency: number }
-  /** Lower-case names of headers whose value contains a secret (dropped on cross-host redirects). */
-  secretHeaders: string[]
   output:
     | { mode: "select"; select: string; schema: Record<string, unknown> | undefined }
     | { mode: "raw" }
@@ -144,7 +142,6 @@ export function planTool(
   }
 
   const headers: [string, Template][] = []
-  const secretHeaders: string[] = []
   for (const [name, value] of Object.entries(http.headers ?? {})) {
     const path = ["http", "headers", name]
     if (!HEADER_NAME.test(name)) error(path, `"${name}" is not a valid header name.`)
@@ -152,10 +149,7 @@ export function planTool(
       error(path, `The "${name}" header is managed by Kervan and cannot be set.`)
     }
     const parsed = template(String(value), path)
-    if (parsed) {
-      headers.push([name, parsed])
-      if (parsed.some((part) => part.kind === "secret")) secretHeaders.push(name.toLowerCase())
-    }
+    if (parsed) headers.push([name, parsed])
   }
 
   let body: BodyTemplate | undefined
@@ -211,7 +205,6 @@ export function planTool(
         specDefaults?.rateLimit?.concurrency ??
         HTTP_DEFAULTS.rateLimit.concurrency,
     },
-    secretHeaders,
     output,
   }
 }
