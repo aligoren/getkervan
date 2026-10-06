@@ -86,3 +86,20 @@ export function deleteSessionsOf(db: Db, scope: WorkspaceScope, userId: string):
     .where(and(eq(sessions.workspaceId, scope.workspaceId), eq(sessions.userId, userId)))
     .run().changes
 }
+
+export function listUsers(db: Db, scope: WorkspaceScope): User[] {
+  return db
+    .select(publicColumns)
+    .from(users)
+    .where(eq(users.workspaceId, scope.workspaceId))
+    .orderBy(users.createdAt)
+    .all()
+}
+
+/** Whether any workspace has an admin (setup is over once one does). */
+export function anyAdminExists(db: Db): boolean {
+  return (
+    db.select({ id: users.id }).from(users).where(eq(users.role, "admin")).limit(1).get() !==
+    undefined
+  )
+}

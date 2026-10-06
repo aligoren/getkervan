@@ -1,19 +1,31 @@
 import { getConnInfo } from "@hono/node-server/conninfo"
 import { type Context, Hono } from "hono"
+import { type ApiEnv, createApi } from "./api/routes.js"
+import type { LoginThrottle } from "./api/throttle.js"
 import { clientIp, rateLimitKey } from "./client-ip.js"
 import { allowedHostNames, type StudioConfig } from "./config.js"
 import { GATEWAY_PATH } from "./gateway.js"
 import { FixedWindowLimiter } from "./limiter.js"
 import type { Studio } from "./studio.js"
+import { serveWeb } from "./web.js"
 
 export interface StudioHttpOptions {
   /** Requests per client IP per minute, across Studio. Default: 1200. */
   ipRateLimit?: number
+  /** Failed-login limits; default: a new `LoginThrottle`. */
+  throttle?: LoginThrottle
+  /** Called once the first admin exists. */
+  onAdminCreated?: () => void
+  /** Where the built web UI is. Default: `apps/studio/dist-web`. */
+  webRoot?: string
 }
 
-export type StudioEnv = { Variables: { clientIp: string } }
+export type StudioEnv = ApiEnv
 
-/** Headers on every response. The web UI (4b) adds its own Content-Security-Policy for pages. */
+/**
+ * Headers on every response. API and gateway responses keep `default-src 'none'`; the web UI's
+ * files set their own policy (`APP_CSP`).
+ */
 const SECURITY_HEADERS: Record<string, string> = {
   "x-content-type-options": "nosniff",
   "referrer-policy": "no-referrer",
@@ -59,6 +71,15 @@ export function createStudioHttp(
   })
 
   app.all(GATEWAY_PATH, (c) => studio.gateway.fetch(c.req.raw))
+  app.route(
+    "/api",
+    createApi(studio, {
+      config,
+      ...(options.throttle ? { throttle: options.throttle } : {}),
+      ...(options.onAdminCreated ? { onAdminCreated: options.onAdminCreated } : {}),
+    }),
+  )
+  app.get("*", serveWeb(options.webRoot))
 
   app.notFound((c) => c.json({ error: "Not found" }, 404))
   app.onError((error, c) => {

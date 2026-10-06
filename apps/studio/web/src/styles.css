@@ -1,0 +1,173 @@
+:root {
+  --bg: #fafaf9;
+  --fg: #1c1917;
+  --muted: #78716c;
+  --line: #e7e5e4;
+  --accent: #b45309;
+  --error: #b91c1c;
+  --warning: #a16207;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+}
+
+.app nav {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.app nav .brand {
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  margin-right: auto;
+}
+
+main {
+  padding: 1rem;
+}
+
+.card {
+  max-width: 24rem;
+  margin: 4rem auto;
+  padding: 1.5rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+button {
+  background: #fff;
+  cursor: pointer;
+}
+
+button[type="submit"] {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.raw-log .label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.error-text,
+.issues .error,
+.output.error .label {
+  color: var(--error);
+}
+
+.issues .warning {
+  color: var(--warning);
+}
+
+.notice {
+  color: #166534;
+}
+
+.inline {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr);
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.toolbar label {
+  flex-direction: row;
+  align-items: center;
+}
+
+.editor {
+  height: 60vh;
+  border: 1px solid var(--line);
+}
+
+.issues,
+.tools,
+.raw-log,
+.servers {
+  list-style: none;
+  padding: 0;
+}
+
+.issues .where {
+  font-family: ui-monospace, monospace;
+}
+
+.tools li {
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.tools li.selected .tool-name {
+  font-weight: 600;
+}
+
+.tool-description {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f5f5f4;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.call {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}

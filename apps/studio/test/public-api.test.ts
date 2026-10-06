@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
 const src = fileURLToPath(new URL("../src", import.meta.url))
+const webSrc = fileURLToPath(new URL("../web/src", import.meta.url))
 
 /** The framework entry points Studio may use: the packages' public API (docs/API.md). */
 const PUBLIC_ENTRY_POINTS = new Set([
@@ -11,6 +12,8 @@ const PUBLIC_ENTRY_POINTS = new Set([
   "@kervan/transport",
   "@kervan/transport/node",
   "@kervan/spec-runtime",
+  // The editor schema, a published file of the package.
+  "@kervan/spec-runtime/schema/kervan.schema.json",
 ])
 
 function sourceFiles(dir: string): string[] {
@@ -32,7 +35,7 @@ function importsOf(file: string): string[] {
 }
 
 describe("Studio uses only the framework's public API", () => {
-  const files = sourceFiles(src)
+  const files = [...sourceFiles(src), ...sourceFiles(webSrc)]
 
   it("finds the sources", () => {
     expect(files.length).toBeGreaterThan(5)
@@ -50,9 +53,11 @@ describe("Studio uses only the framework's public API", () => {
   it("never reaches into framework sources by path", () => {
     const offending = files.flatMap((file) =>
       importsOf(file)
-        .filter(
-          (spec) => spec.startsWith(".") && !path.resolve(path.dirname(file), spec).startsWith(src),
-        )
+        .filter((spec) => {
+          if (!spec.startsWith(".")) return false
+          const target = path.resolve(path.dirname(file), spec)
+          return !target.startsWith(src) && !target.startsWith(webSrc)
+        })
         .map((spec) => `${path.relative(src, file)}: ${spec}`),
     )
     expect(offending).toEqual([])

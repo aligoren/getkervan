@@ -21,6 +21,7 @@ import { getVersion, type SpecVersion, saveVersion } from "./db/repos/versions.j
 import type { WorkspaceScope } from "./db/scope.js"
 import { exportSpec } from "./export.js"
 import { Gateway } from "./gateway.js"
+import { PlaygroundTokens } from "./playground.js"
 import type { SecretStore } from "./secrets.js"
 
 export interface StudioOptions {
@@ -40,7 +41,7 @@ export interface StudioOptions {
 /** A request the caller can fix: shown to the user as is (it never contains secret values). */
 export class StudioError extends Error {
   override name = "StudioError"
-  readonly code: "not_found" | "invalid"
+  readonly code: "not_found" | "invalid" | "conflict" | "forbidden"
   readonly issues: SpecIssue[]
 
   constructor(code: StudioError["code"], message: string, issues: SpecIssue[] = []) {
@@ -61,6 +62,7 @@ export class Studio {
   readonly db: Db
   readonly gateway: Gateway
   readonly secrets: SecretStore
+  readonly playground = new PlaygroundTokens()
   readonly #options: StudioOptions
 
   constructor(options: StudioOptions) {
@@ -74,6 +76,7 @@ export class Studio {
       allowedHosts: options.allowedHosts,
       logger: options.logger,
       allowSecretsOverHttp: options.allowSecretsOverHttp === true,
+      playground: this.playground,
       ...(options.keyRateLimit === undefined ? {} : { keyRateLimit: options.keyRateLimit }),
     })
   }
@@ -89,16 +92,22 @@ export class Studio {
     if (name === "" || name.length > MAX_NAME_LENGTH) {
       throw new StudioError("invalid", `The name must be 1-${MAX_NAME_LENGTH} characters.`)
     }
-    const server = this.db.transaction((tx) => {
-      const created = createServer(tx, scope, { slug: input.slug, name })
-      recordAudit(tx, scope, actor, {
-        action: "server.create",
-        target: { type: "server", id: created.id },
-        details: { slug: created.slug },
+    try {
+      return this.db.transaction((tx) => {
+        const created = createServer(tx, scope, { slug: input.slug, name })
+        recordAudit(tx, scope, actor, {
+          action: "server.create",
+          target: { type: "server", id: created.id },
+          details: { slug: created.slug },
+        })
+        return created
       })
-      return created
-    })
-    return server
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new StudioError("conflict", "A server with this slug already exists.")
+      }
+      throw error
+    }
   }
 
   async deleteServer(scope: WorkspaceScope, serverId: string, actor: Actor): Promise<void> {
@@ -196,6 +205,20 @@ export class Studio {
     return exportSpec(version.yamlText, await this.secrets.list(scope, serverId))
   }
 
+  /**
+   * Issues a playground token for one version of a server (drafts included): the signed-in user's
+   * browser calls the gateway with it for 15 minutes.
+   */
+  playgroundToken(
+    scope: WorkspaceScope,
+    serverId: string,
+    versionId: string,
+    userId: string,
+  ): { token: string; expiresAt: number } {
+    if (!getVersion(this.db, scope, serverId, versionId)) throw notFound()
+    return this.playground.issue({ workspaceId: scope.workspaceId, serverId, versionId, userId })
+  }
+
   /** Creates an API key for a server. The key is returned once and never stored. */
   createApiKey(
     scope: WorkspaceScope,
@@ -242,6 +265,13 @@ export class Studio {
   close(): Promise<void> {
     return this.gateway.close()
   }
+}
+
+/** Whether SQLite refused a write because of a UNIQUE constraint. */
+export function isUniqueViolation(error: unknown): boolean {
+  const code = (error as { code?: unknown; cause?: { code?: unknown } } | null)?.code
+  const cause = (error as { cause?: { code?: unknown } } | null)?.cause?.code
+  return code === "SQLITE_CONSTRAINT_UNIQUE" || cause === "SQLITE_CONSTRAINT_UNIQUE"
 }
 
 function notFound(): StudioError {

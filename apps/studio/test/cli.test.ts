@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from "node:fs"
+import { type AddressInfo, createServer as createNetServer } from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
@@ -88,6 +89,39 @@ describe("starting Studio", () => {
     expect(output).toContain(`${token}`)
     expect(output).toContain("https://studio.example.test/setup")
     expect(consumeSetupToken(running.database.db, token ?? "")).toBe(true)
+  })
+
+  it("moves from loopback to the configured host once setup created the admin", async () => {
+    const dir = dataDir()
+    // A fixed port: both listeners use the configured one.
+    const port = await new Promise<number>((resolve) => {
+      const probe = createNetServer().listen(0, "127.0.0.1", () => {
+        const { port: free } = probe.address() as AddressInfo
+        probe.close(() => resolve(free))
+      })
+    })
+    const { running, lines } = await start({
+      KERVAN_STUDIO_DATA_DIR: dir,
+      KERVAN_STUDIO_PORT: String(port),
+      KERVAN_STUDIO_HOST: "localhost",
+    })
+    expect(running.boundHost).toBe("127.0.0.1")
+    const origin = `http://127.0.0.1:${port}`
+    const setup = await fetch(`${origin}/api/setup`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin },
+      body: JSON.stringify({
+        token: running.setupToken,
+        email: "admin@example.test",
+        password: "correct horse battery staple",
+      }),
+    })
+    expect(setup.status).toBe(201)
+    await expect
+      .poll(() => lines.join("\n"), { timeout: 5000 })
+      .toContain("now listening on localhost")
+    const after = await fetch(`http://localhost:${port}/api/setup`)
+    expect(await after.json()).toEqual({ needed: false })
   })
 
   it("prints no setup token once an admin exists", async () => {

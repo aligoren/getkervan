@@ -5,9 +5,11 @@ them, and MCP clients use them through Studio's gateway at `/s/{serverId}/mcp`. 
 lists who interacts with Studio, what must be protected, the attacks we design against, and how
 each one is mitigated and tested.
 
-Status legend: **4a** is implemented (gateway, data model, framework extensions). **4b**
-(management API and web UI) and **4c** (encrypted vault, versions, API key management, logs) are
-planned and listed so the design is reviewed as a whole.
+Status legend:
+- **Implemented:** **4a** (gateway, data model, framework extensions) and **4b** (management API,
+  web UI, playground).
+- **Planned:** **4c** (encrypted vault, version history, API key management, logs). It is listed
+  so the design is reviewed as a whole.
 
 ## Deployment model
 
@@ -119,33 +121,70 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 
 ### T4: XSS (4b)
 
-- Tool descriptions, upstream output and error messages are untrusted. The UI renders them as
-  text only: React escaping, no `dangerouslySetInnerHTML`, no Markdown rendering.
-- A strict CSP is applied: `script-src 'self'`, `object-src 'none'`, `base-uri 'none'`,
-  `frame-ancestors 'none'`. Responses also carry `nosniff`.
-- Since 4a, every response carries `default-src 'none'`, `nosniff`, `X-Frame-Options: DENY`,
+- The following are untrusted, and the UI renders them as text children only:
+  - tool names, titles and descriptions;
+  - tool output and upstream text;
+  - spec issues and error messages;
+  - server names and the raw playground traffic.
+- None of that is ever rendered as HTML, Markdown, a link or an image. Non-text tool content
+  (images) is described, not displayed.
+- jsdom tests feed seven payloads into every component that shows untrusted text (`<img
+  onerror>`, `<script>`, `<iframe>`, `<svg onload>`, Markdown and `javascript:` links). They check
+  that no element, event-handler attribute or `javascript:` URL appears.
+- A source scan forbids `dangerouslySetInnerHTML`, `innerHTML`, `insertAdjacentHTML`,
+  `document.write`, `eval`, `new Function` and web storage in the UI code. Biome forbids
+  `dangerouslySetInnerHTML` too.
+- Monaco shows marker messages as plain text.
+- **CSP of the UI:**
+  - `default-src 'self'; script-src 'self'` (no inline or eval);
+  - `style-src 'self' 'unsafe-inline'` (Monaco sets inline styles);
+  - `worker-src 'self' blob:`, `connect-src 'self'`;
+  - `object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`, `form-action 'self'`.
+
+  A live check in a real browser (Playwright) found no CSP violation.
+- API and gateway responses keep `default-src 'none'`, plus `nosniff`, `X-Frame-Options: DENY`,
   `Referrer-Policy: no-referrer` and COOP/CORP.
 
 ### T5: CSRF (4b)
 
-- A synchronizer token tied to the session, sent in a header.
-- `Origin` / `Sec-Fetch-Site` must match the public URL, on login too.
-- The management API sends no CORS headers. The gateway needs an `Authorization` header that
-  browsers will not send cross-origin without a preflight that Studio never approves.
+- Every state-changing API request needs all of the following, and setup and login need all but
+  the token:
+  - `Origin` exactly equal to the public URL's origin. A missing Origin, `null`, another port and
+    plain http are all refused.
+  - `Sec-Fetch-Site: same-origin` when the browser sends that header.
+  - `Content-Type: application/json`, so plain HTML forms cannot post.
+  - The session's CSRF token in `X-CSRF-Token`, compared in constant time. The token is the
+    SHA-256 of the secret session id, so only that session's holder can know it.
+- The management API sends no CORS headers.
+- The gateway needs an `Authorization` header, which browsers won't send cross-origin without
+  a preflight that Studio never approves.
 
 ### T6: Session fixation and theft (4b)
 
-- A new session id at login; only its SHA-256 is stored.
-- The cookie is HttpOnly and SameSite=Lax. Over https it is also `Secure` with the `__Host-`
-  prefix.
-- Sessions have idle and absolute timeouts, and logout deletes them. `reset-admin` ends all
-  sessions of the admin (4a).
+- Every login issues a new session id, and a session id the browser brought along is
+  deleted. Only the SHA-256 of the id is stored.
+- The cookie is HttpOnly, SameSite=Lax and `Path=/`, with no `Domain`. Over https it also gets
+  `Secure` and the `__Host-` prefix.
+- Sessions end after 2 hours idle and after 24 hours in any case. An expired session is deleted
+  when seen, and logout (which also needs the CSRF token) deletes the session.
+- `reset-admin` ends all of the admin's sessions.
+- The CSRF token lives in page memory only, never in web storage.
 
 ### T7: Login brute force (4b)
 
-- Failed logins are limited per IP and per account, with growing delays.
-- The error message is the same whether or not the account exists.
-- Passwords are hashed with scrypt (N=2^15, r=8, p=1) and compared in constant time.
+- Failed logins are counted per account and per client IP:
+  - 5 failures for an account, or 20 from an IP, within 15 minutes lock it for 15 minutes (429
+    with `Retry-After`), even for the right password;
+  - unknown accounts lock the same way, so the lock reveals nothing;
+  - setup-token guesses are limited per IP too.
+- A wrong password and an unknown account get the same answer. An unknown account still costs
+  a password check against a dummy hash.
+- Passwords need at least 12 characters, are hashed with scrypt (N=2^15, r=8, p=1) and are
+  compared in constant time.
+- Login successes and failures go to the audit log, with the client IP and never a password.
+- Roles: members write, validate and publish specs and use the playground. Only admins manage
+  users, delete servers and read the audit log (and, in 4c, secrets and keys). Tests check
+  every admin-only endpoint with a member session.
 
 ### T8: API key leakage (4a; management 4c)
 
@@ -158,6 +197,21 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Revocation takes effect on the next request and also ends the key's open event streams
   (subscriptions). Deleting a server ends all of its streams.
 
+### T8b: Playground tokens (4b)
+
+- The playground's browser client calls the gateway with a token, not a cookie: `kvp_` plus a
+  payload signed with HMAC-SHA256. The payload holds the workspace, server, version, user and
+  expiry.
+- The signing key exists only in the Studio process, so a restart invalidates every token.
+  Tokens last 15 minutes.
+- A token works only on its own server and version, including drafts. Forged, tampered, expired
+  and other-server tokens all get the same 401.
+- A draft loads with the same secret store, host bindings and network policy as a published
+  version, so a member cannot use the playground to send a secret anywhere publishing would
+  refuse.
+- Drafts unused for 15 minutes are unloaded.
+- The token is never written to the page or the raw traffic log.
+
 ### T9: Taking over a fresh installation (4a)
 
 - Until an admin exists, Studio listens on `127.0.0.1` only, whatever `KERVAN_STUDIO_HOST`
@@ -165,6 +219,9 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   invalidates the old one). Only the token's hash is stored.
 - `kervan-studio reset-admin` (operator shell) sets a new password and ends the admin's
   sessions. It is recorded in the audit log, without the password.
+- Setup in the browser (4b) consumes the token in the same transaction that creates the admin.
+  It is refused once any admin exists. Only then does Studio also listen on
+  `KERVAN_STUDIO_HOST`.
 
 ### T10: Tenant and server isolation (4a)
 

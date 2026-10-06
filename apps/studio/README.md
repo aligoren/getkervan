@@ -5,9 +5,12 @@ MCP clients through one gateway. Studio is optional: it is built only on the pub
 `@kervan/core`, `@kervan/transport` and `@kervan/spec-runtime`. Every server can be exported as a
 `kervan.yaml` that runs with `kervan run`.
 
-> **Status: in development, not published.** This is phase 4a: data model, gateway and the
-> framework extensions Studio needs. The management API and web UI (4b) and the encrypted secret
-> vault, version history and key management (4c) come next. Until 4c, secrets are kept in memory.
+> **Status: in development, not published.** What exists so far:
+> - phase 4a: data model, gateway and the framework extensions Studio needs;
+> - phase 4b: management API, web UI with the spec editor, and the playground.
+>
+> Next is phase 4c: encrypted secret vault, version history and API key management. Until then,
+> secrets are kept in memory and API keys have no UI.
 
 The security design is in [docs/THREAT-MODEL-STUDIO.md](../../docs/THREAT-MODEL-STUDIO.md).
 
@@ -18,11 +21,32 @@ pnpm build
 node apps/studio/bin/kervan-studio.js start
 ```
 
+`pnpm build` also builds the web UI (`apps/studio/dist-web`). Then open the URL Studio prints.
+
 On first start, Studio:
 
 1. listens on `127.0.0.1` only (whatever `KERVAN_STUDIO_HOST` says);
 2. prints a one-time setup token, valid for 30 minutes, that creates the first admin;
 3. issues a new token, and invalidates the old one, on every restart until an admin exists.
+
+## Web UI
+
+- **Setup and sign-in:** the first admin is created in the browser with the setup token.
+  Sessions use an HttpOnly cookie, and every change needs the session's CSRF token.
+- **Servers:** create a server, then edit its `kervan.yaml` in the Monaco editor, which has
+  completion and validation from the published editor schema.
+  - Saving creates a new immutable version; problems show with line and column.
+  - Publishing validates the version strictly (including secret bindings) and updates the
+    gateway in place.
+  - Any version can be exported as `kervan.yaml`.
+- **Playground:** connects a real MCP client to the gateway with a 15-minute token for the
+  selected version (drafts too). It lists and calls tools, and shows the raw requests and
+  responses. Everything a tool or upstream returns is shown as text.
+- **Roles:** members edit, publish and use the playground. Admins also manage users, delete
+  servers and read the audit log.
+
+For UI development, run Studio, then `pnpm --filter @kervan/studio dev:web`. Vite serves the UI
+and forwards `/api` and `/s` to Studio on port 4310.
 
 ## Gateway
 

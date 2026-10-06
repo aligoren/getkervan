@@ -7,12 +7,12 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && pnpm --filter @kervan/studio build:web",
     "clean": "tsc -b --clean",
-    "typecheck": "tsc -b && tsc -p tsconfig.test.json",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json && tsc -p apps/studio/web/tsconfig.json",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "test": "tsc -b && vitest run",
+    "test": "pnpm build && vitest run",
     "test:watch": "vitest",
     "check:pack": "pnpm -r --filter \"./packages/*\" run check:pack"
   },

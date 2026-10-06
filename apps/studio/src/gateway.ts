@@ -22,6 +22,7 @@ import { getServer } from "./db/repos/servers.js"
 import { getVersion } from "./db/repos/versions.js"
 import { type WorkspaceScope, workspaceScope } from "./db/scope.js"
 import { FixedWindowLimiter } from "./limiter.js"
+import type { PlaygroundTokens } from "./playground.js"
 import type { SecretStore } from "./secrets.js"
 
 export const GATEWAY_PATH = "/s/:serverId/mcp"
@@ -39,6 +40,31 @@ export interface GatewayOptions {
   allowSecretsOverHttp?: boolean
   /** Requests per API key per minute. Default: 600. */
   keyRateLimit?: number
+  /** Verifies playground tokens (`kvp_...`); without it only API keys are accepted. */
+  playground?: PlaygroundTokens
+}
+
+/** How long an unused playground draft stays loaded. */
+export const DRAFT_TTL_MS = 15 * 60 * 1000
+
+/** A version loaded for the playground, which may not be published. */
+interface Draft {
+  registry: InMemoryToolRegistry
+  vault: SecretVault
+  serverId: string
+  /** Resolves to whether the version loaded. */
+  ready: Promise<boolean>
+  lastUsed: number
+}
+
+/** Who is calling: an API key, or a signed-in user's playground token. */
+interface Caller {
+  /** Key id, or `playground:<user>` (stream tracking and rate limits). */
+  id: string
+  scope: WorkspaceScope
+  serverId: string
+  /** Set for playground tokens: the version (published or draft) they may call. */
+  versionId?: string
 }
 
 /** One published server: a registry that lives as long as the server, updated in place. */
@@ -68,6 +94,8 @@ export class Gateway {
   readonly #keyLimiter: FixedWindowLimiter
   /** Open event streams, so revoking a key or deleting a server can end them at once. */
   readonly #streams = new Set<{ keyId: string; serverId: string; abort: AbortController }>()
+  readonly #drafts = new Map<string, Draft>()
+  readonly #sweeper: NodeJS.Timeout
 
   constructor(options: GatewayOptions) {
     this.#options = options
@@ -86,12 +114,15 @@ export class Gateway {
       authenticate: (request, { params }) => this.#authenticate(request, params),
       resolveServer: (_request, { auth, params }) => this.resolve(auth, params),
     })
+    this.#sweeper = setInterval(() => this.sweepDrafts(), 60_000)
+    this.#sweeper.unref()
   }
 
   /** Redacts every secret value any served server has used (for Studio's own logs). */
   redact(text: string): string {
     let result = text
     for (const served of this.#served.values()) result = served.vault.redact(result)
+    for (const draft of this.#drafts.values()) result = draft.vault.redact(result)
     return result
   }
 
@@ -131,13 +162,13 @@ export class Gateway {
     const response = await this.handler.fetch(request)
     const isStream = response.headers.get("content-type")?.startsWith("text/event-stream")
     if (!isStream || !response.body) return response
-    const key = findActiveApiKey(this.#options.db, bearer(request) ?? "")
-    if (!key) {
-      // Revoked between authentication and now.
+    const caller = this.#caller(request)
+    if (!caller) {
+      // Revoked (or expired) between authentication and now.
       await response.body.cancel()
       return unauthorized()
     }
-    const entry = { keyId: key.id, serverId: key.serverId, abort: new AbortController() }
+    const entry = { keyId: caller.id, serverId: caller.serverId, abort: new AbortController() }
     this.#streams.add(entry)
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>()
     response.body
@@ -161,17 +192,53 @@ export class Gateway {
         entry.abort.abort()
       }
     }
+    if ("serverId" in match) {
+      for (const [key, draft] of this.#drafts) {
+        if (draft.serverId === match.serverId) this.#drafts.delete(key)
+      }
+    }
+  }
+
+  /** How many playground drafts are loaded (for tests and status pages). */
+  get loadedDrafts(): number {
+    return this.#drafts.size
+  }
+
+  /** Unloads playground drafts nobody used for `DRAFT_TTL_MS`. Runs every minute. */
+  sweepDrafts(now = Date.now()): void {
+    for (const [versionId, draft] of this.#drafts) {
+      if (now - draft.lastUsed >= DRAFT_TTL_MS) this.#drafts.delete(versionId)
+    }
   }
 
   close(): Promise<void> {
+    clearInterval(this.#sweeper)
     for (const entry of this.#streams) entry.abort.abort()
     this.#streams.clear()
+    this.#drafts.clear()
     return this.handler.close()
   }
 
-  #authenticate(request: Request, params: Readonly<Record<string, string>>): AuthInfo | Response {
+  /** The verified caller of a request, from its API key or playground token. */
+  #caller(request: Request): Caller | undefined {
     const presented = bearer(request)
-    const key = presented ? findActiveApiKey(this.#options.db, presented) : undefined
+    if (!presented) return undefined
+    if (presented.startsWith("kvp_")) {
+      const grant = this.#options.playground?.verify(presented)
+      if (!grant) return undefined
+      return {
+        id: `playground:${grant.userId}`,
+        scope: workspaceScope(grant.workspaceId),
+        serverId: grant.serverId,
+        versionId: grant.versionId,
+      }
+    }
+    const key = findActiveApiKey(this.#options.db, presented)
+    return key && { id: key.id, scope: key.scope, serverId: key.serverId }
+  }
+
+  #authenticate(request: Request, params: Readonly<Record<string, string>>): AuthInfo | Response {
+    const key = this.#caller(request)
     // One answer for a missing key, an unknown or revoked key, and another server's key: callers
     // learn nothing about which servers exist.
     if (!key || key.serverId !== params.serverId) return unauthorized()
@@ -187,7 +254,11 @@ export class Gateway {
       token: key.id,
       clientId: key.id,
       scopes: [],
-      extra: { workspaceId: key.scope.workspaceId, serverId: key.serverId },
+      extra: {
+        workspaceId: key.scope.workspaceId,
+        serverId: key.serverId,
+        ...(key.versionId === undefined ? {} : { versionId: key.versionId }),
+      },
     }
   }
 
@@ -204,11 +275,67 @@ export class Gateway {
     if (typeof workspaceId !== "string" || typeof serverId !== "string") return FORBIDDEN
     if (serverId !== params.serverId) return FORBIDDEN
     const scope = workspaceScope(workspaceId)
+    const versionId = auth?.extra?.versionId
+    if (typeof versionId === "string") return this.#draft(scope, serverId, versionId)
     const key = servedKey(scope, serverId)
     if (!this.#served.has(key)) await this.reload(scope, serverId)
     else await this.#served.get(key)?.queue
     const served = this.#served.get(key)
     return served?.versionId === undefined ? null : served.registry
+  }
+
+  /**
+   * The registry of one version for the playground. It is loaded like a published version (the
+   * same secret source, bindings and network policy) and dropped after `DRAFT_TTL_MS` unused.
+   */
+  async #draft(scope: WorkspaceScope, serverId: string, versionId: string): Promise<ResolveResult> {
+    const key = `${scope.workspaceId}/${serverId}/${versionId}`
+    let draft = this.#drafts.get(key)
+    if (!draft) {
+      const registry = new InMemoryToolRegistry({
+        onListenerError: (error) => this.#options.logger.error("Registry listener failed", error),
+      })
+      const vault = new SecretVault()
+      draft = {
+        registry,
+        vault,
+        serverId,
+        lastUsed: Date.now(),
+        ready: this.#loadDraft(scope, serverId, versionId, registry, vault),
+      }
+      this.#drafts.set(key, draft)
+    }
+    draft.lastUsed = Date.now()
+    if (!(await draft.ready)) {
+      this.#drafts.delete(key)
+      return null
+    }
+    return draft.registry
+  }
+
+  async #loadDraft(
+    scope: WorkspaceScope,
+    serverId: string,
+    versionId: string,
+    registry: InMemoryToolRegistry,
+    vault: SecretVault,
+  ): Promise<boolean> {
+    const version = getVersion(this.#options.db, scope, serverId, versionId)
+    if (!version) return false
+    try {
+      const loaded = await loadSpec(version.yamlText, {
+        fileName: `v${version.number}`,
+        secrets: this.#options.secrets.source(scope, serverId),
+        vault,
+        network: this.#options.network,
+        allowSecretsOverHttp: this.#options.allowSecretsOverHttp === true,
+      })
+      registry.serverInfo = { name: loaded.spec.name, version: loaded.spec.version }
+      applySpec(registry, loaded)
+      return true
+    } catch {
+      return false
+    }
   }
 
   #servedFor(scope: WorkspaceScope, serverId: string): Served {

@@ -29,6 +29,8 @@ export interface StartOptions {
   network?: Omit<StudioNetworkOptions, "denyList" | "selfAddresses">
   /** Resolves the public host name to Studio's own addresses. Default: DNS. */
   resolveSelf?: (host: string) => Promise<string[]>
+  /** Where the built web UI is (tests). Default: `apps/studio/dist-web`. */
+  webRoot?: string
 }
 
 export interface RunningStudio {
@@ -82,16 +84,54 @@ export async function startStudio(
       allowedHosts: allowedHostNames(config),
       logger,
     })
-    const http = createStudioHttp(studio, config)
+    const servers: ReturnType<typeof serve>[] = []
+    const listen = (hostname: string) =>
+      new Promise<ReturnType<typeof serve>>((resolve, reject) => {
+        const listening = serve({ fetch: http.fetch, port: config.port, hostname }, () => {
+          listening.off("error", reject)
+          servers.push(listening)
+          resolve(listening)
+        })
+        listening.once("error", reject)
+      })
+
+    // Listeners that stopped accepting but may still finish requests (closed with the rest).
+    const closing: ReturnType<typeof serve>[] = []
+    /** Listens on `hostname`, retrying briefly while a just-closed listener frees the port. */
+    const rebind = async (hostname: string): Promise<void> => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await listen(hostname)
+          return
+        } catch (error) {
+          if ((error as { code?: string }).code !== "EADDRINUSE" || attempt >= 20) throw error
+          await new Promise((resolve) => setTimeout(resolve, 50))
+        }
+      }
+    }
 
     const host = bindHost(config, hasAdmin)
-    const server = await new Promise<ReturnType<typeof serve>>((resolve, reject) => {
-      const listening = serve({ fetch: http.fetch, port: config.port, hostname: host }, () => {
-        listening.off("error", reject)
-        resolve(listening)
-      })
-      listening.once("error", reject)
+    const http = createStudioHttp(studio, config, {
+      ...(options.webRoot ? { webRoot: options.webRoot } : {}),
+      // Until now Studio listened on loopback only; with an admin it may serve its real host.
+      onAdminCreated: () => {
+        if (host === config.host) return
+        // After the setup response is out: stop accepting on loopback (open connections finish),
+        // then listen on the real host. Both may cover the same port (0.0.0.0 includes loopback).
+        setTimeout(() => {
+          for (const listening of servers.splice(0)) {
+            listening.close()
+            closing.push(listening)
+          }
+          void rebind(config.host).then(
+            () => print(`The first admin exists: now listening on ${config.host}.`),
+            (error: unknown) =>
+              print(`Could not listen on ${config.host}: ${(error as Error).message}`),
+          )
+        }, 0)
+      },
     })
+    const server = await listen(host)
     const address = server.address() as AddressInfo
     const url = new URL(
       `http://${address.family === "IPv6" ? `[${address.address}]` : address.address}:${address.port}`,
@@ -119,10 +159,18 @@ export async function startStudio(
       database,
       close: async () => {
         await studio.close()
-        await new Promise<void>((done) => {
-          server.close(() => done())
-          if ("closeAllConnections" in server) server.closeAllConnections()
-        })
+        for (const listening of closing) {
+          if ("closeAllConnections" in listening) listening.closeAllConnections()
+        }
+        await Promise.all(
+          servers.map(
+            (listening) =>
+              new Promise<void>((done) => {
+                listening.close(() => done())
+                if ("closeAllConnections" in listening) listening.closeAllConnections()
+              }),
+          ),
+        )
         database.close()
       },
     }

@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/dist", "!**/node_modules", "!**/*.tsbuildinfo"]
+    "includes": ["**", "!**/dist", "!**/node_modules", "!**/*.tsbuildinfo", "!**/dist-web"]
   },
   "formatter": {
     "enabled": true,
@@ -41,7 +41,7 @@
   },
   "overrides": [
     {
-      "includes": ["apps/studio/src/**"],
+      "includes": ["apps/studio/src/**", "apps/studio/web/src/**"],
       "linter": {
         "rules": {
           "style": {
@@ -55,7 +55,8 @@
                       "!@kervan/core",
                       "!@kervan/transport",
                       "!@kervan/transport/node",
-                      "!@kervan/spec-runtime"
+                      "!@kervan/spec-runtime",
+                      "!@kervan/spec-runtime/schema/kervan.schema.json"
                     ],
                     "message": "Studio uses only the public entry points of @kervan/* packages (see docs/API.md)."
                   },

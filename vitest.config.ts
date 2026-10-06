@@ -15,6 +15,14 @@ export default defineConfig({
       },
       { test: { name: "studio", root: "apps/studio", include: ["test/**/*.test.ts"] } },
       {
+        test: {
+          name: "studio-web",
+          root: "apps/studio/web",
+          include: ["test/**/*.test.tsx"],
+          environment: "jsdom",
+        },
+      },
+      {
         test: { name: "example-weather", root: "examples/weather", include: ["test/**/*.test.ts"] },
       },
       {

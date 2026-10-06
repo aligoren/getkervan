@@ -163,7 +163,7 @@ async function startProxy(targetPort: number): Promise<number> {
 function get(port: number, headers: Record<string, string>): Promise<number> {
   return new Promise((resolve, reject) => {
     const req = httpRequest(
-      { host: "127.0.0.1", port, path: "/nothing-here", headers },
+      { host: "127.0.0.1", port, path: "/api/nothing-here", headers },
       (response) => {
         response.resume()
         resolve(response.statusCode ?? 0)
@@ -217,7 +217,7 @@ describe("Studio behind a reverse proxy", () => {
   it("sets security headers on every response", async () => {
     const studio = await startStudioHttp({ publicUrl, trustProxy: 0, ipRateLimit: 100 })
     const response = await new Promise<Record<string, unknown>>((resolve, reject) => {
-      httpRequest({ host: "127.0.0.1", port: studio, path: "/", headers: host }, (res) => {
+      httpRequest({ host: "127.0.0.1", port: studio, path: "/api/me", headers: host }, (res) => {
         res.resume()
         resolve(res.headers)
       })
