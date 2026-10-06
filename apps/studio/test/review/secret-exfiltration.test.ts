@@ -34,7 +34,11 @@ async function memberServer(text: string, options: { production?: boolean } = {}
   cleanups.push(t.close)
   const scope = createWorkspace(t.database.db, "w")
   const server = t.studio.createServer(scope, { slug: "s", name: "S" }, user())
-  t.secrets.set(scope, server.id, { name: "API_KEY", value: SECRET, allowedHosts: ["bound.test"] })
+  t.secrets.set(scope, server.id, {
+    name: "API_KEY",
+    value: SECRET,
+    allowedHosts: [`bound.test:${upstream.port}`],
+  })
   const version = t.studio.saveVersion(scope, server.id, text, user("member"))
   let published = true
   try {

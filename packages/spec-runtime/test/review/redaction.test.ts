@@ -36,14 +36,14 @@ const network: NetworkPolicy = {
 /** Answers only for bound.test, like Studio's store. */
 const source: SecretSource = {
   get: (name, context) =>
-    name === "API_KEY" && context?.host === "bound.test" ? SECRET : undefined,
+    name === "API_KEY" && context?.host === `bound.test:${port}` ? SECRET : undefined,
 }
 
 /** One tool that sends the key to the bound host's /reflect endpoint (it echoes X-Key back). */
 const reflectSpec = (output: string) => `specVersion: 1
 name: review
 version: 0.0.0
-secrets: [{ name: API_KEY, hosts: [bound.test] }]
+secrets: [{ name: API_KEY, hosts: ['bound.test:${port}'] }]
 defaults: { http: { allowInsecureHttp: true, timeoutMs: 2000 } }
 tools:
   - name: call
@@ -54,7 +54,12 @@ tools:
     output: ${output}`
 
 async function call(output: string): Promise<string> {
-  const loaded = await loadSpec(reflectSpec(output), { secrets: source, network })
+  // The local test API speaks http; secrets over http need the development opt-in.
+  const loaded = await loadSpec(reflectSpec(output), {
+    secrets: source,
+    network,
+    allowSecretsOverHttp: true,
+  })
   const app = createApp({ name: "review", version: "0.0.0", logger: silentLogger })
   applySpec(app.registry, loaded)
   const client = await createTestClient(app)

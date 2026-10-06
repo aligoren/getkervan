@@ -37,11 +37,12 @@ The runtime export lists are pinned by `test/api.test.ts` in each package.
 
 | Export | Kind | Status |
 | --- | --- | --- |
-| `loadSpec`, `LoadOptions` (incl. `requireSecrets`), `LoadedSpec`, `CompiledTool`, `CompiledDefinition` | function, types | Stable |
+| `loadSpec`, `LoadOptions` (incl. `requireSecrets`, `allowSecretsOverHttp`), `LoadedSpec`, `CompiledTool`, `CompiledDefinition` | function, types | Stable |
 | `applySpec` | function | Stable |
 | `SpecLoadError`, `SpecIssue`, `formatIssue` | class, type, function | Stable |
 | `SecretSource` (`get(name, context?)`), `SecretContext`, `envSecrets`, `SecretVault`, `SecretError`, `REDACTED` | types, function, classes, constant | Stable |
-| `normalizeHost` | function | **Experimental** |
+| `normalizeHostPort` | function | **Experimental** |
+| `METADATA_RANGES` | constant | Stable name; the list may grow in minor releases |
 | `NetworkPolicy` (`allowPrivate`, `denyList`), `NetworkPolicyError` | type, class | Stable |
 | `NetworkPolicy` (`resolve`, `localAddresses`, `lookupGate`), `Resolver`, `ResolvedAddress`, `LookupGate` | types, class | **Experimental** |
 | `Spec`, `SpecTool`, `specJsonSchema` | types, function | Stable (the `kervan.yaml` format, `specVersion: 1`, including host-bound `secrets` entries) |

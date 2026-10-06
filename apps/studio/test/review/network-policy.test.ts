@@ -5,9 +5,10 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { BlockList, isIP } from "node:net"
 import os from "node:os"
 import path from "node:path"
+import { METADATA_RANGES } from "@kervan/spec-runtime"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import { loadConfig } from "../../src/config.js"
-import { METADATA_ADDRESSES, studioNetworkPolicy } from "../../src/network.js"
+import { studioNetworkPolicy } from "../../src/network.js"
 import { startStudio } from "../../src/server.js"
 import {
   connect,
@@ -43,8 +44,10 @@ function denied(entries: readonly string[]): BlockList {
   return list
 }
 
-describe("review: cloud metadata endpoints are on Studio's deny list", () => {
-  const list = denied(studioNetworkPolicy().denyList ?? [])
+// Since 4b the runtime refuses cloud metadata itself, before any policy (no allowPrivate or
+// deny list can change it), so the same protection also covers `kervan run`.
+describe("review: cloud metadata endpoints are refused by the runtime", () => {
+  const list = denied(METADATA_RANGES)
 
   it.each([
     ["AWS / GCP / Azure IMDS", "169.254.169.254", "ipv4"],
@@ -59,8 +62,10 @@ describe("review: cloud metadata endpoints are on Studio's deny list", () => {
     expect(list.check(address, family)).toBe(true)
   })
 
-  it("keeps the documented metadata list in the policy", () => {
-    expect(studioNetworkPolicy().denyList).toEqual(expect.arrayContaining(METADATA_ADDRESSES))
+  it("cannot be widened by Studio's policy", () => {
+    const policy = studioNetworkPolicy({ allowPrivate: ["169.254.0.0/16"] } as never)
+    expect(policy.allowPrivate).toBeUndefined()
+    expect(Object.isFrozen(METADATA_RANGES)).toBe(true)
   })
 })
 

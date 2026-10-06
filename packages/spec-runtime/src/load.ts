@@ -4,7 +4,7 @@ import { type CompiledDefinition, compilePlan, type RuntimeOptions } from "./com
 import { type IssuePath, planTool, type SpecIssue, type ToolPlan } from "./plan.js"
 import {
   envSecrets,
-  normalizeHost,
+  normalizeHostPort,
   SecretError,
   type SecretSource,
   SecretVault,
@@ -39,6 +39,11 @@ export interface LoadOptions {
    * Use it to validate a spec before publishing it. Default: false.
    */
   requireSecrets?: boolean
+  /**
+   * Allow tools that use secrets to call plain http URLs. Off by default: secrets never travel
+   * unencrypted. For local development against an http API only.
+   */
+  allowSecretsOverHttp?: boolean
 }
 
 export class SpecLoadError extends Error {
@@ -124,7 +129,9 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
   spec.tools.forEach((tool, index) => {
     if (names.has(tool.name)) at(["tools", index, "name"], `Duplicate tool name "${tool.name}".`)
     names.add(tool.name)
-    const plan = planTool(tool, spec.defaults, declared, ["tools", index], at)
+    const plan = planTool(tool, spec.defaults, declared, ["tools", index], at, {
+      allowSecretsOverHttp: options.allowSecretsOverHttp === true,
+    })
     if (plan) {
       for (const name of plan.secrets) used.add(name)
       plans.push([tool, plan])
@@ -177,6 +184,7 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
     secrets: source,
     vault,
     ...(options.network ? { network: options.network } : {}),
+    allowSecretsOverHttp: options.allowSecretsOverHttp === true,
   }
   const tools = plans.map(([tool, plan]) => ({
     name: plan.name,
@@ -206,7 +214,7 @@ function declaredSecrets(
     }
     const hosts: string[] = []
     entry.hosts.forEach((host, i) => {
-      const normalized = normalizeHost(host)
+      const normalized = normalizeHostPort(host)
       if (normalized === undefined) {
         at(["secrets", index, "hosts", i], `"${host}" is not a host name.`)
       } else if (!hosts.includes(normalized)) hosts.push(normalized)

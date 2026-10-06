@@ -13,6 +13,8 @@ export interface RunOptions {
   envFiles: string[]
   watch: boolean
   allowPrivateNetwork: boolean
+  /** Let tools send secrets over plain http (`--allow-insecure-secrets`, development only). */
+  allowInsecureSecrets: boolean
   /** Addresses or CIDR ranges tools may never reach (`--deny-network`). */
   denyNetwork: string[]
   cwd: string
@@ -33,6 +35,12 @@ export function runPreflight(options: RunOptions): string[] {
     errors.push(
       "--allow-private-network lets tools reach internal addresses (cloud metadata, databases) " +
         "and is refused with NODE_ENV=production.",
+    )
+  }
+  if (options.allowInsecureSecrets && options.env.NODE_ENV === "production") {
+    errors.push(
+      "--allow-insecure-secrets sends secrets over plain http and is refused with " +
+        "NODE_ENV=production.",
     )
   }
   if (
@@ -68,6 +76,7 @@ export async function runSpec(options: RunOptions): Promise<number> {
       env,
       print,
       ...(network ? { network } : {}),
+      allowSecretsOverHttp: options.allowInsecureSecrets,
     })
   } catch (error) {
     print(`Error: ${(error as Error).message}`)
@@ -75,6 +84,9 @@ export async function runSpec(options: RunOptions): Promise<number> {
   }
   if (options.allowPrivateNetwork) {
     print("Warning: --allow-private-network is on; tools can reach internal addresses.")
+  }
+  if (options.allowInsecureSecrets) {
+    print("Warning: --allow-insecure-secrets is on; secrets may travel over plain http.")
   }
 
   const closers: (() => Promise<void>)[] = []

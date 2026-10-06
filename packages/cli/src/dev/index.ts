@@ -29,6 +29,8 @@ export interface DevOptions {
   envFiles: string[]
   /** Specs only: let tools reach private and loopback addresses (`--allow-private-network`). */
   allowPrivateNetwork: boolean
+  /** Specs only: let tools send secrets over plain http (`--allow-insecure-secrets`). */
+  allowInsecureSecrets: boolean
   /** Specs only: addresses or CIDR ranges tools may never reach (`--deny-network`). */
   denyNetwork: string[]
   stdin: NodeJS.ReadableStream
@@ -94,6 +96,7 @@ export async function runDev(options: DevOptions): Promise<number> {
         env,
         print,
         ...(network ? { network } : {}),
+        allowSecretsOverHttp: options.allowInsecureSecrets,
       })
       host = spec
       redact = spec.redact
@@ -194,6 +197,7 @@ export function defaultDevOptions(entry: string): DevOptions {
     runtime: currentRuntime(),
     envFiles: [],
     allowPrivateNetwork: false,
+    allowInsecureSecrets: false,
     denyNetwork: [],
     stdin: process.stdin,
     stdout: process.stdout,

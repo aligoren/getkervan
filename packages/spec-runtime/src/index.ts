@@ -2,7 +2,7 @@ import type { MutableToolRegistry } from "@kervan/core"
 import { type CompiledDefinition, compilePlan } from "./compile.js"
 import { type LoadedSpec, type LoadOptions, SpecLoadError } from "./load.js"
 import { planTool, type SpecIssue } from "./plan.js"
-import { envSecrets, normalizeHost, SecretVault } from "./secrets.js"
+import { envSecrets, normalizeHostPort, SecretVault } from "./secrets.js"
 import { type SpecTool, specToolSchema } from "./spec-schema.js"
 
 // Public API. The security building blocks (address checks, pinned lookups, template parsing,
@@ -18,6 +18,7 @@ export {
 } from "./load.js"
 export {
   LookupGate,
+  METADATA_RANGES,
   type NetworkPolicy,
   NetworkPolicyError,
   type ResolvedAddress,
@@ -27,7 +28,7 @@ export type { SpecIssue } from "./plan.js"
 export { SCHEMA_LIMITS } from "./schema-limits.js"
 export {
   envSecrets,
-  normalizeHost,
+  normalizeHostPort,
   REDACTED,
   type SecretContext,
   SecretError,
@@ -106,6 +107,7 @@ export function httpTool(
     (path, message, severity = "error") => {
       issues.push({ path, message, severity })
     },
+    { allowSecretsOverHttp: options.allowSecretsOverHttp === true },
   )
   const errors = issues.filter((issue) => issue.severity === "error")
   if (!plan || errors.length > 0) throw new SpecLoadError("httpTool", errors)
@@ -113,6 +115,7 @@ export function httpTool(
     secrets: options.secrets ?? envSecrets(),
     vault: options.vault ?? new SecretVault(),
     ...(options.network ? { network: options.network } : {}),
+    allowSecretsOverHttp: options.allowSecretsOverHttp === true,
   })
   return [plan.name, definition]
 }
@@ -127,7 +130,7 @@ function bindings(
       continue
     }
     const hosts = entry.hosts.map((host) => {
-      const normalized = normalizeHost(host)
+      const normalized = normalizeHostPort(host)
       if (normalized === undefined) {
         throw new SpecLoadError("httpTool", [
           { path: ["secretNames"], message: `"${host}" is not a host name.`, severity: "error" },

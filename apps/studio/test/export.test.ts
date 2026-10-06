@@ -46,7 +46,7 @@ tools: []
   it("writes Studio's bindings for an unbound secret, keeping comments", () => {
     const out = exportSpec(text("[API_KEY]"), [binding("API_KEY", ["api.example.com"])])
     expect(out).toContain("# My server")
-    expect(out).toBe(text('[{ name: API_KEY, hosts: ["api.example.com"] }]'))
+    expect(out).toBe(text('[{ name: API_KEY, hosts: ["api.example.com:443"] }]'))
   })
 
   it("narrows a spec binding to the hosts Studio allows, never widens it", () => {
@@ -54,7 +54,7 @@ tools: []
       text("[{ name: API_KEY, hosts: [a.example.com, b.example.com] }]"),
       [binding("API_KEY", ["b.example.com", "c.example.com"])],
     )
-    expect(narrowed).toContain('hosts: ["b.example.com"]')
+    expect(narrowed).toContain('hosts: ["b.example.com:443"]')
     expect(narrowed).not.toContain("c.example.com")
     expect(narrowed).not.toContain("a.example.com")
   })
@@ -78,10 +78,10 @@ tools: [] # none yet
     ])
     expect(out).toBe(
       source
-        .replace("- API_KEY ", '- { name: API_KEY, hosts: ["api.example.com"] } ')
+        .replace("- API_KEY ", '- { name: API_KEY, hosts: ["api.example.com:443"] } ')
         .replace(
           '- name: OTHER_KEY\n    hosts: [a.example.com, "[2001:db8::1]"]',
-          '- { name: OTHER_KEY, hosts: ["[2001:db8::1]"] }',
+          '- { name: OTHER_KEY, hosts: ["[2001:db8::1]:443"] }',
         ),
     )
   })
@@ -130,7 +130,7 @@ describe("an exported version runs with kervan run", () => {
     t.secrets.set(scope, server.id, {
       name: "API_KEY",
       value: SECRET,
-      allowedHosts: ["127.0.0.1"],
+      allowedHosts: [`127.0.0.1:${upstream.port}`],
     })
     const version = t.studio.saveVersion(
       scope,
@@ -146,7 +146,7 @@ describe("an exported version runs with kervan run", () => {
     const viaGateway = resultText(await gatewayClient.callTool({ name: "keyed", arguments: {} }))
 
     const exported = await t.studio.exportVersion(scope, server.id, version.id)
-    expect(exported).toContain('{ name: API_KEY, hosts: ["127.0.0.1"] }')
+    expect(exported).toContain(`{ name: API_KEY, hosts: ["127.0.0.1:${upstream.port}"] }`)
     expect(exported).not.toContain(SECRET)
     const dir = tempDir()
     const file = path.join(dir, "kervan.yaml")
@@ -155,7 +155,7 @@ describe("an exported version runs with kervan run", () => {
     // The test API is on loopback, which kervan run only reaches with this development flag.
     const transport = new StdioClientTransport({
       command: process.execPath,
-      args: [kervanBin, "run", file, "--allow-private-network"],
+      args: [kervanBin, "run", file, "--allow-private-network", "--allow-insecure-secrets"],
       env: { ...process.env, API_KEY: SECRET, NODE_ENV: "test" } as Record<string, string>,
       stderr: "pipe",
     })
@@ -185,7 +185,7 @@ describe("an exported version runs with kervan run", () => {
     })
     expect(result.status).toBe(1)
     expect(result.stderr).toContain(
-      "Secret API_KEY may only be sent to 127.0.0.1; this tool calls attacker.example.net.",
+      "Secret API_KEY may only be sent to 127.0.0.1:443; this tool calls attacker.example.net:443.",
     )
     expect(result.stderr).not.toContain(SECRET)
   })

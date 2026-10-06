@@ -376,6 +376,7 @@ ${tool}`,
       {
         secrets: { get: () => "secret-value-123456" },
         network: { allowPrivate, resolve },
+        allowSecretsOverHttp: true,
       },
     )
     const app = createApp({ name: "net", version: "0" })

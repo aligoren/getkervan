@@ -1,4 +1,4 @@
-import { normalizeHost } from "@kervan/spec-runtime"
+import { normalizeHostPort } from "@kervan/spec-runtime"
 import { isMap, isScalar, isSeq, parseDocument } from "yaml"
 import type { SecretBinding } from "./secrets.js"
 
@@ -37,9 +37,13 @@ export function exportSpec(yamlText: string, bindings: readonly SecretBinding[])
       expected.push(declared)
       return
     }
+    // Stores keep normalized values; normalize again so a stray form can never widen anything.
+    const allowed = binding.allowedHosts
+      .map((host) => normalizeHostPort(host))
+      .filter((host): host is string => host !== undefined)
     const hosts = declared.hosts
-      ? binding.allowedHosts.filter((host) => declared.hosts?.includes(host))
-      : [...binding.allowedHosts]
+      ? allowed.filter((host) => declared.hosts?.includes(host))
+      : allowed
     if (hosts.length === 0) {
       throw new ExportError(
         `Secret ${declared.name} is not allowed for any of the hosts the spec binds it to.`,
@@ -74,7 +78,7 @@ function readEntry(item: unknown): { name: string; hosts?: string[] } | undefine
   const hosts = item.get("hosts", true)
   if (typeof name !== "string" || !isSeq(hosts)) return undefined
   const normalized = hosts.items.map((host) =>
-    isScalar(host) && typeof host.value === "string" ? normalizeHost(host.value) : undefined,
+    isScalar(host) && typeof host.value === "string" ? normalizeHostPort(host.value) : undefined,
   )
   return {
     name,

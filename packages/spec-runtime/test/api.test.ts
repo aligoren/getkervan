@@ -6,6 +6,7 @@ describe("@kervan/spec-runtime public API", () => {
     expect(Object.keys(await import("../src/index.js")).sort()).toEqual([
       "HTTP_DEFAULTS",
       "LookupGate",
+      "METADATA_RANGES",
       "NetworkPolicyError",
       "REDACTED",
       "SCHEMA_LIMITS",
@@ -18,7 +19,7 @@ describe("@kervan/spec-runtime public API", () => {
       "formatIssue",
       "httpTool",
       "loadSpec",
-      "normalizeHost",
+      "normalizeHostPort",
       "specJsonSchema",
     ])
   })

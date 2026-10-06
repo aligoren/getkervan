@@ -46,6 +46,7 @@ kervan run kervan.yaml --env-file .env --watch
 | `--watch` | Reload the spec when it changes; an invalid edit keeps the last good version. |
 | `--allow-private-network` | Let tools reach internal addresses. Development only; refused with `NODE_ENV=production`. |
 | `--deny-network <cidr>` | An address or range tools may never reach (repeatable); wins over `--allow-private-network`. |
+| `--allow-insecure-secrets` | Let tools send secrets to plain `http://` URLs (a local API). Development only; refused with `NODE_ENV=production`. |
 
 An invalid spec stops `run` with the file, line and column of every problem. Secret values never
 appear in the output. Note: Node.js itself checks `--env-file` arguments, even after the script
@@ -55,8 +56,8 @@ name, and exits with `<file>: not found` (code 9) when the file is missing.
 
 Runs your server with hot reload. Your code runs in a child process; `kervan dev` is a stable
 MCP server in front of it that clients stay connected to. Given a `.yaml`/`.yml` spec instead,
-it reloads the spec in its own process (`--env-file` and `--allow-private-network` work as for
-`run`).
+it reloads the spec in its own process (`--env-file`, `--allow-private-network` and
+`--allow-insecure-secrets` work as for `run`).
 
 ```sh
 kervan dev src/index.ts            # in a terminal: HTTP on 127.0.0.1:3000 plus a REPL

@@ -55,7 +55,7 @@ describe("review: export narrows, never widens", () => {
       binding(["bound.test"]),
     )
     expect(typeof out).toBe("string")
-    expect(await exportedHosts(out as string)).toEqual(["bound.test"])
+    expect(await exportedHosts(out as string)).toEqual(["bound.test:443"])
   })
 
   it("never writes a host only the spec lists", async () => {
@@ -69,7 +69,7 @@ describe("review: export narrows, never widens", () => {
       if (out instanceof ExportError) continue
       const hosts = await exportedHosts(out)
       expect(
-        hosts.filter((h) => h !== "bound.test"),
+        hosts.filter((h) => h !== "bound.test:443"),
         secrets,
       ).toEqual([])
     }
@@ -89,7 +89,7 @@ tools:
 `
     const out = exportOrError(yaml, binding(["bound.test"]))
     if (!(out instanceof ExportError)) {
-      expect(await exportedHosts(out)).toEqual(["bound.test"])
+      expect(await exportedHosts(out)).toEqual(["bound.test:443"])
     }
   })
 

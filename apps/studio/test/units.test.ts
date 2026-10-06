@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { hashPassword, passwordProblem, verifyPassword } from "../src/crypto.js"
 import { createWorkspace } from "../src/db/repos/workspaces.js"
 import { studioLogger } from "../src/logger.js"
-import { addressRangeProblem, METADATA_ADDRESSES, studioNetworkPolicy } from "../src/network.js"
+import { addressRangeProblem, studioNetworkPolicy } from "../src/network.js"
 import { InMemorySecretStore, normalizeAllowedHosts, SecretInputError } from "../src/secrets.js"
 import { echoTool, publishedServer, spec, startTestStudio, type TestStudio } from "./helpers.js"
 
@@ -20,8 +20,14 @@ describe("secret store bindings", () => {
     const store = new InMemorySecretStore()
     store.set(scope, "s", { name: "KEY", value, allowedHosts: ["API.example.com"] })
     const source = store.source(scope, "s")
-    expect(await source.get("KEY", { host: "api.example.com", tool: "t" })).toBe(value)
-    for (const host of ["example.com", "x.api.example.com", "api.example.com.evil.test"]) {
+    expect(await source.get("KEY", { host: "api.example.com:443", tool: "t" })).toBe(value)
+    for (const host of [
+      "example.com:443",
+      "x.api.example.com:443",
+      "api.example.com.evil.test:443",
+      "api.example.com:8443",
+      "api.example.com",
+    ]) {
       expect(await source.get("KEY", { host, tool: "t" }), host).toBeUndefined()
     }
   })
@@ -35,7 +41,7 @@ describe("secret store bindings", () => {
   it("keeps servers and workspaces apart", async () => {
     const store = new InMemorySecretStore()
     store.set(scope, "s", { name: "KEY", value, allowedHosts: ["api.example.com"] })
-    const context = { host: "api.example.com", tool: "t" }
+    const context = { host: "api.example.com:443", tool: "t" }
     expect(await store.source(scope, "other").get("KEY", context)).toBeUndefined()
     const otherScope = { workspaceId: "w2" } as typeof scope
     expect(await store.source(otherScope, "s").get("KEY", context)).toBeUndefined()
@@ -44,11 +50,11 @@ describe("secret store bindings", () => {
 
   it.each([
     [[], /at least one allowed host/],
-    [["*.example.com"], /not a host name/],
-    [["https://api.example.com"], /not a host name/],
-    [["api.example.com:443"], /not a host name/],
-    [["api.example.com/v1"], /not a host name/],
-    [[""], /not a host name/],
+    [["*.example.com"], /is not a host/],
+    [["https://api.example.com"], /is not a host/],
+    [["api.example.com:65536"], /is not a host/],
+    [["api.example.com/v1"], /is not a host/],
+    [[""], /is not a host/],
   ])("refuses allowed hosts %j", (hosts, message) => {
     expect(() => normalizeAllowedHosts(hosts)).toThrow(message)
   })
@@ -73,7 +79,7 @@ describe("secret store bindings", () => {
     const store = new InMemorySecretStore()
     store.set(scope, "s", { name: "KEY", value, allowedHosts: ["a.example.com"] }, 5)
     expect(await store.list(scope, "s")).toEqual([
-      { name: "KEY", allowedHosts: ["a.example.com"], updatedAt: 5 },
+      { name: "KEY", allowedHosts: ["a.example.com:443"], updatedAt: 5 },
     ])
   })
 })
@@ -94,12 +100,13 @@ describe("Studio's logger", () => {
 })
 
 describe("network policy", () => {
-  it("always refuses metadata addresses and never allows private ones", () => {
+  it("adds the configured ranges and never allows private ones", () => {
     const policy = studioNetworkPolicy({
       denyList: ["192.0.2.0/24"],
       allowPrivate: ["0.0.0.0/0"],
     } as Parameters<typeof studioNetworkPolicy>[0])
-    expect(policy.denyList).toEqual(expect.arrayContaining([...METADATA_ADDRESSES, "192.0.2.0/24"]))
+    // Cloud metadata is refused by the runtime itself, before any policy (spec-runtime).
+    expect(policy.denyList).toEqual(["192.0.2.0/24"])
     expect(policy).not.toHaveProperty("allowPrivate")
   })
 })

@@ -1,4 +1,5 @@
 import { checkSchemaLimits } from "./schema-limits.js"
+import { urlHostPort } from "./secrets.js"
 import { checkSelect, SelectError } from "./select.js"
 import { HTTP_DEFAULTS, type Spec, type SpecTool } from "./spec-schema.js"
 import { parseTemplate, references, type Template, TemplateError } from "./template.js"
@@ -28,7 +29,7 @@ export interface ToolPlan {
   method: string
   /** `scheme://host:port`, never templated. */
   origin: string
-  /** The origin's host name, as secret bindings compare it. */
+  /** The origin's `host:port`, as secret bindings compare it. */
   host: string
   path: Template
   /** Query string written literally in the URL (no templates). */
@@ -71,6 +72,11 @@ const BODY_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 const TOKEN = (i: number) => `__kervan_template_${i}__`
 const TOKEN_PATTERN = /__kervan_template_(\d+)__/g
 
+export interface PlanOptions {
+  /** Allow tools that use secrets to call plain http URLs (local development only). */
+  allowSecretsOverHttp?: boolean
+}
+
 type Report = (path: IssuePath, message: string, severity?: "error" | "warning") => void
 
 /**
@@ -83,6 +89,7 @@ export function planTool(
   declaredSecrets: ReadonlyMap<string, readonly string[] | undefined> | undefined,
   at: IssuePath,
   report: Report,
+  options: PlanOptions = {},
 ): ToolPlan | undefined {
   const defaults = specDefaults?.http
   let errors = 0
@@ -178,7 +185,15 @@ export function planTool(
 
   // A bound secret may only go to its hosts. The host is literal, so this is decided here; the
   // executor checks again before every request and redirect.
-  const host = url ? new URL(url.origin).hostname : undefined
+  const target = url ? new URL(url.origin) : undefined
+  const host = target ? urlHostPort(target) : undefined
+  // A secret never travels unencrypted, whatever allowInsecureHttp says.
+  if (target?.protocol === "http:" && secretUses.length > 0 && !options.allowSecretsOverHttp) {
+    error(
+      ["http", "url"],
+      "This tool sends secrets, so its URL must use https: secrets are never sent over plain http.",
+    )
+  }
   const secretHosts = new Map<string, readonly string[]>()
   for (const [name, path] of secretUses) {
     const hosts = declaredSecrets?.get(name)

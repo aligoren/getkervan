@@ -32,6 +32,8 @@ export interface SpecHostOptions {
   file: string
   env: NodeJS.ProcessEnv
   network?: NetworkPolicy
+  /** Let tools that use secrets call plain http URLs (`--allow-insecure-secrets`). */
+  allowSecretsOverHttp?: boolean
   /** Where messages go (already redacted). */
   print: (line: string) => void
 }
@@ -66,6 +68,7 @@ export class SpecHost {
       secrets: envSecrets(options.env),
       vault,
       ...(options.network ? { network: options.network } : {}),
+      allowSecretsOverHttp: options.allowSecretsOverHttp === true,
     })
     const app = createApp({
       name: first.spec.name,
@@ -90,6 +93,7 @@ export class SpecHost {
         secrets: envSecrets(this.#options.env),
         vault: this.#vault,
         ...(this.#options.network ? { network: this.#options.network } : {}),
+        allowSecretsOverHttp: this.#options.allowSecretsOverHttp === true,
       })
       this.#signatures = applySpec(this.app.registry, next, this.#signatures)
       this.#warn(next.warnings, fileName)

@@ -91,7 +91,9 @@ async function connect(dir: string, args: string[], era: "legacy" | "modern" = "
   return { client, stderr: () => stderr, notifications: () => notifications }
 }
 
-const runArgs = ["run", "kervan.yaml", "--env-file", ".env", "--allow-private-network"]
+// The test API is local http: it needs both development flags.
+const devFlags = ["--allow-private-network", "--allow-insecure-secrets"]
+const runArgs = ["run", "kervan.yaml", "--env-file", ".env", ...devFlags]
 
 describe.each(["legacy", "modern"] as const)("kervan run (stdio, %s era)", (era) => {
   it("serves spec tools with secrets from --env-file", { timeout: 30_000 }, async () => {
@@ -111,7 +113,13 @@ describe("kervan run", () => {
     timeout: 30_000,
   }, async () => {
     const dir = await workspace()
-    const { client } = await connect(dir, ["run", "kervan.yaml", "--env-file", ".env"])
+    const { client } = await connect(dir, [
+      "run",
+      "kervan.yaml",
+      "--env-file",
+      ".env",
+      "--allow-insecure-secrets",
+    ])
     const result = await client.callTool({ name: "hello", arguments: {} })
     expect(textOf(result)).toMatch(
       /was blocked: it resolves to a disallowed address \((loopback address|address of this machine)\)/,
@@ -169,6 +177,17 @@ describe("kervan run", () => {
       ["run", "kervan.yaml", "--allow-private-network"],
       { NODE_ENV: "production" },
       /refused with NODE_ENV=production/,
+    ],
+    [
+      ["run", "kervan.yaml", "--allow-insecure-secrets"],
+      { NODE_ENV: "production" },
+      /--allow-insecure-secrets .* refused with NODE_ENV=production/,
+    ],
+    // The spec sends a secret to an http URL: refused unless the development flag is given.
+    [
+      ["run", "kervan.yaml", "--env-file", ".env", "--allow-private-network"],
+      {},
+      /secrets are never sent over plain http/,
     ],
     // Node itself scans argv for --env-file, even after the script, and exits (code 9) when the
     // file is missing; otherwise kervan reports it. Either way the server does not start.
@@ -240,7 +259,7 @@ describe("kervan dev with a spec", () => {
       "--stdio",
       "--env-file",
       ".env",
-      "--allow-private-network",
+      ...devFlags,
     ])
     expect(
       JSON.parse(textOf(await client.callTool({ name: "hello", arguments: {} }))).greeting,

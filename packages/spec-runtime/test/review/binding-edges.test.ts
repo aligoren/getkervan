@@ -8,7 +8,7 @@ import {
   applySpec,
   loadSpec,
   type NetworkPolicy,
-  normalizeHost,
+  normalizeHostPort,
   type SecretContext,
   type SecretSource,
   SpecLoadError,
@@ -34,13 +34,17 @@ const network: NetworkPolicy = {
   resolve: async () => [{ address: "127.0.0.1", family: 4 }],
 }
 
-/** Like Studio's bound source: only the listed hosts, compared exactly; records every ask. */
+/**
+ * Like Studio's bound source: only the listed hosts (on port 443 and on the test API's port),
+ * compared exactly; records every ask.
+ */
 function boundSource(hosts: readonly string[]) {
   const asked: (SecretContext | undefined)[] = []
+  const allowed = hosts.flatMap((host) => [`${host}:443`, `${host}:${port}`])
   const source: SecretSource = {
     get(name, context) {
       asked.push(context)
-      return name === "API_KEY" && context && hosts.includes(context.host) ? SECRET : undefined
+      return name === "API_KEY" && context && allowed.includes(context.host) ? SECRET : undefined
     },
   }
   return { source, asked }
@@ -59,6 +63,8 @@ async function loadErrors(text: string, source: SecretSource): Promise<string[]>
       secrets: source,
       network,
       requireSecrets: true,
+      // The local test API speaks http; secrets over http need the development opt-in.
+      allowSecretsOverHttp: true,
     })
   } catch (error) {
     if (error instanceof SpecLoadError) return error.issues.map((issue) => issue.message)
@@ -68,7 +74,11 @@ async function loadErrors(text: string, source: SecretSource): Promise<string[]>
 }
 
 async function serve(text: string, source: SecretSource) {
-  const loaded = await loadSpec(text.replaceAll("PORT", port), { secrets: source, network })
+  const loaded = await loadSpec(text.replaceAll("PORT", port), {
+    secrets: source,
+    network,
+    allowSecretsOverHttp: true,
+  })
   const app = createApp({ name: "edges", version: "0.0.0", logger: silentLogger })
   applySpec(app.registry, loaded)
   const client = await createTestClient(app)
@@ -209,7 +219,7 @@ describe("review: host normalization agrees between binding, call and source", (
   ])("treats %s as the bound host itself", async (_name, host) => {
     const { source, asked } = boundSource(["bound.test"])
     const client = await serve(
-      `${head("[{ name: API_KEY, hosts: [bound.test] }]")}tools:
+      `${head("[{ name: API_KEY, hosts: ['bound.test:PORT'] }]")}tools:
   - name: call
     description: d
     http: { url: "http://${host}:PORT/echo/norm", headers: { X-Key: "{{secrets.API_KEY}}" } }
@@ -219,7 +229,7 @@ describe("review: host normalization agrees between binding, call and source", (
     const result = await client.callTool({ name: "call", arguments: {} })
     expect(result.isError).toBeFalsy()
     // The source is only ever asked about the normalized name.
-    expect(asked.every((context) => context?.host === "bound.test")).toBe(true)
+    expect(asked.every((context) => context?.host === `bound.test:${port}`)).toBe(true)
   })
 
   it.each([
@@ -238,8 +248,8 @@ describe("review: host normalization agrees between binding, call and source", (
   })
 
   it("normalizes IPv4 literal forms identically on both sides", () => {
-    expect(normalizeHost("0x7f.1")).toBe(new URL("http://2130706433/").hostname)
-    expect(normalizeHost("[0:0::1]")).toBe(new URL("http://[::1]/").hostname)
+    expect(normalizeHostPort("0x7f.1")).toBe(`${new URL("http://2130706433/").hostname}:443`)
+    expect(normalizeHostPort("[0:0::1]:8443")).toBe(`${new URL("http://[::1]/").hostname}:8443`)
   })
 })
 
@@ -260,7 +270,7 @@ describe("review: redirects agree with the binding", () => {
     ["a decimal IP literal", "http://2130706433:PORT/echo/r-dec?k={{secrets.API_KEY}}"],
     ["a suffix host", "http://bound.test.evil.test:PORT/echo/r-suf?k={{secrets.API_KEY}}"],
   ])("does not carry a reflected secret to %s", async (name, location) => {
-    for (const secrets of ["[{ name: API_KEY, hosts: [bound.test] }]", "[API_KEY]"]) {
+    for (const secrets of ["[{ name: API_KEY, hosts: ['bound.test:PORT'] }]", "[API_KEY]"]) {
       const before = upstream.requests.length
       const client = await serve(redirecting(secrets, location), boundSource(["bound.test"]).source)
       await client.callTool({ name: "call", arguments: {} })
@@ -288,7 +298,7 @@ describe("review: redirects agree with the binding", () => {
       source,
     )
     await client.callTool({ name: "call", arguments: {} })
-    expect(asked.map((context) => context?.host)).toContain("other.test")
+    expect(asked.map((context) => context?.host)).toContain(`other.test:${port}`)
     expect(leaks("/echo/r-ask")).toEqual([])
   })
 })

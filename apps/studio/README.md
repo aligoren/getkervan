@@ -47,7 +47,7 @@ claude mcp add --transport http weather https://studio.example.com/s/<serverId>/
 | `KERVAN_STUDIO_HOST` | `127.0.0.1` | Interface to listen on once an admin exists. |
 | `KERVAN_STUDIO_PORT` | `4310` | |
 | `KERVAN_STUDIO_DATA_DIR` | `./.kervan-studio` | Holds `studio.db`. |
-| `KERVAN_STUDIO_TRUST_PROXY` | `0` | Number of reverse proxies that append to `X-Forwarded-For`. |
+| `KERVAN_STUDIO_TRUST_PROXY` | `0` | Number of reverse proxies that append to `X-Forwarded-For`. **Only set it when Studio is reachable through the proxy alone** (see below). |
 | `KERVAN_STUDIO_DENY_NETWORK` | | Comma-separated addresses or CIDR ranges spec tools may never reach (your internal services). |
 
 There is deliberately no setting that lets spec tools reach private or loopback addresses.
@@ -64,6 +64,10 @@ Terminate TLS at the proxy, and make Studio reachable **only** through it: bind 
 
 Studio takes the client IP from the entry its outermost trusted proxy wrote. Anything a client
 writes into `X-Forwarded-For` itself is ignored.
+
+> **Warning:** with `KERVAN_STUDIO_TRUST_PROXY` set, Studio must not be reachable except
+> through the proxy. Firewall its port. A client that connects directly can put any address
+> in `X-Forwarded-For`, which defeats per-IP rate limits and falsifies audit records.
 
 ## Recovering admin access
 

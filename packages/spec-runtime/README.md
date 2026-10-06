@@ -121,8 +121,18 @@ Every request, and every redirect hop, goes through the same checks, and each fa
 Blocked requests report the reason but never the resolved address, which could reveal internal
 DNS names.
 
-The order of the rules is: `network.denyList` (always refused), `network.allowPrivate` (explicitly
-allowed), this machine's addresses, then the public-unicast checks. For local development,
+The order of the rules is: cloud metadata (always refused, see below), `network.denyList` (always
+refused), `network.allowPrivate` (explicitly allowed), this machine's addresses, then the
+public-unicast checks.
+
+**Cloud metadata endpoints are refused before any other rule**, so neither `allowPrivate` nor
+`--allow-private-network` reaches them (`METADATA_RANGES`):
+- all of link-local `169.254.0.0/16` (the metadata service of AWS, GCP, Azure, Oracle,
+  DigitalOcean, OpenStack; ECS/EKS credential agents; Tencent);
+- `fd00:ec2::/32` (AWS over IPv6);
+- `100.100.100.200` (Alibaba);
+- `168.63.129.16` (Azure WireServer, a public address);
+- `192.0.0.192` (Oracle, legacy). For local development,
 `kervan run --allow-private-network` (refused with `NODE_ENV=production`) or `network.allowPrivate`
 in code allows internal addresses; `--deny-network <cidr>` or `network.denyList` blocks more. A
 spec file can set neither.
@@ -148,21 +158,34 @@ to 32 levels, 2,000 nodes, 64 `anyOf`/`oneOf`/`allOf` keywords, 64 KiB and 512-c
 never put in error messages or logs, and every result and error a spec tool returns is scrubbed of
 them, including their URL-encoded, form-encoded and JSON-escaped forms, in case the API echoes them
 back. The upstream response is scrubbed before `select` runs on it, so an expression cannot
-reshape or probe a reflected secret. Secrets shorter than 8 characters are rejected, because short values cannot be redacted
-reliably.
+reshape or probe a reflected secret. Secrets shorter than 8 characters are rejected, because short
+values cannot be redacted reliably.
+
+**Secrets never travel over plain http.** A tool that uses a secret must call an `https://` URL,
+even when `allowInsecureHttp` is set; this is checked when the spec loads and again before every
+request. For local development against an http API, `kervan run --allow-insecure-secrets`
+(refused with `NODE_ENV=production`) or `loadSpec(text, { allowSecretsOverHttp: true })` turns
+the check off.
 
 ### Binding a secret to hosts
 
-A secret can be restricted to the hosts it may be sent to:
+A secret can be restricted to the hosts, and ports, it may be sent to:
 
 ```yaml
 secrets:
-  - OTHER_KEY                                   # unrestricted
-  - { name: API_KEY, hosts: [api.example.com] } # only ever sent to api.example.com
+  - OTHER_KEY                    # unrestricted
+  - name: API_KEY
+    hosts:
+      - api.example.com          # port 443
+      - api.example.com:8443     # this port only
 ```
 
-- Hosts match exactly, after normalization (case, IDNA, IP forms). `example.com` does not cover
-  `api.example.com`, and wildcards, ports and paths are refused.
+- Entries are `host` or `host:port`; without a port, the binding means port 443. A secret bound
+  to `api.example.com` is never sent to `api.example.com:8443`.
+- Hosts and ports match exactly, after normalization (case, IDNA, IP forms). `example.com` does
+  not cover `api.example.com`, and wildcards, schemes and paths are refused.
+- In a one-line (flow) list, quote `host:port` entries: `hosts: ["api.example.com:8443"]`. YAML
+  reads an unquoted `a:b` inside `[...]` as a key and value.
 - A tool that uses a bound secret against another host is a load error.
 - The executor checks again before every request and every redirect hop:
   - A redirect to a host that may not receive the tool's secrets is not followed, even when the
@@ -170,8 +193,9 @@ secrets:
   - When following a redirect to another origin, `Accept` and `User-Agent` are dropped too if
     they hold a secret.
 
-A `SecretSource` can enforce its own bindings: `get(name, { host, tool })` receives the host a
-value is about to be sent to, and returns `undefined` to refuse. A spec's `hosts` can only narrow
+A `SecretSource` can enforce its own bindings: `get(name, { host, tool })` receives the
+`host:port` a value is about to be sent to (always with the port, e.g. `api.example.com:443`;
+`normalizeHostPort` normalizes an entry the same way), and returns `undefined` to refuse. A spec's `hosts` can only narrow
 what the source allows. `loadSpec(text, { requireSecrets: true })` turns "not set or not allowed
 for this host" warnings into errors. Use it to validate a spec before publishing it.
 

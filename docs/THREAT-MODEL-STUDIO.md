@@ -56,7 +56,9 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 
 - **Bindings are authoritative and admin-owned.** Each secret has a non-empty list of allowed
   hosts. A spec's own `secrets: [{ name, hosts }]` can only narrow it: effective = Studio ∩
-  spec. Matching is exact and on normalized host names: no subdomains, suffixes or wildcards.
+  spec. Entries are `host` or `host:port` (port 443 when omitted), so a secret never goes to
+  another port of a bound host. Matching is exact and on normalized values: no subdomains,
+  suffixes or wildcards.
 - **Three checks**, each tested on its own:
   1. **Publish:** `loadSpec` with `requireSecrets` asks Studio's source for each (secret, host)
      pair. A host outside the binding fails the publish.
@@ -88,7 +90,8 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   form-encoded and JSON-escaped forms. Studio's logger redacts every known value from messages
   and serialized data.
 - **A secret never travels over plain http.** A spec author can set `allowInsecureHttp`, but
-  Studio refuses to publish a tool that uses secrets with it. Tools without secrets may still use
+  a tool that uses secrets is refused at load time and again before sending. This is the
+  framework's default, so `kervan run` enforces it too. Tools without secrets may still use
   http.
 - The export writes bindings, never values.
 - A test scans every surface 4a has and finds no form of the value:
@@ -106,7 +109,8 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Refused, on top of the runtime's rules (public unicast only, DNS pinned, IPv4-mapped and
   encoded forms refused, this machine's interface addresses refused):
   - cloud metadata addresses, including Azure's WireServer (168.63.129.16), which is a public
-    address;
+    address. The framework refuses these by default, before any other rule, so `kervan run`
+    (even with `--allow-private-network`) refuses them too;
   - `KERVAN_STUDIO_DENY_NETWORK` (internal infrastructure). Studio refuses to start if an
     entry is not an address or CIDR range;
   - the addresses of `KERVAN_STUDIO_PUBLIC_URL`, resolved at startup, so tools cannot call back
@@ -231,8 +235,11 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   is the address the outermost trusted proxy saw; entries further left are client-written and
   ignored.
 - With the default `0`, the header is ignored entirely.
-- Enable it only when Studio is reachable **only** through the proxy: bind Studio to loopback
-  or a private interface.
+- **When `KERVAN_STUDIO_TRUST_PROXY` is on, Studio must be reachable only through the
+  proxy.** Bind Studio to loopback or a private interface that only the proxy can reach, and
+  block its port from everywhere else. Otherwise a client that connects to Studio directly can
+  write any client IP into `X-Forwarded-For`. That defeats the per-IP limit, puts false addresses
+  in the audit log, and will affect login throttling in 4b.
 - The proxy must pass the original `Host` header, because Studio accepts only the public URL's
   host name.
 
@@ -254,5 +261,3 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - **Encodings the vault does not know.** If a bound upstream reflects a secret in another
   encoding (for example base64 or HTML entities), it is not redacted. Bind secrets to APIs you
   trust not to echo them.
-- **Host bindings do not include the port.** A bound secret may go to any port of its host, over
-  https.

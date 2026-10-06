@@ -1,10 +1,10 @@
-import { normalizeHost, type SecretSource, SPEC_LIMITS } from "@kervan/spec-runtime"
+import { normalizeHostPort, type SecretSource, SPEC_LIMITS } from "@kervan/spec-runtime"
 import type { WorkspaceScope } from "./db/scope.js"
 
 /** What Studio shows about a secret: never its value. */
 export interface SecretBinding {
   name: string
-  /** Normalized host names the value may be sent to; never empty. */
+  /** Normalized `host:port` entries the value may be sent to; never empty. */
   allowedHosts: readonly string[]
   updatedAt: number
 }
@@ -37,11 +37,11 @@ export function normalizeAllowedHosts(hosts: readonly string[]): string[] {
   }
   const normalized: string[] = []
   for (const host of hosts) {
-    const value = normalizeHost(host.trim())
+    const value = normalizeHostPort(host.trim())
     if (value === undefined) {
       throw new SecretInputError(
-        `"${host}" is not a host name. Use a name like api.example.com: no scheme, port, path ` +
-          "or wildcard.",
+        `"${host}" is not a host. Use host or host:port, like api.example.com (port 443) or ` +
+          "api.example.com:8443: no scheme, path or wildcard.",
       )
     }
     if (!normalized.includes(value)) normalized.push(value)

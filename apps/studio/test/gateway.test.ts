@@ -45,6 +45,9 @@ async function client(url: URL, key: string, era: "modern" | "legacy" = "modern"
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** The bound host and the test API's port, as bindings are written. */
+const bound = () => `bound.test:${upstream.port}`
+
 const requestsTo = (path: string) => upstream.requests.filter((request) => request.path === path)
 
 describe("serving a published server", () => {
@@ -134,7 +137,7 @@ describe("secrets bound to hosts", () => {
   }
 
   it("sends the secret to an allowed host and never returns it", async () => {
-    const s = await withSecret(["bound.test"])
+    const s = await withSecret([bound()])
     await s.publish(keyed(`${base}/echo/keyed`))
     const c = await client(s.mcpUrl, s.key)
     const result = await c.callTool({ name: "keyed", arguments: {} })
@@ -146,19 +149,19 @@ describe("secrets bound to hosts", () => {
 
   it("refuses to publish a spec that sends the secret to another host", async () => {
     // A member who can edit specs points the tool at a host they control.
-    const s = await withSecret(["bound.test"])
+    const s = await withSecret([bound()])
     const error = await s
       .publish(keyed(`http://attacker.test:${upstream.port}/echo/stolen`))
       .then(() => undefined)
       .catch((e: unknown) => e as StudioError)
     expect(error?.issues.map((issue) => issue.message)).toContain(
-      "Secret API_KEY is not set or not allowed for attacker.test; tools that use it there fail until it is.",
+      `Secret API_KEY is not set or not allowed for attacker.test:${upstream.port}; tools that use it there fail until it is.`,
     )
     expect(requestsTo("/echo/stolen")).toEqual([])
   })
 
   it("does not let a spec widen the binding with its own hosts list", async () => {
-    const s = await withSecret(["bound.test"])
+    const s = await withSecret([bound()])
     const text = keyed(
       `http://attacker.test:${upstream.port}/echo/widened`,
       "secrets: [{ name: API_KEY, hosts: [attacker.test] }]",
@@ -168,35 +171,35 @@ describe("secrets bound to hosts", () => {
   })
 
   it("lets a spec narrow the binding", async () => {
-    const s = await withSecret(["bound.test", "other.test"])
+    const s = await withSecret([bound(), `other.test:${upstream.port}`])
     const text = keyed(
       `http://other.test:${upstream.port}/echo/narrowed`,
-      "secrets: [{ name: API_KEY, hosts: [bound.test] }]",
+      `secrets: [{ name: API_KEY, hosts: ["${bound()}"] }]`,
     )
     const error = await s.publish(text).catch((e: unknown) => e as StudioError)
     expect(error?.issues.map((issue) => issue.message)).toContain(
-      "Secret API_KEY may only be sent to bound.test; this tool calls other.test.",
+      `Secret API_KEY may only be sent to ${bound()}; this tool calls other.test:${upstream.port}.`,
     )
   })
 
   it("refuses at call time when the binding no longer allows the host", async () => {
-    const s = await withSecret(["bound.test"])
+    const s = await withSecret([bound()])
     await s.publish(keyed(`${base}/echo/later`))
     // An admin narrows the binding after publishing; the running tool must follow it at once.
     s.t.secrets.set(s.scope, s.server.id, {
       name: "API_KEY",
       value: SECRET,
-      allowedHosts: ["elsewhere.test"],
+      allowedHosts: [`elsewhere.test:${upstream.port}`],
     })
     const c = await client(s.mcpUrl, s.key)
     const result = await c.callTool({ name: "keyed", arguments: {} })
     expect(result.isError).toBe(true)
-    expect(resultText(result)).toBe("Secret API_KEY is not set or not allowed for bound.test.")
+    expect(resultText(result)).toBe(`Secret API_KEY is not set or not allowed for ${bound()}.`)
     expect(requestsTo("/echo/later")).toEqual([])
   })
 
   it("does not follow a redirect to a host outside the binding", async () => {
-    const s = await withSecret(["bound.test"])
+    const s = await withSecret([bound()])
     const text = spec(
       `
   - name: hop

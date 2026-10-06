@@ -26,19 +26,19 @@ export const HTTP_DEFAULTS = {
 const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/
 const SECRET_NAME = /^[A-Z][A-Z0-9_]{0,127}$/
 /** A DNS name or a bracketed IPv6 literal; no scheme, port, path or wildcard. */
-const HOST_NAME = /^(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?|\[[0-9A-Fa-f:.]+\])$/
+const HOST_NAME = /^(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/
 
 const secretName = z.string().regex(SECRET_NAME)
 const boundSecret = z
   .strictObject({
     name: secretName,
     hosts: z
-      .array(z.string().max(253).regex(HOST_NAME))
+      .array(z.string().max(259).regex(HOST_NAME))
       .min(1)
       .max(SPEC_LIMITS.maxSecretHosts)
       .meta({
         description:
-          "The only hosts this secret may be sent to, matched exactly (no subdomains or wildcards), e.g. api.example.com.",
+          "The only hosts this secret may be sent to, as host or host:port (port 443 when omitted), matched exactly (no subdomains or wildcards), e.g. api.example.com or api.example.com:8443.",
       }),
   })
   .meta({ description: "A secret bound to the hosts it may be sent to." })

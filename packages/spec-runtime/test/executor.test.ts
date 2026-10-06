@@ -38,7 +38,8 @@ defaults: { http: { allowInsecureHttp: true, timeoutMs: 1000, maxResponseBytes: 
 ${head}
 tools:
 ${tools.replaceAll("BASE", upstream.url)}`
-  const loaded = await loadSpec(text, { secrets, network })
+  // The local test API speaks http; secrets over http need the development opt-in.
+  const loaded = await loadSpec(text, { secrets, network, allowSecretsOverHttp: true })
   const logger = recordingLogger()
   const app = createApp({ name: "executor", version: "0.0.0", logger })
   applySpec(app.registry, loaded)
@@ -316,14 +317,16 @@ version: 0.0.0
 secrets: [OTHER_KEY]
 tools:
   - { name: t, description: d, http: { url: "${upstream.url}/echo", allowInsecureHttp: true, headers: { X-Key: "{{secrets.OTHER_KEY}}" } }, output: { select: "@" } }`,
-      { secrets: { get: () => undefined }, network },
+      { secrets: { get: () => undefined }, network, allowSecretsOverHttp: true },
     )
     const app = createApp({ name: "s", version: "0", logger: recordingLogger() })
     applySpec(app.registry, loaded)
     const client = await createTestClient(app)
     clients.push(client)
     const result = await client.callTool({ name: "t", arguments: {} })
-    expect(text(result)).toBe("Secret OTHER_KEY is not set or not allowed for 127.0.0.1.")
+    expect(text(result)).toBe(
+      `Secret OTHER_KEY is not set or not allowed for 127.0.0.1:${new URL(upstream.url).port}.`,
+    )
   })
 })
 

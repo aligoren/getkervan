@@ -16,7 +16,7 @@ import {
 } from "./http.js"
 import { type NetworkPolicy, resolveTarget } from "./network.js"
 import type { BodyTemplate, ToolPlan } from "./plan.js"
-import { SecretError, type SecretSource, type SecretVault } from "./secrets.js"
+import { SecretError, type SecretSource, type SecretVault, urlHostPort } from "./secrets.js"
 import { select } from "./select.js"
 import {
   checkHeaderValue,
@@ -34,6 +34,8 @@ export interface RuntimeOptions {
   vault: SecretVault
   /** Which addresses requests may reach (SSRF policy). Default: public unicast only. */
   network?: NetworkPolicy
+  /** Allow tools that use secrets to call plain http URLs (local development only). */
+  allowSecretsOverHttp?: boolean
 }
 
 export type CompiledDefinition = ToolDefinition | StructuredToolDefinition
@@ -201,6 +203,11 @@ async function sendFollowingRedirects(
       runtime.network,
       ctx.signal ? AbortSignal.any([ctx.signal, timeout]) : timeout,
     )
+    if (call.url.protocol === "http:" && plan.secrets.length > 0 && !runtime.allowSecretsOverHttp) {
+      throw new ToolError(
+        `Request to ${call.url.host} was not sent: this tool uses secrets, which never travel over plain http.`,
+      )
+    }
     const response = await sendHttp(call, {
       timeoutMs: plan.limits.timeoutMs,
       maxResponseBytes: plan.limits.maxResponseBytes,
@@ -253,7 +260,8 @@ async function sendFollowingRedirects(
     }
     // The new URL comes from the upstream and may carry secrets it reflected from this request
     // (an open redirect). A host that may not receive every secret the tool uses is refused.
-    if (next.hostname !== call.url.hostname && !(await mayReceiveSecrets(plan, next, runtime))) {
+    const nextHost = urlHostPort(next)
+    if (nextHost !== urlHostPort(call.url) && !(await mayReceiveSecrets(plan, nextHost, runtime))) {
       throw new ToolError(
         `Request to ${host} was redirected to a host that may not receive this tool's secrets; not followed.`,
       )
@@ -311,12 +319,12 @@ class CallLimiter {
   }
 }
 
-/** Whether every secret the tool uses may be sent to `url`'s host (spec binding and source). */
-async function mayReceiveSecrets(plan: ToolPlan, url: URL, runtime: RuntimeOptions) {
+/** Whether every secret the tool uses may be sent to `host` (spec binding and source). */
+async function mayReceiveSecrets(plan: ToolPlan, host: string, runtime: RuntimeOptions) {
   for (const name of plan.secrets) {
     const hosts = plan.secretHosts.get(name)
-    if (hosts && !hosts.includes(url.hostname)) return false
-    const value = await runtime.secrets.get(name, { host: url.hostname, tool: plan.name })
+    if (hosts && !hosts.includes(host)) return false
+    const value = await runtime.secrets.get(name, { host, tool: plan.name })
     if (value === undefined || value === "") return false
   }
   return true

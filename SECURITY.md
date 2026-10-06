@@ -47,8 +47,9 @@ What the defaults guarantee:
 - **Multi-tenancy.** Each tenant's tool set has its own notification channel. Tenant resolution
   happens after authentication, and errors never name a tenant.
 - **Spec network access (SSRF).** Only public unicast addresses are reachable. Encoded IP forms,
-  IPv4-mapped and other embedded addresses, link-local and cloud metadata ranges, and this
-  machine's own interface addresses are refused. DNS is resolved once and the connection is pinned
+  IPv4-mapped and other embedded addresses, link-local ranges, and this machine's own interface
+  addresses are refused. Cloud metadata endpoints (including Azure's public WireServer address)
+  are refused even when private networks are allowed for development. DNS is resolved once and the connection is pinned
   to the checked addresses. Redirects are not followed unless allowed, and are then checked hop by
   hop, with every spec header except `Accept`/`User-Agent` dropped across origins. Every check
   fails closed. The checks are covered by tests, and the tests were verified by deliberately
@@ -56,8 +57,12 @@ What the defaults guarantee:
 - **Spec templates.** Only `{{input.x}}` and `{{secrets.X}}`, with no logic. Values are escaped
   for their context (URL path, query, header, JSON body). Header injection and path traversal are
   rejected.
-- **Secrets.** Only declared names resolve, and short values are rejected. Raw and encoded forms
-  are removed from results, errors and logs.
+- **Secrets.** Only declared names resolve, and short values are rejected.
+  - Raw and encoded forms are removed from results, errors and logs, and from upstream data
+    before a spec's `select` sees it.
+  - A secret can be bound to `host:port` pairs (port 443 by default), checked at load, before
+    every request and on every redirect hop.
+  - Secrets are never sent over plain http.
 - **Limits.** Timeouts, response sizes (also after decompression), content types, JSON Schema
   complexity (no remote `$ref`), and per-tool rate limits.
 
@@ -65,7 +70,8 @@ What the defaults guarantee:
 
 These are known and documented, so not vulnerabilities:
 
-- Behavior you opt into: `--allow-private-network` / `network.allowPrivate`, `allowInsecureHttp`,
+- Behavior you opt into: `--allow-private-network` / `network.allowPrivate`,
+  `--allow-insecure-secrets` / `allowSecretsOverHttp`, `allowInsecureHttp`,
   `followRedirects`, `raw: true` output, binding to a public interface.
 - Code you write in tool handlers or middleware: Kervan cannot sandbox it.
 - Prompt injection carried inside a field that a spec explicitly selects. Kervan narrows what

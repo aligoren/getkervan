@@ -148,7 +148,7 @@ describe("Studio's own policies", () => {
     const error = await studio.publish(scope, server.id, version.id, user()).catch((e) => e)
     expect(error).toBeInstanceOf(StudioError)
     expect((error as StudioError).issues.map((issue) => issue.message)).toEqual([
-      'Tool "keyed" uses secrets, so it must use https: Studio never sends a secret over plain http.',
+      "This tool sends secrets, so its URL must use https: secrets are never sent over plain http.",
     ])
     // Without secrets, plain http stays the spec author's choice.
     const plain = studio.saveVersion(

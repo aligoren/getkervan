@@ -35,6 +35,8 @@ export interface GatewayOptions {
   /** Host names accepted in `Host` and `Origin` headers. */
   allowedHosts: readonly string[]
   logger: Logger
+  /** For tests against a local http API only (see `StudioOptions`). */
+  allowSecretsOverHttp?: boolean
   /** Requests per API key per minute. Default: 600. */
   keyRateLimit?: number
 }
@@ -246,6 +248,7 @@ export class Gateway {
         secrets: this.#options.secrets.source(served.scope, served.serverId),
         vault: served.vault,
         network: this.#options.network,
+        allowSecretsOverHttp: this.#options.allowSecretsOverHttp === true,
       })
       served.registry.serverInfo = {
         name: loaded.spec.name,

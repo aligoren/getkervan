@@ -2,19 +2,6 @@ import { lookup } from "node:dns/promises"
 import { isIP } from "node:net"
 import type { LookupGate, NetworkPolicy, Resolver } from "@kervan/spec-runtime"
 
-/**
- * Cloud metadata endpoints. The runtime already refuses link-local and private ranges; listing
- * them again keeps them refused even if that classification ever changed.
- */
-export const METADATA_ADDRESSES = [
-  "169.254.169.254/32",
-  "169.254.170.2/32",
-  "fd00:ec2::254/128",
-  "100.100.100.200/32",
-  // Azure's WireServer (host agent and metadata channel); it is a public address.
-  "168.63.129.16/32",
-]
-
 /** Why an address or CIDR range is not valid, or `undefined` if it is. */
 export function addressRangeProblem(entry: string): string | undefined {
   const [address = "", prefix, extra] = entry.split("/")
@@ -41,16 +28,12 @@ export interface StudioNetworkOptions {
 }
 
 /**
- * The SSRF policy for every spec tool Studio runs: public unicast addresses only, minus metadata,
- * the configured infrastructure and Studio's own addresses. It is built field by field, so an
- * `allowPrivate` passed in from anywhere is dropped.
+ * The SSRF policy for every spec tool Studio runs: the runtime's defaults (public unicast only,
+ * cloud metadata always refused) minus the configured infrastructure and Studio's own addresses.
+ * It is built field by field, so an `allowPrivate` passed in from anywhere is dropped.
  */
 export function studioNetworkPolicy(options: StudioNetworkOptions = {}): NetworkPolicy {
-  const denyList = [
-    ...METADATA_ADDRESSES,
-    ...(options.denyList ?? []),
-    ...(options.selfAddresses ?? []).map(asRange),
-  ]
+  const denyList = [...(options.denyList ?? []), ...(options.selfAddresses ?? []).map(asRange)]
   return {
     denyList,
     ...(options.resolve ? { resolve: options.resolve } : {}),

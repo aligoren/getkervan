@@ -2,7 +2,10 @@ import { SPEC_LIMITS } from "./spec-schema.js"
 
 /** Where a secret is about to be sent. */
 export interface SecretContext {
-  /** Host name the request goes to (normalized: lowercase, no port), e.g. `api.example.com`. */
+  /**
+   * Host and port the request goes to, normalized and always with the port, e.g.
+   * `api.example.com:443` (see `normalizeHostPort`).
+   */
   host: string
   /** The tool making the request. */
   tool: string
@@ -25,17 +28,26 @@ export function envSecrets(env: NodeJS.ProcessEnv = process.env): SecretSource {
 }
 
 /**
- * Normalizes a host name the way URLs do (lowercase, IDNA, IPv4 forms), or returns `undefined`
- * if it is not a bare host name. Bindings compare normalized names exactly.
+ * Normalizes a `host` or `host:port` binding the way URLs do (lowercase, IDNA, IPv4 forms) to
+ * `host:port`, with port 443 when none is given. Returns `undefined` for anything else (schemes,
+ * paths, wildcards). Bindings compare normalized values exactly.
  */
-export function normalizeHost(host: string): string | undefined {
-  if (!/^(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?|\[[0-9A-Fa-f:.]+\])$/.test(host)) return undefined
+export function normalizeHostPort(entry: string): string | undefined {
+  if (!/^(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/.test(entry)) {
+    return undefined
+  }
   try {
-    const url = new URL(`https://${host}/`)
-    return url.port === "" && url.hostname !== "" ? url.hostname : undefined
+    const url = new URL(`https://${entry}/`)
+    return url.hostname === "" ? undefined : `${url.hostname}:${url.port || "443"}`
   } catch {
     return undefined
   }
+}
+
+/** The `host:port` a URL connects to, as bindings compare it. */
+export function urlHostPort(url: URL): string {
+  const port = url.port || (url.protocol === "http:" ? "80" : "443")
+  return `${url.hostname}:${port}`
 }
 
 export const REDACTED = "[redacted]"

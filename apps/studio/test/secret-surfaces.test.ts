@@ -37,8 +37,12 @@ describe("a secret value never comes back out of Studio", () => {
     cleanups.push(t.close)
     const scope = createWorkspace(t.database.db, "w")
     const server = t.studio.createServer(scope, { slug: "s", name: "S" }, user())
-    t.secrets.set(scope, server.id, { name: "API_KEY", value: SECRET, allowedHosts: ["api.test"] })
     const base = `http://api.test:${upstream.port}`
+    t.secrets.set(scope, server.id, {
+      name: "API_KEY",
+      value: SECRET,
+      allowedHosts: [`api.test:${upstream.port}`],
+    })
     const text = spec(
       `
   - name: reflect

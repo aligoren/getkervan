@@ -32,6 +32,7 @@ Commands:
     --no-watch           Do not restart on file changes
     --env-file <path>    Load environment variables (repeatable; set variables win)
     --allow-private-network  Specs only: let tools reach private and loopback addresses
+    --allow-insecure-secrets Specs only: let tools send secrets over plain http
     --deny-network <cidr>    Specs only: an address or range tools may never reach (repeatable)
   studio <cmd>   Run a Kervan Studio command (start, reset-admin) if Studio is installed
   run <spec>     Serve a kervan.yaml spec
@@ -42,6 +43,7 @@ Commands:
     --env-file <path>    Load environment variables (repeatable; set variables win)
     --watch              Reload the spec when it changes
     --allow-private-network  Let tools reach private addresses (refused in production)
+    --allow-insecure-secrets Let tools send secrets over plain http (refused in production)
     --deny-network <cidr>    An address or range tools may never reach (repeatable)
 
 Options:
@@ -110,6 +112,7 @@ async function runDevCommand(argv: string[], io: RunIo): Promise<number> {
     watch: { type: "boolean", default: true },
     "env-file": { type: "string", multiple: true },
     "allow-private-network": { type: "boolean" },
+    "allow-insecure-secrets": { type: "boolean" },
     "deny-network": { type: "string", multiple: true },
   })
   const [entry] = positionals
@@ -130,6 +133,7 @@ async function runDevCommand(argv: string[], io: RunIo): Promise<number> {
   )
   options.envFiles = (values["env-file"] as string[] | undefined) ?? []
   options.allowPrivateNetwork = values["allow-private-network"] === true
+  options.allowInsecureSecrets = values["allow-insecure-secrets"] === true
   options.denyNetwork = (values["deny-network"] as string[] | undefined) ?? []
   if (io.runtime) options.runtime = io.runtime
   return runDev(options)
@@ -144,6 +148,7 @@ async function runSpecCommand(argv: string[]): Promise<number> {
     "env-file": { type: "string", multiple: true },
     watch: { type: "boolean" },
     "allow-private-network": { type: "boolean" },
+    "allow-insecure-secrets": { type: "boolean" },
     "deny-network": { type: "string", multiple: true },
   })
   const [spec] = positionals
@@ -159,6 +164,7 @@ async function runSpecCommand(argv: string[]): Promise<number> {
     envFiles: (values["env-file"] as string[] | undefined) ?? [],
     watch: values.watch === true,
     allowPrivateNetwork: values["allow-private-network"] === true,
+    allowInsecureSecrets: values["allow-insecure-secrets"] === true,
     denyNetwork: (values["deny-network"] as string[] | undefined) ?? [],
     cwd: process.cwd(),
     env: process.env,

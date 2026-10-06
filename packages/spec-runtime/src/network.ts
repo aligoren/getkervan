@@ -168,7 +168,27 @@ const BLOCKED_CIDRS = [
   "8000::/1",
 ].map((cidr) => ipaddr.parseCIDR(cidr))
 
+/**
+ * Cloud metadata and host-agent endpoints. They hand out credentials, so they are refused before
+ * any other rule: no `allowPrivate` (and no `--allow-private-network`) reaches them.
+ */
+export const METADATA_RANGES: readonly string[] = Object.freeze([
+  // Link-local: the metadata service of AWS, GCP, Azure, Oracle, DigitalOcean, OpenStack and
+  // others (169.254.169.254), ECS/EKS credential agents, Tencent (169.254.0.23).
+  "169.254.0.0/16",
+  // AWS metadata and agents over IPv6 (fd00:ec2::254, fd00:ec2::23).
+  "fd00:ec2::/32",
+  // Alibaba Cloud.
+  "100.100.100.200/32",
+  // Azure WireServer (host agent and metadata channel), a public address.
+  "168.63.129.16/32",
+  // Oracle Cloud (legacy metadata address).
+  "192.0.0.192/32",
+])
+
 type Cidr = [ipaddr.IPv4 | ipaddr.IPv6, number]
+
+const METADATA_CIDRS = METADATA_RANGES.map((cidr) => ipaddr.parseCIDR(cidr) as Cidr)
 
 function parseCidrList(entries: readonly string[] | undefined, option: string): Cidr[] {
   return (entries ?? []).map((entry) => {
@@ -223,7 +243,9 @@ export function checkAddress(address: string, rules: AddressRules = {}): Address
     const parsed = ipaddr.process(address)
     const matches = (ranges: readonly Cidr[] | undefined) =>
       ranges !== undefined && (inRanges(parsed, ranges) || inRanges(raw, ranges))
-    // Order: explicit deny, explicit allow, this machine, then the public-unicast checks.
+    // Order: cloud metadata, explicit deny, explicit allow, this machine, then the public-unicast
+    // checks.
+    if (matches(METADATA_CIDRS)) return { allowed: false, reason: "cloud metadata address" }
     if (matches(rules.deny)) return { allowed: false, reason: "address on the deny list" }
     if (matches(rules.allow)) return { allowed: true }
     if (matches(rules.local)) return { allowed: false, reason: "address of this machine" }

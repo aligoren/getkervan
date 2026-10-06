@@ -4,7 +4,6 @@ import {
   type NetworkPolicy,
   SecretVault,
   SPEC_LIMITS,
-  type Spec,
   type SpecIssue,
   SpecLoadError,
 } from "@kervan/spec-runtime"
@@ -74,6 +73,7 @@ export class Studio {
       network: options.network,
       allowedHosts: options.allowedHosts,
       logger: options.logger,
+      allowSecretsOverHttp: options.allowSecretsOverHttp === true,
       ...(options.keyRateLimit === undefined ? {} : { keyRateLimit: options.keyRateLimit }),
     })
   }
@@ -145,11 +145,8 @@ export class Studio {
         vault: new SecretVault(),
         network: this.#options.network,
         requireSecrets: true,
+        allowSecretsOverHttp: this.#options.allowSecretsOverHttp === true,
       })
-      const insecure = this.#options.allowSecretsOverHttp ? [] : secretsOverHttp(loaded.spec)
-      if (insecure.length > 0) {
-        throw new StudioError("invalid", "The spec is not valid.", insecure)
-      }
       return loaded.warnings
     } catch (error) {
       if (error instanceof SpecLoadError) {
@@ -245,26 +242,6 @@ export class Studio {
   close(): Promise<void> {
     return this.gateway.close()
   }
-}
-
-/**
- * Tools that may send a secret over plain http. A spec author can turn on `allowInsecureHttp`,
- * but a secret an admin entrusted to Studio must only travel encrypted, so Studio refuses them.
- */
-function secretsOverHttp(spec: Spec): SpecIssue[] {
-  const defaultInsecure = spec.defaults?.http?.allowInsecureHttp === true
-  return spec.tools.flatMap((tool, index) => {
-    const insecure = tool.http.allowInsecureHttp ?? defaultInsecure
-    const usesSecrets = JSON.stringify(tool.http).includes("{{secrets.")
-    if (!insecure || !usesSecrets) return []
-    return [
-      {
-        path: ["tools", index, "http", "allowInsecureHttp"],
-        message: `Tool "${tool.name}" uses secrets, so it must use https: Studio never sends a secret over plain http.`,
-        severity: "error" as const,
-      },
-    ]
-  })
 }
 
 function notFound(): StudioError {
