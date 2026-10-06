@@ -59,6 +59,11 @@ const BLOCKED_CIDRS = [
   "fe80::/10",
   "fec0::/10",
   "ff00::/8",
+  // Everything outside 2000::/3 (the only global unicast space): ipaddr.js calls unassigned
+  // space such as 4000::/2 or ::1:0:0:1 "unicast", and SIIT (::ffff:0:0:0/96) is only in its list.
+  "::/3",
+  "4000::/2",
+  "8000::/1",
 ].map((cidr) => ipaddr.parseCIDR(cidr))
 
 type Cidr = [ipaddr.IPv4 | ipaddr.IPv6, number]
@@ -88,6 +93,8 @@ export type AddressVerdict = { allowed: true } | { allowed: false; reason: strin
 export function checkAddress(address: string, allowPrivate: readonly Cidr[] = []): AddressVerdict {
   try {
     if (isIP(address) === 0) return { allowed: false, reason: "not a valid IP address" }
+    // A zone ID (fe80::1%eth0) selects an interface; no address we may contact needs one.
+    if (address.includes("%")) return { allowed: false, reason: "IP address with a zone ID" }
     const raw = ipaddr.parse(address)
     // Unwrap IPv4-mapped IPv6 (::ffff:a.b.c.d), so both forms are judged as the same address.
     const parsed = ipaddr.process(address)
@@ -118,9 +125,14 @@ export interface ResolvedTarget {
 /**
  * Resolves `url`'s host once and checks every address. All of them must be allowed: a host
  * that resolves to one public and one internal address is refused. Fails closed on empty or
- * failed resolution.
+ * failed resolution. `signal` bounds the wait: a name server that never answers must not hold
+ * the call (the lookup itself cannot be cancelled, but its answer is then ignored).
  */
-export async function resolveTarget(url: URL, policy: NetworkPolicy = {}): Promise<ResolvedTarget> {
+export async function resolveTarget(
+  url: URL,
+  policy: NetworkPolicy = {},
+  signal?: AbortSignal,
+): Promise<ResolvedTarget> {
   const host = url.hostname
   const allow = parseAllowList(policy.allowPrivate)
   const block = (reason: string) => new ToolError(`Request to ${url.host} was blocked: ${reason}.`)
@@ -133,8 +145,14 @@ export async function resolveTarget(url: URL, policy: NetworkPolicy = {}): Promi
   } else {
     if (host === "" || /[^a-z0-9.-]/i.test(host)) throw block("the host name is not valid")
     try {
-      addresses = await (policy.resolve ?? defaultResolver)(host)
+      addresses = await abortable((policy.resolve ?? defaultResolver)(host), signal)
     } catch {
+      if (signal?.aborted) {
+        const timedOut = (signal.reason as { name?: unknown } | undefined)?.name === "TimeoutError"
+        throw new ToolError(
+          `Request to ${url.host} ${timedOut ? "timed out" : "was cancelled"} while resolving the host name.`,
+        )
+      }
       throw block("the host name could not be resolved")
     }
   }
@@ -146,6 +164,16 @@ export async function resolveTarget(url: URL, policy: NetworkPolicy = {}): Promi
     if (!verdict.allowed) throw block(`it resolves to a ${verdict.reason}`)
   }
   return { hostname: host, addresses, lookup: pinnedLookup(literal, addresses) }
+}
+
+function abortable<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason)
+    if (signal.aborted) return onAbort()
+    signal.addEventListener("abort", onAbort, { once: true })
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort))
+  })
 }
 
 /**

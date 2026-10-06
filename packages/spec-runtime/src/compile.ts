@@ -87,9 +87,13 @@ async function executePlan(
     },
   }
 
-  const url = new URL(
-    plan.origin + renderText(plan.path, render, encodePathValue) + plan.staticSearch,
-  )
+  const path = renderText(plan.path, render, encodePathValue)
+  const url = new URL(plan.origin + path + plan.staticSearch)
+  // Each value is checked on its own, but next to literal text it can still form a "." / ".."
+  // segment (".{{input.x}}." with x = ""), which URL parsing would resolve out of the path.
+  if (url.pathname !== path) {
+    throw new ToolError("The input values form a dot segment, which is not allowed in a URL path.")
+  }
   for (const [name, templates] of plan.query) {
     for (const template of templates) {
       const ref = singleRef(template)
@@ -181,7 +185,12 @@ async function sendFollowingRedirects(
 ): Promise<HttpResponse> {
   let call = first
   for (let hop = 0; ; hop++) {
-    const target = await resolveTarget(call.url, runtime.network)
+    const timeout = AbortSignal.timeout(plan.limits.timeoutMs)
+    const target = await resolveTarget(
+      call.url,
+      runtime.network,
+      ctx.signal ? AbortSignal.any([ctx.signal, timeout]) : timeout,
+    )
     const response = await sendHttp(call, {
       timeoutMs: plan.limits.timeoutMs,
       maxResponseBytes: plan.limits.maxResponseBytes,

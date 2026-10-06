@@ -123,12 +123,15 @@ export function renderText(
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
 const CONTROL = /[\u0000-\u001f\u007f]/
 
-/** Path values are percent-encoded; `.`/`..` and control characters are rejected (traversal). */
+/**
+ * Path values are percent-encoded; `.`/`..`, empty values (`/a//b`, or a leading `//host`) and
+ * control characters are rejected, since they change which resource the path names.
+ */
 export function encodePathValue(
   value: string,
   part: Exclude<TemplatePart, { kind: "text" }>,
 ): string {
-  if (value === "." || value === ".." || CONTROL.test(value)) {
+  if (value === "" || value === "." || value === ".." || CONTROL.test(value)) {
     throw new ToolError(`${describeRef(part)} is not allowed in a URL path.`)
   }
   return encodeURIComponent(value)

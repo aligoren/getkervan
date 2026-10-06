@@ -59,7 +59,7 @@ is a load error. `\{{` writes a literal `{{`. Values are encoded for where they 
 
 | Where | How |
 | --- | --- |
-| URL | Scheme, host and port must be literal. Templates only in the path, each value percent-encoded; `.`/`..` are rejected. |
+| URL | Scheme, host and port must be literal. Templates only in the path, each value percent-encoded; empty values, `.`/`..`, and values that form a dot segment with the literal text around them are rejected. |
 | `query` | Set through `URLSearchParams`; an array value repeats the parameter; a missing optional value leaves it out |
 | `headers` | Names are literal; values with CR, LF, NUL or other control characters are rejected |
 | `body` | Built as a JSON value, never by string concatenation. A string that is exactly one reference keeps the value's type. |
@@ -95,13 +95,15 @@ Every request, and every redirect hop, goes through the same checks, and each fa
 
 1. The URL is parsed with the WHATWG parser, which turns encodings such as `2130706433`,
    `0x7f.1` or `0177.0.0.1` into `127.0.0.1`; the scheme, host and port are literal in the spec.
-2. The host name is resolved **once**. Empty answers, resolver errors and anything that is not a
-   strictly valid IP address block the request.
+2. The host name is resolved **once**, within the request timeout. Empty answers, resolver errors
+   and anything that is not a strictly valid IP address (including IPv6 zone IDs such as
+   `%eth0`) block the request.
 3. **Every** address must be public unicast: the address classifier (`ipaddr.js`) must say
    `unicast` **and** the address must be outside an independent list of internal ranges
    (loopback, private, link-local and cloud metadata such as `169.254.169.254`, CGNAT, unique
-   local, multicast, documentation, benchmarking, NAT64, 6to4, Teredo, and every IPv4-mapped IPv6
-   address). One internal address among public ones blocks the whole request.
+   local, multicast, documentation, benchmarking, NAT64, 6to4, Teredo, every IPv4-mapped IPv6
+   address, and all IPv6 space outside the global unicast block `2000::/3`). One internal address
+   among public ones blocks the whole request.
 4. The connection is pinned to the checked addresses through a custom `lookup` (no second DNS
    query, so no DNS rebinding window), on a fresh connection, and the socket's remote address is
    checked again when it connects.

@@ -79,6 +79,10 @@ describe("checkAddress: only public unicast passes", () => {
     ["2001:2::1", "IPv6 benchmarking"],
     ["fec0::1", "site-local (deprecated)"],
     ["100::1", "discard-only"],
+    ["::ffff:0:7f00:1", "IPv4-translated (SIIT) loopback"],
+    ["::1:0:0:1", "IANA reserved, outside 2000::/3 (ipaddr calls it unicast)"],
+    ["4000::1", "IANA reserved, outside 2000::/3 (ipaddr calls it unicast)"],
+    ["fe00::1", "IANA reserved, outside 2000::/3 (ipaddr calls it unicast)"],
   ])("blocks %s (%s)", (address) => {
     expect(checkAddress(address).allowed).toBe(false)
   })
@@ -97,6 +101,9 @@ describe("checkAddress: only public unicast passes", () => {
     "::ffff:999.1.1.1",
     "[::1]",
     "8.8.8.8/32",
+    // Zone IDs pick an interface; a public address has no business carrying one.
+    "2606:4700::1%eth0",
+    "2606:4700::1%1",
   ])("fails closed on %j (not a strictly valid IP)", (address) => {
     expect(checkAddress(address).allowed).toBe(false)
   })
@@ -122,6 +129,10 @@ describe("checkAddress: only public unicast passes", () => {
       "::1",
       "fd00::1",
       "64:ff9b::a00:1",
+      "::ffff:0:7f00:1",
+      "::1:0:0:1",
+      "4000::1",
+      "fe00::1",
     ]) {
       expect(checkAddress(address).allowed, address).toBe(false)
     }
@@ -163,6 +174,16 @@ describe("resolveTarget", () => {
     "http://0.0.0.0/",
     "http://169.254.169.254/latest/meta-data/",
     "http://[fd00:ec2::254]/",
+    "http://%31%32%37.0.0.1/",
+    "http://１２７.０.０.１/",
+    "http://127.0.0.1./",
+    "http://127.000.000.001/",
+    "http://0300.0250.0.1/",
+    "http://0xC0A80001/",
+    "http://3232235521/",
+    "http://[0:0:0:0:0:FFFF:7F00:0001]/",
+    "http://[::ffff:0:7f00:1]/",
+    "http://[64:ff9b::a9fe:a9fe]/",
   ])("blocks the IP literal in %s after URL normalization", async (url) => {
     const resolve = vi.fn(fixed(v4("8.8.8.8")))
     await expect(resolveTarget(new URL(url), { resolve })).rejects.toThrow(/was blocked/)
@@ -400,6 +421,8 @@ ${tool}`,
       `http://[::ffff:127.0.0.2]:${port}/echo`,
       `http://2130706434:${port}/echo`,
       `http://0x7f000002:${port}/echo`,
+      `//127.0.0.2:${port}/echo`,
+      `/\\127.0.0.2:${port}/echo`,
     ]) {
       const client = await serve(redirectTool(to).replaceAll("PORT", String(port)), resolver)
       expect(text(await client.callTool({ name: "hop", arguments: {} })), to).toMatch(/blocked/)
@@ -465,6 +488,29 @@ ${tool}`,
       /another host with a request body/,
     )
   })
+
+  it("bounds name resolution by the request timeout and frees the call slot", async () => {
+    // A name server that never answers must not hold the tool's only call slot forever.
+    let calls = 0
+    const hangsOnce: Resolver = (_host) =>
+      ++calls === 1 ? new Promise(() => {}) : Promise.resolve([v4("127.0.0.1")])
+    const tool = `
+  - name: slow_dns
+    description: d
+    rateLimit: { concurrency: 1 }
+    http:
+      method: GET
+      url: "http://hang.test:${port}/echo"
+      timeoutMs: 300
+    output: { select: "path" }`
+    const client = await serve(tool, hangsOnce)
+    const started = Date.now()
+    const first = text(await client.callTool({ name: "slow_dns", arguments: {} }))
+    expect(first).toMatch(/hang\.test.*timed out/)
+    expect(Date.now() - started).toBeLessThan(3_000)
+    const second = text(await client.callTool({ name: "slow_dns", arguments: {} }))
+    expect(JSON.parse(second)).toBe("/echo")
+  }, 15_000)
 
   it("turns POST into GET without a body on 303", async () => {
     const tool = `

@@ -114,6 +114,28 @@ describe("template safety", () => {
     expect(upstream.requests.length).toBe(before)
   })
 
+  it.each([
+    ["BASE/echo/.{{input.id}}./secret", ""],
+    ["BASE/echo/%2{{input.id}}/secret", "e"],
+    ["BASE/echo/.%2{{input.id}}/secret", "E"],
+    // An empty segment: "//echo/secret" reads as a scheme-relative URL to many servers.
+    ["BASE/{{input.id}}/echo/secret", ""],
+  ])("rejects values that change the path's segments (%s, %j)", async (url, id) => {
+    // Each value is safe on its own; next to literal text it would form "..", "%2e" or "//".
+    const { client } = await serve(`
+  - name: joined
+    description: d
+    input: { type: object, properties: { id: { type: string } } }
+    http: { method: GET, url: "${url}" }
+    output: { select: path }
+`)
+    const before = upstream.requests.length
+    const result = await client.callTool({ name: "joined", arguments: { id } })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toMatch(/not allowed in a URL path/)
+    expect(upstream.requests.length).toBe(before)
+  })
+
   it.each(["a\r\nX-Injected: 1", "a\nb", "a\u0000b"])(
     "rejects header injection %j without sending",
     async (note) => {
