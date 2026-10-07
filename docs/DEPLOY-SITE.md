@@ -90,9 +90,9 @@ Renew `Expires` in `security.txt` every year: move it forward (at most a year), 
 `pnpm check:site`, and redeploy. An expired `security.txt` tells reporters the contact may be
 stale.
 
-Once the repository is published, `pnpm check:site` will run as a scheduled CI job (for example
-weekly), so the warning 30 days before expiry reaches the maintainers without anyone having to
-remember.
+Once the repository is published, `.github/workflows/site-check.yml` runs `pnpm check:site
+--strict` every week: 30 days before expiry, the warning fails the run, so it reaches the
+maintainers without anyone having to remember.
 
 ## Schema versions
 

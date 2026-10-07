@@ -5,7 +5,7 @@ import { setTheme } from "../src/accounts.js"
 import { listAudit } from "../src/db/repos/audit.js"
 import { countActiveAdmins, createUser, getUser } from "../src/db/repos/users.js"
 import { createWorkspace } from "../src/db/repos/workspaces.js"
-import { type ApiStudio, apiStudio, ORIGIN, PASSWORD } from "./api-helpers.js"
+import { type ApiStudio, apiStudio, cookieOf, ORIGIN, PASSWORD } from "./api-helpers.js"
 import { echoTool, MODERN, spec } from "./helpers.js"
 
 const studios: ApiStudio[] = []
@@ -327,8 +327,13 @@ describe("rule: every change needs the session's CSRF token and Studio's origin,
       adminPassword: PASSWORD,
     })
     const temporary = String(reset.json.temporaryPassword)
-    await put(admin, "/profile/password", { currentPassword: PASSWORD, newPassword: NEW_PASSWORD })
-    await post(admin, "/profile/sessions/end-others")
+    const changed = await put(admin, "/profile/password", {
+      currentPassword: PASSWORD,
+      newPassword: NEW_PASSWORD,
+    })
+    // The change renews the admin's session: they go on with the new cookie and token.
+    const renewed = { cookie: cookieOf(changed.headers), csrf: String(changed.json.csrfToken) }
+    await post(renewed, "/profile/sessions/end-others")
 
     const events = listAudit(s.database.db, s.scope)
     const find = (action: string) => events.find((e) => e.action === action)
@@ -451,7 +456,10 @@ describe("rule: an admin's reset forces a new password before anything else", ()
       body: { currentPassword: temporary, newPassword: NEW_PASSWORD },
     })
     expect(changed.status).toBe(200)
-    expect((await s.request("GET", "/api/servers", session)).status).toBe(200)
+    // The session goes on under a new id (the old cookie no longer works), and is free.
+    expect((await s.request("GET", "/api/servers", session)).status).toBe(401)
+    const renewed = { cookie: cookieOf(changed.headers) }
+    expect((await s.request("GET", "/api/servers", renewed)).status).toBe(200)
     expectNoPasswords(changed.text + login.text, temporary)
   })
 })
@@ -483,7 +491,10 @@ describe("rule: changing your own password ends your other sessions, not this on
     })
     expect(changed.status).toBe(200)
     expect(changed.json.sessionsEnded).toBe(1)
-    expect((await s.request("GET", "/api/me", member)).status).toBe(200)
+    // This session goes on, under a new id.
+    expect((await s.request("GET", "/api/me", { cookie: cookieOf(changed.headers) })).status).toBe(
+      200,
+    )
     expect((await s.request("GET", "/api/me", other)).status).toBe(401)
     await expect(s.signIn("member@example.test", NEW_PASSWORD)).resolves.toBeDefined()
   })

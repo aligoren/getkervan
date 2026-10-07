@@ -5,6 +5,8 @@
 // - security.txt: an error once Expires has passed, a warning when it is less than 30 days away or
 //   more than a year ahead (RFC 9116 recommends less than a year).
 // - site/schema/v1.json: an error when it differs from the package's schema (`pnpm site:schema`).
+//
+// `--strict` (the weekly CI job) fails on warnings too, so an expiry coming up is not missed.
 import { readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 
@@ -43,6 +45,11 @@ export function checkSecurityTxt(text, now = Date.now()) {
   return { errors, warnings }
 }
 
+/** The exit code: 1 on errors, and with `strict` on warnings too. */
+export function exitCode({ errors, warnings }, strict) {
+  return errors.length > 0 || (strict && warnings.length > 0) ? 1 : 0
+}
+
 function main() {
   const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
   const { errors, warnings } = checkSecurityTxt(read("site/.well-known/security.txt"))
@@ -51,7 +58,7 @@ function main() {
   }
   for (const warning of warnings) console.warn(`warning: ${warning}`)
   for (const error of errors) console.error(`error: ${error}`)
-  if (errors.length > 0) process.exit(1)
+  if (exitCode({ errors, warnings }, process.argv.includes("--strict")) !== 0) process.exit(1)
   console.log(warnings.length > 0 ? "check:site passed with warnings." : "check:site passed.")
 }
 

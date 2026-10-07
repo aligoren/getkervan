@@ -376,7 +376,12 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     attempt.done(true)
     // Other sessions are gone, so their playground tokens are too; open streams end here.
     studio.gateway.endPlayground(session.user.id)
-    return c.json(result)
+    // This session continues under a new id (and so a new CSRF token): a copy of the old cookie,
+    // say one taken before the change, no longer works.
+    const user = getUser(db, session.scope, session.user.id)
+    if (!user) throw new StudioError("not_found", "Not found.")
+    const { csrfToken } = startSession(c, user)
+    return c.json({ ...result, csrfToken })
   })
 
   api.get("/profile/sessions", signedIn(), (c) => {

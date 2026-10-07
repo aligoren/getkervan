@@ -1,5 +1,5 @@
-import { type ChildProcess, fork } from "node:child_process"
-import { existsSync } from "node:fs"
+import { type ChildProcess, type ForkOptions, fork } from "node:child_process"
+import { existsSync, realpathSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { compile } from "@jmespath-community/jmespath"
 import { ToolError } from "@kervan/core"
@@ -80,6 +80,57 @@ function childScript(): string {
   return existsSync(built) ? built : fileURLToPath(new URL("./select-child.ts", import.meta.url))
 }
 
+/**
+ * Environment variables a select process gets: none. It reads no configuration, and the parent's
+ * environment holds what it must never see (Studio's master keys, tokens, `NODE_OPTIONS`).
+ */
+export const SELECT_ENV_ALLOWLIST: readonly string[] = []
+
+/** Node's permission model flag: `--permission` (22.13+), `--experimental-permission` before. */
+function permissionFlag(): string | undefined {
+  const flags = process.allowedNodeEnvironmentFlags
+  if (flags.has("--permission")) return "--permission"
+  return flags.has("--experimental-permission") ? "--experimental-permission" : undefined
+}
+
+/**
+ * How a select process starts (exported for tests). Under the permission model it may read only
+ * its script, the package.json beside it (the module format) and the JMESPath module, which it
+ * imports by path; it may not write files, start processes or workers. The network, which that
+ * model leaves open in Node 22 and 24, is closed by the script itself.
+ */
+export function selectProcess(): {
+  script: string
+  args: string[]
+  options: ForkOptions & { execArgv: string[]; env: Record<string, string> }
+} {
+  const script = childScript()
+  const jmespath = realpathSync(fileURLToPath(import.meta.resolve("@jmespath-community/jmespath")))
+  const manifest = fileURLToPath(new URL("../package.json", import.meta.url))
+  const permission = permissionFlag()
+  const env: Record<string, string> = {}
+  for (const name of SELECT_ENV_ALLOWLIST) {
+    const value = process.env[name]
+    if (value !== undefined) env[name] = value
+  }
+  return {
+    script,
+    args: [jmespath],
+    options: {
+      execArgv: [
+        `--max-old-space-size=${HEAP_MB}`,
+        ...(permission
+          ? [permission, ...[script, manifest, jmespath].map((file) => `--allow-fs-read=${file}`)]
+          : []),
+      ],
+      env,
+      serialization: "advanced",
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
+      windowsHide: true,
+    },
+  }
+}
+
 class SelectPool {
   readonly #workers = new Set<Worker>()
   readonly #queue: Pending[] = []
@@ -152,12 +203,8 @@ class SelectPool {
   }
 
   #start(): Worker {
-    const child = fork(childScript(), [], {
-      execArgv: [`--max-old-space-size=${HEAP_MB}`],
-      serialization: "advanced",
-      stdio: ["ignore", "ignore", "ignore", "ipc"],
-      windowsHide: true,
-    })
+    const { script, args, options } = selectProcess()
+    const child = fork(script, args, options)
     const worker: Worker = { child }
     this.#workers.add(worker)
     child.on("message", (message: Reply) => this.#reply(worker, message))

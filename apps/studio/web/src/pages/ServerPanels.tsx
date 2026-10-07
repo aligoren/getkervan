@@ -18,7 +18,7 @@ import { CodeBlock, CopyButton } from "../ui/Copy.js"
 import { Dialog } from "../ui/Dialog.js"
 import { Checkbox, Field, Input } from "../ui/Field.js"
 import { Alert } from "../ui/Layout.js"
-import { DisabledReason, Select } from "../ui/Radix.js"
+import { DisabledReason, Select, TabPanel, Tabs } from "../ui/Radix.js"
 import { EmptyRow, Table, TBody, TD, TH, THead, TR } from "../ui/Table.js"
 import { useToast } from "../ui/Toast.js"
 
@@ -400,6 +400,30 @@ export function SecretsPanel(props: { serverId: string }) {
   )
 }
 
+/**
+ * The `claude mcp add` command for a new key: with the key in it, or reading it from the
+ * environment (bash/zsh, PowerShell) so it stays out of the shell's history. The last two never
+ * hold the key: it is typed, hidden, when they run.
+ */
+export function connectCommands(slug: string, endpoint: string) {
+  const add = (bearer: string) =>
+    `claude mcp add --transport http ${slug} ${endpoint} --header "Authorization: Bearer ${bearer}"`
+  return {
+    inline: (key: string) => add(key),
+    bash: [
+      "printf 'API key: '; read -rs KERVAN_API_KEY; echo",
+      add("$KERVAN_API_KEY"),
+      "unset KERVAN_API_KEY",
+    ].join("\n"),
+    powershell: [
+      '$key = Read-Host "API key" -AsSecureString',
+      '$env:KERVAN_API_KEY = [Net.NetworkCredential]::new("", $key).Password',
+      add("$env:KERVAN_API_KEY"),
+      "Remove-Item Env:KERVAN_API_KEY; Remove-Variable key",
+    ].join("\n"),
+  }
+}
+
 interface KeyInfo {
   id: string
   name: string
@@ -426,8 +450,8 @@ export function KeysPanel(props: {
   const [revoking, setRevoking] = useState<KeyInfo>()
   const [error, setError] = useState<unknown>()
   const endpoint = `${window.location.origin}/s/${encodeURIComponent(props.serverId)}/mcp`
-  const command = (key: string) =>
-    `claude mcp add --transport http ${props.serverSlug ?? "studio"} ${endpoint} --header "Authorization: Bearer ${key}"`
+  const commands = connectCommands(props.serverSlug ?? "studio", endpoint)
+  const [shell, setShell] = useState<keyof typeof commands>("inline")
 
   const load = useCallback(
     () =>
@@ -602,21 +626,50 @@ export function KeysPanel(props: {
               </Field>
               <CopyButton value={created} label="Copy key" copiedMessage="Key copied" />
             </div>
-            <CodeBlock
-              label="Connect command for Claude Code"
-              action={
-                <CopyButton
-                  value={command(created)}
-                  label="Copy command"
-                  size="sm"
-                  variant="ghost"
-                  copiedMessage="Command copied"
-                  onCopied={() => props.onCommandCopied?.()}
-                />
+            <Tabs
+              aria-label="Connect command"
+              value={shell}
+              onValueChange={(value) =>
+                setShell(value === "bash" || value === "powershell" ? value : "inline")
               }
+              items={[
+                { value: "inline", label: "Key in the command" },
+                { value: "bash", label: "bash / zsh" },
+                { value: "powershell", label: "PowerShell" },
+              ]}
             >
-              {command(created)}
-            </CodeBlock>
+              {(["inline", "bash", "powershell"] as const).map((kind) => {
+                const text = kind === "inline" ? commands.inline(created) : commands[kind]
+                return (
+                  <TabPanel key={kind} value={kind}>
+                    <CodeBlock
+                      label={
+                        kind === "inline"
+                          ? "Connect command for Claude Code"
+                          : "Reads the key without echoing it, so it stays out of your shell history"
+                      }
+                      action={
+                        <CopyButton
+                          value={text}
+                          label="Copy command"
+                          size="sm"
+                          variant="ghost"
+                          copiedMessage="Command copied"
+                          onCopied={() => props.onCommandCopied?.()}
+                        />
+                      }
+                    >
+                      {text}
+                    </CodeBlock>
+                    {kind === "inline" ? null : (
+                      <p className="mt-2 text-xs text-fg-muted">
+                        Run it, then paste the key when asked for it.
+                      </p>
+                    )}
+                  </TabPanel>
+                )
+              })}
+            </Tabs>
           </div>
         ) : (
           <form id="key-form" className="space-y-4" onSubmit={create}>

@@ -67,7 +67,10 @@ On first start, Studio:
   (`host` or `host:port`). Before a secret the published version uses can be deleted, Studio
   lists the tools that use it and asks for confirmation.
 - **API keys (admins):** a key is shown once when created, with a ready `claude mcp add`
-  command for the server's full endpoint URL; the list shows its prefix and last use. Revoking
+  command for the server's full endpoint URL. Besides the command with the key in it, there are
+  bash/zsh and PowerShell versions that ask for the key without echoing it, so it stays out of
+  your shell history; each has its own copy button. The list shows a key's prefix and last
+  use. Revoking
   asks for confirmation and takes effect at once: open streams of that key are closed.
 - **Calls:** tool, caller (the playground, or the API key by name), status and duration of
   recent calls. Admins can also log arguments and results (redacted, cut to 4 KiB).
@@ -113,7 +116,8 @@ On first start, Studio:
   their secondary columns under the first cell, and a table that is still too wide scrolls in
   its own box, with a fade on the edge that has more.
 - **Profile (everyone):** your email and role (only an admin changes those), an optional display
-  name, your password (the current one is required; your other sessions are signed out), and
+  name, your password (the current one is required; your other sessions are signed out, and
+  this one continues under a new session id, so an old copy of its cookie stops working), and
   your active sessions, which you can sign out one by one or all at once.
 - **Server status:** the server list shows whether each server is published and whether a newer
   draft is valid, has problems, or was never checked, plus the time of the last call. A new
@@ -141,6 +145,24 @@ Clients send one of the server's API keys:
 ```sh
 claude mcp add --transport http weather https://studio.example.com/s/<serverId>/mcp \
   --header "Authorization: Bearer kvn_..."
+```
+
+To keep the key out of your shell history, read it hidden and pass it through a variable:
+
+```sh
+# bash / zsh
+printf 'API key: '; read -rs KERVAN_API_KEY; echo
+claude mcp add --transport http weather https://studio.example.com/s/<serverId>/mcp \
+  --header "Authorization: Bearer $KERVAN_API_KEY"
+unset KERVAN_API_KEY
+```
+
+```powershell
+# PowerShell
+$key = Read-Host "API key" -AsSecureString
+$env:KERVAN_API_KEY = [Net.NetworkCredential]::new("", $key).Password
+claude mcp add --transport http weather https://studio.example.com/s/<serverId>/mcp --header "Authorization: Bearer $env:KERVAN_API_KEY"
+Remove-Item Env:KERVAN_API_KEY; Remove-Variable key
 ```
 
 - A key works for its own server only.

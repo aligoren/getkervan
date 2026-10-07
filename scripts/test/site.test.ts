@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { loadSpec } from "../../packages/spec-runtime/src/index.js"
-import { checkSecurityTxt, securityTxtFields } from "../check-site.mjs"
+import { checkSecurityTxt, exitCode, securityTxtFields } from "../check-site.mjs"
 
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
 
@@ -82,5 +82,19 @@ describe("the website", () => {
     expect(example).toBeDefined()
     const loaded = await loadSpec(example ?? "", { secrets: { get: () => undefined } })
     expect(loaded.tools.map((tool) => tool.name)).toEqual(["get_daily_forecast"])
+  })
+})
+
+describe("check:site's exit code", () => {
+  it("fails on errors, and with --strict (the weekly CI job) on warnings too", () => {
+    const none = { errors: [], warnings: [] }
+    const warned = { errors: [], warnings: ["security.txt expires in 9 day(s)"] }
+    const failed = { errors: ["security.txt expired"], warnings: [] }
+    expect([exitCode(none, false), exitCode(warned, false), exitCode(failed, false)]).toEqual([
+      0, 0, 1,
+    ])
+    expect([exitCode(none, true), exitCode(warned, true), exitCode(failed, true)]).toEqual([
+      0, 1, 1,
+    ])
   })
 })

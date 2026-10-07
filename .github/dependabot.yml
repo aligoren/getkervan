@@ -1,0 +1,43 @@
+# Dependency updates, weekly and grouped. A new release must be at least a week old before
+# Dependabot proposes it (cooldown), which matches the project's rule of not taking releases
+# younger than a week. Security updates are not held back: cooldown does not apply to them, and
+# they come in their own group as soon as an advisory is published (enable "Dependabot security
+# updates" in the repository settings; see docs/RELEASING.md).
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      npm-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns: ["*"]
+      npm-major:
+        applies-to: version-updates
+        update-types: [major]
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      actions-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      actions:
+        applies-to: version-updates
+        patterns: ["*"]

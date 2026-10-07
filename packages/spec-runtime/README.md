@@ -85,7 +85,9 @@ JMESPath is evaluated by `@jmespath-community/jmespath` (MPL-2.0), an interprete
 execution; Kervan registers no custom functions. A short expression can still be costly (its
 functions build strings and arrays, `map` nests), so expressions run in a separate process with
 its own memory limit, stopped when the tool's timeout runs out: a runaway expression fails its
-call, and your process keeps serving. Numbers that hold a secret are redacted too.
+call, and your process keeps serving. That process gets an empty environment and only the
+(redacted) data and the expression; under Node's permission model it can read only the files it
+loads and cannot write files, start processes or use the network. Numbers that hold a secret are redacted too.
 
 ## Built-in limits
 

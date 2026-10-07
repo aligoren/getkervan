@@ -195,7 +195,9 @@ string to the places it is shown.
 - The web UI returns to the sign-in page as soon as a request is refused because the session
   ended (signed out elsewhere, timed out or deactivated).
 - **Changing one's own password** needs the current password and ends every other session of
-  the user (and so their playground tokens); the session that made the change stays.
+  the user (and so their playground tokens). The session that made the change goes on under a
+  new id, with a new cookie and CSRF token: a copy of its old cookie, taken before the change,
+  no longer works.
 - **An admin's password reset** needs the admin's own password, ends all of the user's
   sessions, and sets `must_change_password`. Until the user picks a new password, the API
   answers 403 (`password_change_required`) to everything except the session check, the profile,
@@ -438,6 +440,17 @@ string to the places it is shown.
   - running out of memory ends only that process; the call fails, and the next call gets a new
     one;
   - only the selected JSON comes back, cut to the tool's output limit.
+- The process gets nothing it does not need:
+  - an empty environment (Studio's master keys, any `KERVAN_*` value and `NODE_OPTIONS` stay in
+    Studio; on Windows, libuv itself passes a few system variables such as `PATH` and
+    `SYSTEMROOT`);
+  - each message holds only the data, already redacted, and the expression;
+  - Node's permission model (`--permission`): it may read only its own script, the package.json
+    beside it and the JMESPath module (loaded by path), and may not write files, start processes
+    or workers. Node 22 and 24 leave the network out of that model (Node 25 adds it), so the
+    process's own script closes it: TCP (and with it TLS, HTTP and `fetch`) and UDP fail.
+  - Tested by running a probe with exactly these options (Node 22 and 24, Windows and Linux):
+    no `KERVAN_` variable, and every file, process, worker and network attempt refused.
 - Tests: a 34-character expression that used to end the process, a 1,000^3 nested `map`, and
   gradual growth past the heap limit, each in a child process; the process is not kept alive.
 - Limit: one slow expression holds one of the two processes until its timeout, so calls of other
@@ -545,8 +558,8 @@ string to the places it is shown.
 - **Users cannot change their own email.** It is the sign-in identifier and Studio does not
   verify email addresses, so only an admin changes it.
 - **A password change ends the user's open playground streams in every session**, including the
-  current one (streams are tracked per user); the current session's tokens stay valid, so the
-  playground reconnects.
+  current one, and the current session's playground tokens too (it has a new id): the playground
+  asks for a new token when it connects again.
 - **Unbounded version history.** Every save is kept; there is no cap or pruning per server.
   Members are trusted not to fill the disk.
 - **Members can read bindings** (secret names and hosts, never values) through the export, so
@@ -559,11 +572,10 @@ string to the places it is shown.
     out the lock or restarts Studio;
   - with a reverse proxy on the same machine and `KERVAN_STUDIO_TRUST_PROXY=0`, every client is
     127.0.0.1 to Studio, so failed setup guesses from anyone count together (set the proxy count);
-  - changing one's own password keeps the current session (the others end): if that very cookie
-    was stolen, sign out and in again;
   - the exported `kervan.yaml` keeps a member's comments, including a `yaml-language-server`
     schema line an editor might follow;
-  - the `claude mcp add` command Studio shows puts the key in shell history;
+  - the `claude mcp add` command with the key in it puts the key in shell history; Studio also
+    offers bash/zsh and PowerShell versions that read the key hidden from the terminal instead;
   - a tool whose name server never answers holds one of the process-wide DNS lookup slots until
     its timeout; members choose their own (bounded) timeouts and response sizes;
   - `raw: true` JSON with duplicate keys: a value `JSON.parse` drops is not checked value by

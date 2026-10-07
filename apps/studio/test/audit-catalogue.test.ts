@@ -2,7 +2,7 @@
 // proof that no password, secret value, API key or token ever reaches a row.
 import { afterEach, describe, expect, it } from "vitest"
 import { listAudit } from "../src/db/repos/audit.js"
-import { type ApiStudio, apiStudio, PASSWORD } from "./api-helpers.js"
+import { type ApiStudio, apiStudio, cookieOf, PASSWORD } from "./api-helpers.js"
 import { echoTool, spec } from "./helpers.js"
 
 /** Every action the web API records. (`kervan-studio reset-admin` also records user.password_reset.) */
@@ -106,13 +106,15 @@ describe("the audit log", () => {
     )
 
     // The member: forced password change, profile, theme (only a real change counts), sessions.
-    const member = await s.signIn("member2@example.test", TEMPORARY)
-    await ok(
-      call("PUT", "/profile/password", member, {
+    const forced = await s.signIn("member2@example.test", TEMPORARY)
+    const changed = await ok(
+      call("PUT", "/profile/password", forced, {
         currentPassword: TEMPORARY,
         newPassword: MEMBER_NEW,
       }),
     )
+    // The change renews the session: the member goes on with its new cookie and token.
+    const member = { cookie: cookieOf(changed.headers), csrf: String(changed.json.csrfToken) }
     await ok(call("PUT", "/profile", member, { displayName: "Member Two" }))
     await ok(call("PUT", "/profile/theme", member, { theme: "dark" }))
     await ok(call("PUT", "/profile/theme", member, { theme: "dark" }))

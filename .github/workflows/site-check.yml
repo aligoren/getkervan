@@ -1,0 +1,27 @@
+# Weekly date checks of the website: security.txt must not expire (or come within 30 days of
+# expiring), and the published editor schema must match the package's. Any problem fails the run,
+# so it shows in the repository's Actions tab and notifies the maintainers.
+name: Site check
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+      # No dependencies needed. --strict: warnings (expiring soon) fail the run too.
+      - run: node scripts/check-site.mjs --strict

@@ -1,6 +1,6 @@
 import { Laptop, LogOut } from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useState } from "react"
-import { api, type User } from "../api.js"
+import { api, setCsrfToken, type User } from "../api.js"
 import { UsernameField } from "../components/UsernameField.js"
 import { ErrorText } from "../components/untrusted.js"
 import { deviceName } from "../device.js"
@@ -38,10 +38,13 @@ function PasswordForm(props: {
     }
     setBusy(true)
     try {
-      const result = await api<{ sessionsEnded: number }>("PUT", "/profile/password", {
-        currentPassword: current,
-        newPassword: next,
-      })
+      const result = await api<{ sessionsEnded: number; csrfToken: string }>(
+        "PUT",
+        "/profile/password",
+        { currentPassword: current, newPassword: next },
+      )
+      // The session continues under a new id: the server set its cookie, this is its token.
+      setCsrfToken(result.csrfToken)
       setCurrent("")
       setNext("")
       setRepeat("")

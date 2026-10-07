@@ -1,0 +1,88 @@
+# Publishes the packages to npm, by hand only, after an approval on the "release" environment.
+# Nothing here runs on its own, and it publishes nothing yet: see docs/RELEASING.md.
+#
+# Publishing is refused by scripts/guard-publish.mjs (run below for every package) until both:
+# - the "release" environment has the variable KERVAN_ALLOW_PUBLISH set to 1, and
+# - the "Not published yet" notes are removed from the README files: until the first release,
+#   guard-publish refuses while any package README still says "Not published yet".
+#
+# The packages are published with npm provenance through npm's trusted publishing (OIDC, no npm
+# token): the npm packages must list this repository and workflow as a trusted publisher, and each
+# package.json needs a `repository` field pointing at this repository.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dist-tag:
+        description: npm dist-tag for this release
+        type: choice
+        options: [next, latest]
+        default: next
+
+permissions:
+  contents: read
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Configure required reviewers on this environment: a person approves every run.
+    environment: release
+    permissions:
+      contents: read
+      # npm provenance and trusted publishing (OIDC).
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Enable pnpm
+        run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm check:pack
+
+      - name: Check npm (trusted publishing needs npm 11.5.1 or later)
+        run: |
+          node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number)
+            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)))
+            if (!ok) { console.error(`npm ${process.argv[1]} is too old for trusted publishing.`); process.exit(1) }
+          ' "$(npm --version)"
+
+      # pnpm pack writes the real versions in place of workspace: dependencies.
+      - name: Pack the packages
+        run: pnpm -r --filter "./packages/*" pack --pack-destination "$RUNNER_TEMP/release"
+
+      # `npm publish <tarball>` does not run prepublishOnly, so the guard runs here for each
+      # package. It refuses until KERVAN_ALLOW_PUBLISH is 1 and no README says "Not published yet".
+      - name: Guard
+        env:
+          KERVAN_ALLOW_PUBLISH: ${{ vars.KERVAN_ALLOW_PUBLISH }}
+        run: |
+          for dir in packages/*/; do
+            (cd "$dir" && node ../../scripts/guard-publish.mjs)
+          done
+
+      # Dependencies first, so a client never finds a package whose dependency is missing.
+      - name: Publish with provenance
+        env:
+          DIST_TAG: ${{ inputs.dist-tag }}
+        run: |
+          cd "$RUNNER_TEMP/release"
+          for name in kervan-core kervan-transport kervan-spec-runtime kervan create-kervan; do
+            file=$(ls "$name"-[0-9]*.tgz)
+            npm publish "./$file" --provenance --access public --tag "$DIST_TAG"
+          done
