@@ -277,6 +277,81 @@ test("the theme follows the account across sessions; signed out, the system's", 
     })
 })
 
+test("dates are English even when the browser is Turkish", async ({ browser }) => {
+  const context = await browser.newContext({
+    locale: "tr-TR",
+    viewport: { width: 1280, height: 900 },
+  })
+  const page = await context.newPage()
+  // The browser really is Turkish: left to itself, it would format in Turkish.
+  expect(await page.evaluate(() => new Date(2026, 9, 7).toLocaleDateString())).toBe("07.10.2026")
+  await signIn(page, admin)
+  for (const hash of ["#/users", "#/audit", "#/profile", "#/"]) {
+    await page.goto(`${studio.url}/${hash}`)
+    await page.waitForLoadState("networkidle")
+    const text = await page.locator("main").innerText()
+    expect(text, hash).not.toMatch(
+      /Oca|Şub|Mar |Nis|May |Haz|Tem|Ağu|Eyl|Eki|Kas|Ara|önce|dakika|saat|şimdi/,
+    )
+  }
+  await page.goto(`${studio.url}/#/users`)
+  const row = page.getByRole("row").filter({ hasText: admin.email })
+  await expect(row).toContainText(/(just now|minutes? ago)/)
+  await expect(row).toContainText(/[A-Z][a-z]{2} \d{1,2}, \d{4}/)
+  await context.close()
+})
+
+test("focus rings show for the keyboard, not after mouse clicks", async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, admin)
+  await page.goto(`${studio.url}/#/users`)
+  const focused = () =>
+    page.evaluate(() => {
+      const element = document.activeElement as HTMLElement
+      return {
+        name: element.getAttribute("aria-label") ?? element.textContent?.trim() ?? "",
+        outline: getComputedStyle(element).outlineStyle,
+      }
+    })
+
+  // A dialog closed with Escape gives focus back to its button, with a ring (keyboard).
+  const addUser = page.getByRole("button", { name: "Add user" })
+  await addUser.click()
+  await page.getByRole("dialog").getByLabel("Email").fill("x")
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("dialog")).toBeHidden()
+  await expect(addUser).toBeFocused()
+  expect((await focused()).outline).toBe("solid")
+
+  // Then the mouse: a menu and the dialog it opens show no ring, though focus moved by script.
+  await rowActions(page, admin.email).click()
+  await page.getByRole("menuitem", { name: "Change role" }).click()
+  await expect(page.getByRole("dialog")).toBeVisible()
+  expect(await focused()).toEqual({ name: "member", outline: "none" })
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click()
+  await expect(rowActions(page, admin.email)).toBeFocused()
+  expect((await focused()).outline).toBe("none")
+
+  // A sidebar link clicked, then Shift pressed (no navigation): still no ring.
+  await page
+    .getByRole("navigation", { name: "Main" })
+    .getByRole("link", { name: "Settings" })
+    .click()
+  await page.keyboard.press("Shift")
+  expect(await focused()).toEqual({ name: "Settings", outline: "none" })
+
+  // Tab: the ring is back.
+  await page.keyboard.press("Tab")
+  expect((await focused()).outline).toBe("solid")
+  // Text fields show focus even after a click (the caret is there).
+  await page.goto(`${studio.url}/#/profile`)
+  await page.getByLabel("Display name").click()
+  await expect(page.getByLabel("Display name")).toBeFocused()
+  expect(
+    await page.getByLabel("Display name").evaluate((field) => getComputedStyle(field).outlineStyle),
+  ).toBe("solid")
+})
+
 test("at 390px every page fits the screen and the menu opens in a drawer", async ({ browser }) => {
   const page = await newPage(browser, 390, 844)
   await page.goto(studio.url)

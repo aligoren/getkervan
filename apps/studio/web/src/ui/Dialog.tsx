@@ -1,11 +1,26 @@
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
-import type { ReactNode } from "react"
+import { type ReactNode, useLayoutEffect, useRef } from "react"
 import { cn } from "./cn.js"
 
 /**
+ * What had focus when a dialog opened: the button that opened it. A dialog opened from a "…" menu
+ * item gets the menu's button instead, since the item is gone once the menu closes.
+ */
+function opener(): HTMLElement | null {
+  const active = document.activeElement
+  if (!(active instanceof HTMLElement) || active === document.body) return null
+  const menu = active.closest('[role="menu"]')
+  if (menu?.id) {
+    return document.querySelector<HTMLElement>(`[aria-controls="${CSS.escape(menu.id)}"]`)
+  }
+  return active
+}
+
+/**
  * A modal dialog (Radix: focus trap, Escape to close, labelled by its title). Controlled:
- * `open` and `onOpenChange`. Put the form's buttons in `footer`.
+ * `open` and `onOpenChange`. Put the form's buttons in `footer`. Closing gives focus back to what
+ * opened it, so keyboard users continue where they were.
  */
 export function Dialog(props: {
   open: boolean
@@ -18,11 +33,27 @@ export function Dialog(props: {
   tone?: "default" | "danger"
   size?: "sm" | "md" | "lg"
 }) {
+  const returnTo = useRef<HTMLElement | null>(null)
+  // Layout effects run before Radix moves focus into the dialog, so this still sees the opener.
+  // Closing (or unmounting) gives focus back after Radix is done.
+  useLayoutEffect(() => {
+    if (!props.open) return
+    returnTo.current = opener()
+    return () => {
+      const target = returnTo.current
+      setTimeout(() => {
+        if (target?.isConnected) target.focus()
+      }, 0)
+    }
+  }, [props.open])
+
   return (
     <RadixDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] data-[state=open]:animate-[fade-in_150ms_ease-out]" />
         <RadixDialog.Content
+          // Focus goes back to the opener (above), not wherever Radix would put it.
+          onCloseAutoFocus={(event) => event.preventDefault()}
           className={cn(
             "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col",
             "rounded-xl border border-border bg-surface shadow-lg",

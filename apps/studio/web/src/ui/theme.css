@@ -203,6 +203,20 @@
   }
 }
 
+/*
+ * Pointer users see no focus ring on buttons, links, tabs or menu items (modality.ts sets
+ * data-modality). Browsers otherwise keep one after a click when focus moves by script, or after
+ * any key press. Keyboard users keep every ring; text fields always show theirs.
+ */
+:root[data-modality="pointer"]
+:focus-visible:not(
+  input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"]),
+  textarea,
+  [contenteditable="true"]
+) {
+  outline: none;
+}
+
 @utility visually-hidden {
   position: absolute;
   width: 1px;

@@ -336,11 +336,30 @@ export function updateProfile(
   })
 }
 
-/** The signed-in user's own theme (only theirs: the API has no user id for it). */
-export function setTheme(db: Db, scope: WorkspaceScope, userId: string, theme: Theme): Theme {
+/**
+ * The signed-in user's own theme (only theirs: the API has no user id for it). A change is
+ * audited; choosing the theme that is already set writes nothing.
+ */
+export function setTheme(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  theme: Theme,
+  actor: Actor,
+): Theme {
   if (!THEMES.includes(theme)) throw new StudioError("invalid", "Unknown theme.")
-  if (!updateUser(db, scope, userId, { theme })) throw notFound()
-  return theme
+  return writeTransaction(db, (tx) => {
+    const user = getUser(tx, scope, userId)
+    if (!user) throw notFound()
+    if (user.theme === theme) return theme
+    updateUser(tx, scope, user.id, { theme })
+    recordAudit(tx, scope, actor, {
+      action: "user.theme",
+      target: { type: "user", id: user.id },
+      details: { from: user.theme, to: theme },
+    })
+    return theme
+  })
 }
 
 function notFound(): StudioError {

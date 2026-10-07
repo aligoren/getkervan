@@ -625,7 +625,7 @@ export function Audit() {
     <>
       <PageHeader
         title="Audit log"
-        description="Sign-ins, publishes and changes to users, secrets and keys, newest first. Entries cannot be edited or deleted."
+        description="Who did what: sign-ins and sign-outs, users and profiles, servers, secrets and API keys. The latest 100 entries, newest first; entries cannot be edited or deleted, and passwords, secret values and keys are never recorded."
         actions={
           <Button
             onClick={() => void load()}

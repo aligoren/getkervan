@@ -333,7 +333,7 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     const body = await parse(c, themeBody)
     const session = c.get("session")
     if (!session) throw new StudioError("forbidden", "Sign in first.")
-    return c.json({ theme: setTheme(db, session.scope, session.user.id, body.theme) })
+    return c.json({ theme: setTheme(db, session.scope, session.user.id, body.theme, actor(c)) })
   })
 
   api.put("/profile/password", signedIn(undefined, duringPasswordChange), async (c) => {

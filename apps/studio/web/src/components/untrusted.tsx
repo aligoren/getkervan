@@ -2,21 +2,11 @@
 // It is only ever rendered as React text children: never as HTML, Markdown, a link or an image.
 import { ArrowDownLeft, ArrowUpRight, CircleAlert, ScrollText, TriangleAlert } from "lucide-react"
 import type { Issue } from "../api.js"
+import { shortTime } from "../time.js"
 import { Badge } from "../ui/Badge.js"
 import { cn } from "../ui/cn.js"
 import { Alert, EmptyState } from "../ui/Layout.js"
 import { EmptyRow, Table, TBody, TD, TH, THead, TR } from "../ui/Table.js"
-
-/** A time for tables: "Oct 7, 11:21:04" in the viewer's locale. */
-export function shortTime(time: number): string {
-  return new Date(time).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  })
-}
 
 export interface ToolSummary {
   name: string
@@ -330,7 +320,7 @@ export function AuditTable(props: {
       <EmptyState
         icon={<ScrollText className="size-5" />}
         title="No events yet"
-        description="Sign-ins, publishes, secret and key changes and user changes are recorded here."
+        description="Sign-ins, user and profile changes, servers, secrets and API keys are recorded here."
       />
     )
   }

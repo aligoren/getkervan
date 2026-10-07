@@ -75,6 +75,13 @@ On first start, Studio:
 - **Theme:** System, Light or Dark, from the switch in the sidebar or on Settings. The choice is
   saved to your account (not to the browser), so it follows you to every device; signed out,
   Studio follows the system setting.
+- **Audit log (admins):** sign-ins and sign-outs, user and profile changes (including the theme),
+  servers (created, published, rolled back, refused, settings, deleted), secrets and API keys;
+  the latest 100 entries. Passwords, secret values and keys are never recorded.
+- **Dates and times** are always in English (`Oct 7, 2026`, `3 minutes ago`), whatever the
+  browser's language, like the rest of the UI. Hovering one shows the exact time.
+- **Focus rings** show when you use the keyboard, not after mouse clicks; text fields always show
+  focus. Closing a dialog returns focus to the button that opened it.
 - **Narrow screens:** every page fits a 390px-wide phone without sideways scrolling. Tables move
   their secondary columns under the first cell, and a table that is still too wide scrolls in
   its own box, with a fade on the edge that has more.

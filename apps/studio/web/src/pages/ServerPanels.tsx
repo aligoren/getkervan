@@ -9,9 +9,8 @@ import {
   ErrorText,
   type SecretSummary,
   SecretTable,
-  shortTime,
 } from "../components/untrusted.js"
-import { Ago, DateOnly } from "../time.js"
+import { Ago, DateOnly, shortTime } from "../time.js"
 import { Badge } from "../ui/Badge.js"
 import { Button, buttonClass } from "../ui/Button.js"
 import { Card, CardContent, CardHeader } from "../ui/Card.js"

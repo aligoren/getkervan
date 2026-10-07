@@ -316,16 +316,25 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 
 - The audit log is append-only (database triggers refuse `UPDATE` and `DELETE`). Admins can read
   it in the UI.
-- Events recorded:
-  - setup, login success and failure (with the client IP), logout;
-  - users created, password resets;
-  - servers created and deleted, and the server's call-log setting;
-  - publish and rollback, with the version and the previous version;
-  - refused publishes (for example a spec that would send a secret to an unbound host), with
-    who tried and how many problems were found;
-  - secrets created, rotated, rebound and deleted (with the tools that used a deleted one);
-  - API keys created and revoked.
-- Details hold names, ids, hosts and counts, never values, keys or passwords.
+- Events recorded (`apps/studio/test/audit-catalogue.test.ts` triggers each one through the API
+  and pins the list):
+  - `studio.setup`; `login.success` and `login.failure` (with the client IP); `logout`;
+    `session.end` and `session.end_others` (sessions a user signed out);
+  - `user.create`, `user.role`, `user.email`, `user.password_reset` (also by
+    `kervan-studio reset-admin`), `user.password_change`, `user.profile`, `user.theme` (only
+    when it changes), `user.disable` and `user.enable`;
+  - `server.create`, `server.delete`, `server.settings` (the call-log setting);
+  - `server.publish` and `server.rollback`, with the version and the previous version;
+  - `server.publish_refused` (for example a spec that would send a secret to an unbound host),
+    with who tried and how many problems were found;
+  - `secret.create`, `secret.rotate`, `secret.hosts` and `secret.delete` (with the tools that
+    used a deleted one);
+  - `api_key.create` and `api_key.revoke` (also for each key revoked with a deactivation).
+- Not recorded: saving a spec version (versions are immutable and keep their author) and
+  playground use (call logs record the calls).
+- Details hold names, ids, hosts and counts, never values, keys or passwords. The catalogue test
+  checks every stored row and the audit page for each password, secret value, API key, setup
+  token and session used along the way.
 
 ### T15: Call logs (4c)
 

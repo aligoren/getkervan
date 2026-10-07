@@ -30,6 +30,8 @@ async function setup(options: Parameters<typeof apiStudio>[0] = {}) {
   return { s, owner, admin, memberUser, member, put, post }
 }
 
+const ACTOR = { type: "user" as const, id: "test-actor" }
+
 /** Every audit row and every response body must be free of these. */
 function expectNoPasswords(text: string, ...passwords: string[]) {
   for (const password of [PASSWORD, NEW_PASSWORD, ...passwords]) {
@@ -597,11 +599,11 @@ describe("the theme preference", () => {
   it("is checked again below the API, and only ever changes the given user in its workspace", async () => {
     const { s, owner, memberUser } = await setup()
     expect(() =>
-      setTheme(s.database.db, s.scope, memberUser.id, "neon" as unknown as "dark"),
+      setTheme(s.database.db, s.scope, memberUser.id, "neon" as unknown as "dark", ACTOR),
     ).toThrow("Unknown theme.")
     const elsewhere = createWorkspace(s.database.db, "elsewhere")
-    expect(() => setTheme(s.database.db, elsewhere, memberUser.id, "dark")).toThrow()
-    expect(setTheme(s.database.db, s.scope, memberUser.id, "light")).toBe("light")
+    expect(() => setTheme(s.database.db, elsewhere, memberUser.id, "dark", ACTOR)).toThrow()
+    expect(setTheme(s.database.db, s.scope, memberUser.id, "light", ACTOR)).toBe("light")
     expect(getUser(s.database.db, s.scope, memberUser.id)?.theme).toBe("light")
     expect(getUser(s.database.db, s.scope, owner.id)?.theme).toBe("system")
   })
