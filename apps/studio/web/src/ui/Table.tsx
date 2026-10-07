@@ -1,9 +1,11 @@
 import type { HTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from "react"
 import { cn } from "./cn.js"
+import { Scroller } from "./Scroller.js"
 
 /**
- * A data table in a bordered, scrollable container (wide tables scroll sideways instead of
- * overflowing the page). `dense` tightens the rows.
+ * A data table in a bordered box that scrolls sideways when the table is wider than the screen
+ * (with a fade on the edge that has more), instead of overflowing the page. `dense` tightens
+ * the rows.
  */
 export function Table(props: {
   children: ReactNode
@@ -12,12 +14,8 @@ export function Table(props: {
   "aria-label"?: string
 }) {
   return (
-    <div
-      // relative: visually hidden (absolute) labels inside stay clipped by this scroll box.
-      className={cn(
-        "relative overflow-x-auto rounded-lg border border-border bg-surface",
-        props.className,
-      )}
+    <Scroller
+      className={cn("overflow-hidden rounded-lg border border-border bg-surface", props.className)}
     >
       <table
         aria-label={props["aria-label"]}
@@ -28,7 +26,7 @@ export function Table(props: {
       >
         {props.children}
       </table>
-    </div>
+    </Scroller>
   )
 }
 

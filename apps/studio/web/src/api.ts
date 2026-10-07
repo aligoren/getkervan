@@ -18,6 +18,8 @@ export interface User {
   disabledAt?: number | null
   createdAt?: number
   lastLoginAt?: number | null
+  /** The theme the user chose (kept on the server, so it follows them across devices). */
+  theme?: "system" | "light" | "dark"
 }
 
 /** The latest validation of a version (`null`: never checked). */

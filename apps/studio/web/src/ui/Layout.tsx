@@ -31,7 +31,7 @@ export function EmptyState(props: {
   title: ReactNode
   description?: ReactNode
   action?: ReactNode
-  className?: string
+  className?: string | undefined
 }) {
   return (
     <div
@@ -56,10 +56,10 @@ export function EmptyState(props: {
 
 /** A message in the page: an error, a warning, or a note. */
 export function Alert(props: {
-  tone?: "danger" | "warning" | "success" | "neutral"
+  tone?: "danger" | "warning" | "success" | "neutral" | undefined
   title?: ReactNode
   children?: ReactNode
-  className?: string
+  className?: string | undefined
 }) {
   const tone = props.tone ?? "neutral"
   return (

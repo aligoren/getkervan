@@ -17,6 +17,8 @@ import {
   type Role,
   setDisabledAt,
   setPasswordHash,
+  THEMES,
+  type Theme,
   type User,
   updateUser,
 } from "./db/repos/users.js"
@@ -332,6 +334,13 @@ export function updateProfile(
     })
     return { ...user, displayName }
   })
+}
+
+/** The signed-in user's own theme (only theirs: the API has no user id for it). */
+export function setTheme(db: Db, scope: WorkspaceScope, userId: string, theme: Theme): Theme {
+  if (!THEMES.includes(theme)) throw new StudioError("invalid", "Unknown theme.")
+  if (!updateUser(db, scope, userId, { theme })) throw notFound()
+  return theme
 }
 
 function notFound(): StudioError {

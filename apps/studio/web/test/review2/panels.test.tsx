@@ -1,7 +1,7 @@
 // Independent review: untrusted text in the panels the existing XSS test does not render (users,
 // API key names, the delete-secret warning, version labels), and the playground token never
 // reaching the page or the raw traffic log.
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { setCsrfToken } from "../../src/api.js"
 import { Users } from "../../src/pages/Admin.js"
@@ -16,7 +16,11 @@ const PAYLOADS = [
 ]
 
 function expectInert(container: HTMLElement, payload: string) {
-  expect(container.querySelectorAll("img, script, iframe, svg, object, embed")).toHaveLength(0)
+  // The design system's own icons are SVGs (lucide); anything else is foreign.
+  const foreign = [...container.querySelectorAll("img, script, iframe, svg, object, embed")].filter(
+    (element) => !(element.tagName.toLowerCase() === "svg" && element.classList.contains("lucide")),
+  )
+  expect(foreign).toHaveLength(0)
   for (const element of container.querySelectorAll("*")) {
     for (const attribute of element.getAttributeNames()) {
       expect(attribute.startsWith("on"), `${element.tagName} ${attribute}`).toBe(false)
@@ -86,11 +90,14 @@ describe.each(PAYLOADS)("untrusted text in admin panels is never HTML: %s", (pay
           })
     const { container, getByText } = render(<SecretsPanel serverId="s1" />)
     await waitFor(() => expect(container.textContent).toContain("API_KEY"))
+    fireEvent.click(getByText("Delete"))
+    const dialog = await screen.findByRole("dialog")
     await act(async () => {
-      fireEvent.click(getByText("Delete"))
+      fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }))
     })
-    await waitFor(() => expect(container.querySelector(".callout")).not.toBeNull())
-    expectInert(container, payload)
+    await waitFor(() => expect(dialog.textContent).toContain(payload))
+    // The dialog is rendered outside the panel (a portal): check the whole page.
+    expectInert(document.body, payload)
   })
 })
 
@@ -100,17 +107,21 @@ describe("the secrets panel", () => {
       init?.method === "PUT"
         ? json({ secret: { name: "API_KEY", allowedHosts: ["a.test:443"], updatedAt: 0 } })
         : json({ secrets: [] })
-    const { container, getByLabelText, getByText } = render(<SecretsPanel serverId="s1" />)
+    render(<SecretsPanel serverId="s1" />)
+    fireEvent.click(screen.getByRole("button", { name: "Add secret" }))
     const value = "sk-typed-into-the-form-123"
-    fireEvent.change(getByLabelText("Secret name"), { target: { value: "API_KEY" } })
-    fireEvent.change(getByLabelText("Secret value"), { target: { value } })
-    fireEvent.change(getByLabelText("Allowed hosts"), { target: { value: "a.test" } })
-    expect((getByLabelText("Secret value") as HTMLInputElement).type).toBe("password")
+    fireEvent.change(screen.getByLabelText("Secret name"), { target: { value: "API_KEY" } })
+    fireEvent.change(screen.getByLabelText("Secret value"), { target: { value } })
+    fireEvent.change(screen.getByLabelText("Allowed hosts"), { target: { value: "a.test" } })
+    expect((screen.getByLabelText("Secret value") as HTMLInputElement).type).toBe("password")
     await act(async () => {
-      fireEvent.click(getByText("Save secret"))
+      fireEvent.click(screen.getByRole("button", { name: "Save secret" }))
     })
-    await waitFor(() => expect((getByLabelText("Secret value") as HTMLInputElement).value).toBe(""))
-    expect(container.innerHTML).not.toContain(value)
+    // The dialog closes and the value is gone from the page; a new dialog starts empty.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(document.body.innerHTML).not.toContain(value)
+    fireEvent.click(screen.getByRole("button", { name: "Add secret" }))
+    expect((screen.getByLabelText("Secret value") as HTMLInputElement).value).toBe("")
     // It went out once, with the CSRF token, to the server's own secret route.
     const put = calls.find((call) => call.init?.method === "PUT")
     expect(put?.url).toBe("/api/servers/s1/secrets/API_KEY")

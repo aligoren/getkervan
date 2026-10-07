@@ -1,5 +1,5 @@
 import { Check, Copy } from "lucide-react"
-import { useState } from "react"
+import { type ReactNode, useId, useState } from "react"
 import { Button, type ButtonSize, type ButtonVariant } from "./Button.js"
 import { cn } from "./cn.js"
 import { useToast } from "./Toast.js"
@@ -49,37 +49,50 @@ export function CopyButton(props: {
 
 /**
  * Monospaced text in a box: commands, keys, JSON. Long lines wrap (or scroll with
- * `wrap={false}`), so nothing runs out of its container.
+ * `wrap={false}`), so nothing runs out of its container. With a `label`, the box is a figure
+ * named by its caption.
  */
 export function CodeBlock(props: {
   children: string
   copy?: boolean
   wrap?: boolean
   label?: string
+  /** Shown at the right of the label, e.g. a copy button with its own label. */
+  action?: ReactNode
   className?: string
 }) {
+  const id = useId()
+  const copy = props.copy ? <CopyButton value={props.children} variant="ghost" size="icon" /> : null
+  const pre = (
+    <pre
+      className={cn(
+        "max-h-96 overflow-auto px-3 py-2.5 font-mono text-[0.8125rem] leading-relaxed text-fg",
+        // Wrap at spaces; break inside a word only when a word is longer than the line.
+        props.wrap === false ? "whitespace-pre" : "whitespace-pre-wrap [overflow-wrap:anywhere]",
+        copy && !props.label && "pr-12",
+      )}
+    >
+      {props.children}
+    </pre>
+  )
+  const box = cn("relative m-0 rounded-lg border border-border bg-subtle", props.className)
+  if (!props.label) {
+    return (
+      <div className={box}>
+        {pre}
+        {copy ? <div className="absolute top-1.5 right-1.5">{copy}</div> : null}
+      </div>
+    )
+  }
   return (
-    <div className={cn("relative rounded-lg border border-border bg-subtle", props.className)}>
-      {props.label ? (
-        <div className="border-b border-border px-3 py-1.5 text-xs font-medium text-fg-muted">
+    <figure aria-labelledby={id} className={box}>
+      <figcaption className="flex min-h-9 items-center justify-between gap-2 border-b border-border py-0.5 pr-1 pl-3">
+        <span id={id} className="text-xs font-medium text-fg-muted">
           {props.label}
-        </div>
-      ) : null}
-      <pre
-        className={cn(
-          "max-h-96 overflow-auto px-3 py-2.5 font-mono text-[0.8125rem] leading-relaxed text-fg",
-          // Wrap at spaces; break inside a word only when a word is longer than the line.
-          props.wrap === false ? "whitespace-pre" : "whitespace-pre-wrap [overflow-wrap:anywhere]",
-          props.copy && "pr-12",
-        )}
-      >
-        {props.children}
-      </pre>
-      {props.copy ? (
-        <div className={cn("absolute right-1.5", props.label ? "top-9" : "top-1.5")}>
-          <CopyButton value={props.children} variant="ghost" />
-        </div>
-      ) : null}
-    </div>
+        </span>
+        {props.action ?? copy}
+      </figcaption>
+      {pre}
+    </figure>
   )
 }

@@ -1,11 +1,12 @@
 // Fixes from the end-to-end walkthrough: returning to sign-in when the session ends, saving a
 // secret, revoking a key, connecting a client, and starting playground arguments.
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { App } from "../src/App.js"
 import { api, onSessionEnded, setCsrfToken } from "../src/api.js"
 import { KeysPanel, SecretsPanel } from "../src/pages/ServerPanels.js"
 import { argumentSkeleton } from "../src/playground/skeleton.js"
+import { ToastProvider } from "../src/ui/Toast.js"
 
 type Handler = (method: string, url: string, body: unknown) => Response
 let handler: Handler
@@ -47,7 +48,8 @@ describe("when the session ends while a page is open", () => {
       return json({ error: "Sign in first." }, 401)
     }
     const page = render(<App />)
-    await page.findByText("a@example.test (member)")
+    await page.findByRole("heading", { name: "Servers" })
+    expect(page.getByRole("navigation", { name: "Main" }).textContent).toContain("Servers")
     // Deactivated (or signed out elsewhere): the next request is refused.
     signedIn = false
     await api("POST", "/servers", { slug: "x", name: "X" }).catch(() => {})
@@ -68,17 +70,25 @@ describe("when the session ends while a page is open", () => {
 describe("the secrets panel", () => {
   it("confirms a save and clears the form", async () => {
     handler = (method) => (method === "GET" ? json({ secrets: [] }) : json({ secret: {} }))
-    const page = render(<SecretsPanel serverId="s1" />)
-    fireEvent.change(page.getByLabelText("Secret name"), { target: { value: "API_KEY" } })
-    fireEvent.change(page.getByLabelText("Secret value"), { target: { value: "value-123456" } })
-    fireEvent.change(page.getByLabelText("Allowed hosts"), {
+    render(
+      <ToastProvider>
+        <SecretsPanel serverId="s1" />
+      </ToastProvider>,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Add secret" }))
+    fireEvent.change(screen.getByLabelText("Secret name"), { target: { value: "API_KEY" } })
+    fireEvent.change(screen.getByLabelText("Secret value"), { target: { value: "value-123456" } })
+    fireEvent.change(screen.getByLabelText("Allowed hosts"), {
       target: { value: "api.example.com" },
     })
-    fireEvent.click(page.getByRole("button", { name: "Save secret" }))
-    await page.findByText("Saved API_KEY.")
-    expect((page.getByLabelText("Secret name") as HTMLInputElement).value).toBe("")
-    expect((page.getByLabelText("Secret value") as HTMLInputElement).value).toBe("")
-    expect((page.getByLabelText("Allowed hosts") as HTMLInputElement).value).toBe("")
+    fireEvent.click(screen.getByRole("button", { name: "Save secret" }))
+    await screen.findByText("Saved API_KEY.")
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    // The next secret starts from an empty form.
+    fireEvent.click(screen.getByRole("button", { name: "Add secret" }))
+    expect((screen.getByLabelText("Secret name") as HTMLInputElement).value).toBe("")
+    expect((screen.getByLabelText("Secret value") as HTMLInputElement).value).toBe("")
+    expect((screen.getByLabelText("Allowed hosts") as HTMLInputElement).value).toBe("")
   })
 })
 
@@ -88,12 +98,14 @@ describe("the API keys panel", () => {
   it("asks before revoking", async () => {
     handler = (method) =>
       method === "GET" ? json({ keys: [{ ...key, revokedAt: null }] }) : json({ ok: true })
-    const page = render(<KeysPanel serverId="s1" />)
-    fireEvent.click(await page.findByRole("button", { name: "Revoke" }))
+    render(<KeysPanel serverId="s1" />)
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke" }))
+    expect(await screen.findByRole("dialog", { name: "Revoke ci?" })).toBeTruthy()
     expect(requests.filter((r) => r.method === "DELETE")).toHaveLength(0)
-    fireEvent.click(page.getByRole("button", { name: "Cancel" }))
-    fireEvent.click(await page.findByRole("button", { name: "Revoke" }))
-    fireEvent.click(page.getByRole("button", { name: "Revoke now" }))
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke key" }))
     await waitFor(() => expect(requests.filter((r) => r.method === "DELETE")).toHaveLength(1))
     expect(requests.find((r) => r.method === "DELETE")?.url).toBe("/api/servers/s1/keys/k1")
   })
@@ -104,16 +116,19 @@ describe("the API keys panel", () => {
     const page = render(<KeysPanel serverId="s1" serverSlug="weather" />)
     const endpoint = `${window.location.origin}/s/s1/mcp`
     expect(page.container.textContent).toContain(endpoint)
-    fireEvent.change(page.getByLabelText("Key name"), {
-      target: { value: "ci" },
-    })
-    fireEvent.click(page.getByRole("button", { name: "Create key" }))
-    const command = (await page.findByLabelText(
-      "Connect command for Claude Code",
-    )) as HTMLTextAreaElement
-    expect(command.value).toBe(
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }))
+    fireEvent.change(screen.getByLabelText("Key name"), { target: { value: "ci" } })
+    // The page behind the dialog is hidden from assistive tech: this is the dialog's button.
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }))
+    const field = (await screen.findByLabelText("New API key")) as HTMLInputElement
+    expect(field.value).toBe("kvn_new-key-value")
+    const figure = screen.getByRole("figure", { name: "Connect command for Claude Code" })
+    expect(figure.querySelector("pre")?.textContent).toBe(
       `claude mcp add --transport http weather ${endpoint} --header "Authorization: Bearer kvn_new-key-value"`,
     )
+    // Separate buttons for the key and the command.
+    expect(screen.getByRole("button", { name: "Copy key" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Copy command" })).toBeTruthy()
   })
 })
 

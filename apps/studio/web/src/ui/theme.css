@@ -8,7 +8,7 @@
  *
  * Contrast (WCAG 2.1 AA, computed for every pair the components use, both themes): text 16.7+,
  * muted text 7.0+, subtle text 4.9+ (also on the subtle background), links 6.4+, text on accent
- * 5.0+, text on danger 6.3+, status text on its subtle background 4.5+, form field outlines
+ * 5.5+, text on danger 6.3+, status text on its subtle background 4.5+, form field outlines
  * 3.3+ against what surrounds them (WCAG 1.4.11).
  */
 @import "tailwindcss";
@@ -90,9 +90,10 @@
   --k-fg: #1c1917; /* 16.7:1 on bg */
   --k-fg-muted: #57534e; /* 7.3:1 on bg, 7.0:1 on subtle */
   --k-fg-subtle: #6b645f; /* 5.6:1 on bg, 5.3:1 on subtle */
-  --k-accent: #b45309; /* white text 5.0:1 */
-  --k-accent-hover: #92400e;
-  --k-accent-fg: #ffffff;
+  /* A true amber with dark text (5.5:1); white text on it would be 3.2:1. */
+  --k-accent: #d97706;
+  --k-accent-hover: #f59e0b; /* dark text 8.1:1 */
+  --k-accent-fg: #1c1917;
   --k-accent-subtle: #fef3c7;
   --k-accent-text: #92400e; /* 7.1:1 on surface, 6.4:1 on accent-subtle */
   --k-success: #15803d; /* 5.0:1 on surface, 4.6:1 on success-subtle */
@@ -103,7 +104,7 @@
   --k-danger-hover: #991b1b;
   --k-danger-fg: #ffffff; /* 6.5:1 on danger */
   --k-danger-subtle: #fee2e2;
-  --k-ring: #d97706;
+  --k-ring: #b45309;
   --k-shadow: rgb(28 25 23 / 0.06);
   --k-shadow-strong: rgb(28 25 23 / 0.18);
   color-scheme: light;
@@ -225,6 +226,12 @@
   from {
     opacity: 0;
     transform: translate(-50%, calc(-50% + 4px)) scale(0.98);
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
   }
 }
 

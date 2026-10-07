@@ -6,6 +6,7 @@ import "monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution.js"
 import { configureMonacoYaml } from "monaco-yaml"
 import { useEffect, useRef } from "react"
 import type { Issue } from "../api.js"
+import { useIsDark } from "../theme.js"
 import YamlWorker from "./yaml.worker.ts?worker"
 
 // Workers come from Studio's own origin (CSP worker-src 'self').
@@ -32,6 +33,24 @@ configureMonacoYaml(monaco, {
   ],
 })
 
+// The editor's colors follow Studio's surface tokens (theme.css), in both themes.
+monaco.editor.defineTheme("kervan-light", {
+  base: "vs",
+  inherit: true,
+  rules: [],
+  colors: { "editor.background": "#ffffff", "editorGutter.background": "#ffffff" },
+})
+monaco.editor.defineTheme("kervan-dark", {
+  base: "vs-dark",
+  inherit: true,
+  rules: [],
+  colors: {
+    "editor.background": "#181716",
+    "editorGutter.background": "#181716",
+    "editor.lineHighlightBackground": "#201e1c",
+  },
+})
+
 function toTop(instance: monaco.editor.IStandaloneCodeEditor): void {
   instance.setPosition({ lineNumber: 1, column: 1 })
   instance.setScrollTop(0)
@@ -48,6 +67,7 @@ export default function SpecEditor(props: {
   const editor = useRef<monaco.editor.IStandaloneCodeEditor>(undefined)
   const onChange = useRef(props.onChange)
   onChange.current = props.onChange
+  const dark = useIsDark()
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: created once; value syncs below
   useEffect(() => {
@@ -60,6 +80,12 @@ export default function SpecEditor(props: {
       minimap: { enabled: false },
       tabSize: 2,
       scrollBeyondLastLine: false,
+      theme: dark ? "kervan-dark" : "kervan-light",
+      fontSize: 13,
+      // Long descriptions and selects wrap, indented, instead of running off the side.
+      wordWrap: "on",
+      wrappingIndent: "indent",
+      padding: { top: 8 },
     })
     editor.current = instance
     toTop(instance)
@@ -79,6 +105,9 @@ export default function SpecEditor(props: {
     model.setValue(props.value)
     toTop(instance)
   }, [props.value])
+
+  // Monaco's theme is global; there is one editor on the page.
+  useEffect(() => monaco.editor.setTheme(dark ? "kervan-dark" : "kervan-light"), [dark])
 
   useEffect(() => {
     const model = editor.current?.getModel()
@@ -103,5 +132,5 @@ export default function SpecEditor(props: {
     )
   }, [props.issues])
 
-  return <div className="editor" ref={container} />
+  return <div className="h-[60vh] min-h-80" ref={container} data-testid="spec-editor" />
 }

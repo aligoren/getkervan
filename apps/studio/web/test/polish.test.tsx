@@ -54,8 +54,8 @@ describe("next steps", () => {
     const page = render(<NextSteps serverId="s1" isAdmin refresh={0} />)
     await page.findByText(/Publish it/)
     const items = [...page.container.querySelectorAll("li")].map((li) => [
-      li.textContent?.replace(/[✓○]\s*/, ""),
-      li.className === "done",
+      li.textContent,
+      li.hasAttribute("data-done"),
     ])
     expect(items).toEqual([
       ["Save a version of the spec that is valid (done)", true],
@@ -90,7 +90,7 @@ describe("next steps", () => {
       )
     const page = render(<NextSteps serverId="s9" isAdmin={false} refresh={0} />)
     await page.findByText(/Publish it/)
-    expect(page.container.querySelector("li")?.className).toBe("done")
+    expect(page.container.querySelector("li")?.hasAttribute("data-done")).toBe(true)
     cleanup()
     handler = () =>
       json(
@@ -105,7 +105,25 @@ describe("next steps", () => {
       )
     const none = render(<NextSteps serverId="s9" isAdmin={false} refresh={0} />)
     await none.findByText(/Publish it/)
-    expect(none.container.querySelector("li")?.className).not.toBe("done")
+    expect(none.container.querySelector("li")?.hasAttribute("data-done")).toBe(false)
+  })
+
+  it("does not ask for secrets when the published version uses none", async () => {
+    const broken = { valid: false, problems: 1, secrets: 0, checkedAt: 0 }
+    handler = () =>
+      json(
+        overview({
+          summary: {
+            latest: { id: "v2", number: 2, check: broken },
+            publishedNumber: 1,
+            lastCallAt: null,
+          },
+          publishedSecrets: 0,
+        }),
+      )
+    const page = render(<NextSteps serverId="s7" isAdmin refresh={0} />)
+    const step = await page.findByText(/Add the secrets the spec uses/)
+    expect(step.closest("li")?.hasAttribute("data-done")).toBe(true)
   })
 
   it("shows members only the steps they can take", async () => {
@@ -158,14 +176,16 @@ describe("status in the server list and the version history", () => {
       />,
     )
     const rows = [...page.container.querySelectorAll("tbody tr")].map((row) =>
-      [...row.querySelectorAll(".badge")].map((badge) => `${badge.className}:${badge.textContent}`),
+      [...row.querySelectorAll("[data-tone]")].map(
+        (badge) => `${badge.getAttribute("data-tone")}:${badge.textContent}`,
+      ),
     )
     expect(rows).toEqual([
-      ["badge ok:published v1", "badge bad:draft v2 has problems"],
-      ["badge plain:not published", "badge plain:draft v1 not checked"],
-      ["badge ok:published v3"],
+      ["success:published v1", "danger:draft v2 has problems"],
+      ["neutral:not published", "neutral:draft v1 not checked"],
+      ["success:published v3"],
     ])
-    expect(page.container.textContent).toContain("—")
+    expect(page.container.textContent).toContain("never")
   })
 
   it("marks each version in the history", () => {
@@ -186,8 +206,10 @@ describe("status in the server list and the version history", () => {
         onChanged={() => {}}
       />,
     )
-    const badges = [...page.container.querySelectorAll("tbody .badge")].map((b) => b.textContent)
-    expect(badges).toEqual(["2 problems", "not checked", "valid"])
+    const badges = [...page.container.querySelectorAll("tbody [data-tone]")].map(
+      (b) => b.textContent,
+    )
+    expect(badges).toEqual(["2 problems", "not checked", "published", "valid"])
     expect(render(<CheckBadge check={check(false, 1)} />).container.textContent).toBe("1 problem")
   })
 })
@@ -220,7 +242,7 @@ describe("a forced password change", () => {
     fireEvent.change(page.getByLabelText("Current password"), {
       target: { value: "temporary pw 123" },
     })
-    fireEvent.change(page.getByLabelText("New password (at least 12 characters)"), {
+    fireEvent.change(page.getByLabelText("New password"), {
       target: { value: "my own new password" },
     })
     fireEvent.change(page.getByLabelText("Repeat the new password"), {
@@ -257,7 +279,7 @@ describe("the profile page", () => {
     const page = render(<Profile onChanged={() => {}} />)
     await page.findByText("m@example.test")
     const current = page.getByLabelText("Current password") as HTMLInputElement
-    const next = page.getByLabelText("New password (at least 12 characters)") as HTMLInputElement
+    const next = page.getByLabelText("New password") as HTMLInputElement
     expect([current.type, current.autocomplete]).toEqual(["password", "current-password"])
     expect([next.type, next.autocomplete]).toEqual(["password", "new-password"])
     fireEvent.change(current, { target: { value: "x" } })

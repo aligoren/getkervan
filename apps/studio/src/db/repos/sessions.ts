@@ -3,7 +3,7 @@ import { randomToken, sha256 } from "../../crypto.js"
 import type { Db } from "../open.js"
 import { sessions, users } from "../schema.js"
 import { type WorkspaceScope, workspaceScope } from "../scope.js"
-import type { Role } from "./users.js"
+import type { Role, Theme } from "./users.js"
 
 /** A session ends after this long without a request. */
 export const SESSION_IDLE_MS = 2 * 60 * 60 * 1000
@@ -19,6 +19,7 @@ export interface SessionUser {
   displayName: string | null
   /** The user must change their password before using anything else (an admin reset it). */
   mustChangePassword: boolean
+  theme: Theme
 }
 
 /** A session as its owner sees it: never its id or the id's hash. */
@@ -86,6 +87,7 @@ export function findSession(db: Db, id: string, now = Date.now()): ActiveSession
       role: users.role,
       displayName: users.displayName,
       mustChangePassword: users.mustChangePassword,
+      theme: users.theme,
       userWorkspaceId: users.workspaceId,
       disabledAt: users.disabledAt,
     })
@@ -111,6 +113,7 @@ export function findSession(db: Db, id: string, now = Date.now()): ActiveSession
       role: row.role,
       displayName: row.displayName,
       mustChangePassword: row.mustChangePassword,
+      theme: row.theme,
     },
     expiresAt: row.expiresAt,
   }

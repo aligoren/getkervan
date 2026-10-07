@@ -14,7 +14,8 @@
     "format": "biome check --write .",
     "test": "pnpm build && vitest run",
     "test:watch": "vitest",
-    "check:pack": "pnpm -r --filter \"./packages/*\" run check:pack"
+    "check:pack": "pnpm -r --filter \"./packages/*\" run check:pack",
+    "e2e": "pnpm build && pnpm --filter @kervan/studio e2e"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

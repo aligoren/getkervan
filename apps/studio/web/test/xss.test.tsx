@@ -30,7 +30,11 @@ const PAYLOADS = [
 
 /** No element the payload could create, no handler attribute, no javascript: URL. */
 function expectInert(container: HTMLElement, payload: string) {
-  expect(container.querySelectorAll("img, script, iframe, svg, object, embed")).toHaveLength(0)
+  // The design system's own icons are SVGs (lucide); anything else is foreign.
+  const foreign = [...container.querySelectorAll("img, script, iframe, svg, object, embed")].filter(
+    (element) => !(element.tagName.toLowerCase() === "svg" && element.classList.contains("lucide")),
+  )
+  expect(foreign).toHaveLength(0)
   for (const element of container.querySelectorAll("*")) {
     for (const attribute of element.getAttributeNames()) {
       expect(attribute.startsWith("on"), `${element.tagName} ${attribute}`).toBe(false)
@@ -160,7 +164,14 @@ describe.each(PAYLOADS)("untrusted text in 4c views is never HTML: %s", (payload
         ]}
       />,
     )
-    expect(container.querySelectorAll("img, script, iframe, svg, object, embed")).toHaveLength(0)
+    // The design system's own icons are SVGs (lucide); anything else is foreign.
+    const foreign = [
+      ...container.querySelectorAll("img, script, iframe, svg, object, embed"),
+    ].filter(
+      (element) =>
+        !(element.tagName.toLowerCase() === "svg" && element.classList.contains("lucide")),
+    )
+    expect(foreign).toHaveLength(0)
     expect(container.textContent).toContain(payload)
   })
 

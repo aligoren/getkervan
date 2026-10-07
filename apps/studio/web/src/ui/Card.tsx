@@ -20,7 +20,7 @@ export function CardHeader(props: {
   return (
     <div
       className={cn(
-        "flex items-start justify-between gap-4 border-b border-border px-5 py-4",
+        "flex flex-col gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4",
         props.className,
       )}
     >
@@ -31,7 +31,7 @@ export function CardHeader(props: {
         ) : null}
       </div>
       {props.actions ? (
-        <div className="flex shrink-0 items-center gap-2">{props.actions}</div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">{props.actions}</div>
       ) : null}
     </div>
   )

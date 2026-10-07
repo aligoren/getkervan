@@ -66,13 +66,14 @@ describe("upgrading a database from before user management", () => {
     const upgraded = openDatabase(file)
     cleanups.push(() => upgraded.close())
     const applied = upgraded.sqlite.prepare("SELECT count(*) AS n FROM __drizzle_migrations").get()
-    expect(applied).toEqual({ n: 6 })
+    expect(applied).toEqual({ n: 7 })
     expect(getUser(upgraded.db, scope, "u1")).toMatchObject({
       email: "old@example.test",
       role: "admin",
       displayName: null,
       mustChangePassword: false,
       lastLoginAt: null,
+      theme: "system",
     })
     // An old session keeps working, with no recorded IP or browser.
     expect(findSession(upgraded.db, sessionId)?.user).toMatchObject({
@@ -180,6 +181,38 @@ describe("version checks", () => {
     expect(forMember.status).toBe(200)
     expect(forMember.json).not.toHaveProperty("secrets")
     expect(forMember.json).not.toHaveProperty("activeKeys")
+  })
+
+  it("tells the next steps how many secrets the published version uses", async () => {
+    const { s, admin, id, save } = await setup()
+    const overview = async () => (await s.request("GET", `/api/servers/${id}/overview`, admin)).json
+    expect((await overview()).publishedSecrets).toBeNull()
+    const saved = await save(spec(echoTool("https://api.example.com/x")))
+    const versionId = String((saved.version as { id: string }).id)
+    await s.request("POST", `/api/servers/${id}/versions/${versionId}/publish`, {
+      ...admin,
+      body: {},
+    })
+    // A broken newer draft does not hide that the published version needs no secrets.
+    await save("specVersion: 1\nname: x\nversion: 1\ntools: [{ name: 1 }]\n")
+    expect((await overview()).publishedSecrets).toBe(0)
+  })
+
+  it("gives the server page the same status as the list", async () => {
+    const { s, admin, id, save } = await setup()
+    const saved = await save(spec(echoTool("https://api.example.com/x")))
+    const versionId = String((saved.version as { id: string }).id)
+    await s.request("POST", `/api/servers/${id}/versions/${versionId}/publish`, {
+      ...admin,
+      body: {},
+    })
+    await save("specVersion: 1\nname: x\nversion: 1\ntools: [{ name: 1 }]\n")
+    const detail = await s.request("GET", `/api/servers/${id}`, admin)
+    expect((detail.json.server as { summary: unknown }).summary).toMatchObject({
+      latest: { number: 2, check: { valid: false } },
+      publishedNumber: 1,
+      lastCallAt: null,
+    })
   })
 
   it("reports a valid version even when the newest one has problems (next steps)", async () => {

@@ -1,4 +1,5 @@
 import type { Client } from "@modelcontextprotocol/client"
+import { Play, PlugZap } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { api } from "../api.js"
 import {
@@ -9,6 +10,11 @@ import {
   ToolOutput,
   type ToolSummary,
 } from "../components/untrusted.js"
+import { Badge } from "../ui/Badge.js"
+import { Button } from "../ui/Button.js"
+import { Card, CardContent, CardHeader } from "../ui/Card.js"
+import { CopyButton } from "../ui/Copy.js"
+import { Field, Textarea } from "../ui/Field.js"
 import { connectPlayground } from "./client.js"
 import { argumentSkeleton } from "./skeleton.js"
 
@@ -19,7 +25,11 @@ interface Grant {
 }
 
 /** Calls one saved version (draft or published) through the gateway, as a real client would. */
-export function Playground(props: { serverId: string; versionId: string | undefined }) {
+export function Playground(props: {
+  serverId: string
+  versionId: string | undefined
+  versionNumber?: number | undefined
+}) {
   const [client, setClient] = useState<Client>()
   const [tools, setTools] = useState<(ToolSummary & { inputSchema?: unknown })[]>([])
   const [selected, setSelected] = useState<string>()
@@ -27,7 +37,7 @@ export function Playground(props: { serverId: string; versionId: string | undefi
   const [result, setResult] = useState<unknown>()
   const [log, setLog] = useState<LogEntry[]>([])
   const [error, setError] = useState<unknown>()
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<"connect" | "call">()
   const nextId = useRef(0)
 
   // A new version means a new connection.
@@ -49,7 +59,7 @@ export function Playground(props: { serverId: string; versionId: string | undefi
 
   const connect = async () => {
     if (!props.versionId) return
-    setBusy(true)
+    setBusy("connect")
     setError(undefined)
     try {
       const grant = await api<Grant>(
@@ -63,13 +73,13 @@ export function Playground(props: { serverId: string; versionId: string | undefi
     } catch (caught) {
       setError(caught)
     } finally {
-      setBusy(false)
+      setBusy(undefined)
     }
   }
 
   const call = async () => {
     if (!client || !selected) return
-    setBusy(true)
+    setBusy("call")
     setError(undefined)
     try {
       const parsed: unknown = JSON.parse(args)
@@ -82,68 +92,101 @@ export function Playground(props: { serverId: string; versionId: string | undefi
     } catch (caught) {
       setError(caught)
     } finally {
-      setBusy(false)
+      setBusy(undefined)
     }
   }
 
+  // The log never holds the playground token (see client.ts).
+  const transcript = log
+    .map((entry) => `${entry.direction === "request" ? "→" : "←"} ${entry.text}`)
+    .join("\n\n")
+
   return (
-    <section className="playground">
-      <h2>Playground</h2>
-      <p className="muted">
-        Try the selected version here with a temporary 15-minute token. To connect Claude or another
-        client for good, create an API key in the API keys tab.
-      </p>
-      <button type="button" onClick={connect} disabled={!props.versionId || busy}>
-        {client ? "Reconnect" : "Connect"}
-      </button>
-      <ErrorText error={error} />
-      <ToolList
-        tools={tools}
-        selected={selected}
-        onSelect={(name) => {
-          setSelected(name)
-          setArgs(argumentSkeleton(tools.find((tool) => tool.name === name)?.inputSchema))
-          // The previous tool's result or error does not belong to this one.
-          setResult(undefined)
-          setError(undefined)
-        }}
+    <Card className="min-w-0" data-testid="playground">
+      <CardHeader
+        title="Playground"
+        description="Try the selected version through the gateway, with a temporary 15-minute token. Clients that stay connected need an API key."
       />
-      {selected ? (
-        <div className="call">
-          <label>
-            Arguments (JSON)
-            <textarea
-              value={args}
-              onChange={(event) => setArgs(event.target.value)}
-              rows={5}
-              spellCheck={false}
-            />
-          </label>
-          <button type="button" onClick={call} disabled={busy}>
-            Call {selected}
-          </button>
-        </div>
-      ) : null}
-      {result !== undefined ? <ToolOutput result={result} /> : null}
-      <details>
-        <summary>Raw requests and responses ({log.length})</summary>
-        {log.length > 0 ? (
-          <button
-            type="button"
-            onClick={() =>
-              // The log never holds the playground token (see client.ts).
-              void navigator.clipboard?.writeText(
-                log
-                  .map((entry) => `${entry.direction === "request" ? "→" : "←"} ${entry.text}`)
-                  .join("\n\n"),
-              )
-            }
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={client ? "secondary" : "primary"}
+            onClick={() => void connect()}
+            disabled={!props.versionId}
+            loading={busy === "connect"}
+            icon={<PlugZap className="size-4" aria-hidden="true" />}
           >
-            Copy
-          </button>
+            {client ? "Reconnect" : "Connect"}
+          </Button>
+          {props.versionId === undefined ? (
+            <span className="text-xs text-fg-subtle">Save a version to try it.</span>
+          ) : client ? (
+            <Badge tone="success" dot>
+              {props.versionNumber === undefined
+                ? "connected"
+                : `connected to v${props.versionNumber}`}
+            </Badge>
+          ) : null}
+        </div>
+        <ErrorText error={error} />
+        {client ? (
+          <section aria-label="Tools" className="space-y-2">
+            <h3 className="text-xs font-medium tracking-wide text-fg-muted uppercase">Tools</h3>
+            <ToolList
+              tools={tools}
+              selected={selected}
+              onSelect={(name) => {
+                setSelected(name)
+                setArgs(argumentSkeleton(tools.find((tool) => tool.name === name)?.inputSchema))
+                // The previous tool's result or error does not belong to this one.
+                setResult(undefined)
+                setError(undefined)
+              }}
+            />
+          </section>
         ) : null}
-        <RawLog entries={log} />
-      </details>
-    </section>
+        {selected ? (
+          <div className="space-y-3">
+            <Field label="Arguments (JSON)">
+              <Textarea
+                value={args}
+                onChange={(event) => setArgs(event.target.value)}
+                rows={5}
+                spellCheck={false}
+                className="font-mono text-[0.8125rem]"
+              />
+            </Field>
+            <Button
+              variant="primary"
+              onClick={() => void call()}
+              loading={busy === "call"}
+              disabled={busy === "connect"}
+              icon={<Play className="size-4" aria-hidden="true" />}
+            >
+              Call {selected}
+            </Button>
+          </div>
+        ) : null}
+        {result !== undefined ? (
+          <section aria-label="Result" className="space-y-2">
+            <h3 className="text-xs font-medium tracking-wide text-fg-muted uppercase">Result</h3>
+            <ToolOutput result={result} />
+          </section>
+        ) : null}
+        <details className="group rounded-md border border-border">
+          <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm font-medium text-fg-muted select-none hover:text-fg">
+            {`Raw requests and responses (${log.length})`}
+          </summary>
+          <div className="space-y-2 border-t border-border p-3">
+            {log.length > 0 ? (
+              <CopyButton value={transcript} label="Copy" size="sm" copiedMessage="Log copied" />
+            ) : (
+              <p className="text-xs text-fg-subtle">Nothing yet. Connect to see the traffic.</p>
+            )}
+            <RawLog entries={log} />
+          </div>
+        </details>
+      </CardContent>
+    </Card>
   )
 }

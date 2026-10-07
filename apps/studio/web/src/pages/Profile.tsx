@@ -1,22 +1,32 @@
+import { Laptop, LogOut } from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useState } from "react"
 import { api, type User } from "../api.js"
 import { UsernameField } from "../components/UsernameField.js"
 import { ErrorText } from "../components/untrusted.js"
 import { deviceName } from "../device.js"
-
-/** A time, or "—" when there is none. */
-export function when(time: number | null | undefined): string {
-  return typeof time === "number" ? new Date(time).toLocaleString() : "—"
-}
+import { Ago, DateOnly } from "../time.js"
+import { Badge } from "../ui/Badge.js"
+import { Button } from "../ui/Button.js"
+import { Card, CardContent, CardFooter, CardHeader } from "../ui/Card.js"
+import { Field, Input } from "../ui/Field.js"
+import { PageHeader, Skeleton } from "../ui/Layout.js"
+import { useToast } from "../ui/Toast.js"
+import { AuthLayout } from "./Auth.js"
 
 /**
  * Changes the signed-in user's password. The current password is required; the new one needs
  * at least 12 characters. Every other session ends.
  */
-function PasswordForm(props: { username: string; onDone: (sessionsEnded: number) => void }) {
+function PasswordForm(props: {
+  username: string
+  onDone: (sessionsEnded: number) => void
+  /** In a card: fields in the body, the button in the card's footer. */
+  inCard?: boolean
+}) {
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
   const [repeat, setRepeat] = useState("")
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>()
 
   const submit = async (event: FormEvent) => {
@@ -26,6 +36,7 @@ function PasswordForm(props: { username: string; onDone: (sessionsEnded: number)
       setError(new Error("The new passwords do not match."))
       return
     }
+    setBusy(true)
     try {
       const result = await api<{ sessionsEnded: number }>("PUT", "/profile/password", {
         currentPassword: current,
@@ -37,25 +48,25 @@ function PasswordForm(props: { username: string; onDone: (sessionsEnded: number)
       props.onDone(result.sessionsEnded)
     } catch (caught) {
       setError(caught)
+    } finally {
+      setBusy(false)
     }
   }
 
-  return (
-    <form className="stack" onSubmit={submit}>
+  const fields = (
+    <div className="space-y-4">
       <UsernameField username={props.username} />
-      <label>
-        Current password
-        <input
+      <Field label="Current password">
+        <Input
           type="password"
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
           autoComplete="current-password"
           required
         />
-      </label>
-      <label>
-        New password (at least 12 characters)
-        <input
+      </Field>
+      <Field label="New password" help="At least 12 characters.">
+        <Input
           type="password"
           value={next}
           onChange={(e) => setNext(e.target.value)}
@@ -63,10 +74,9 @@ function PasswordForm(props: { username: string; onDone: (sessionsEnded: number)
           minLength={12}
           required
         />
-      </label>
-      <label>
-        Repeat the new password
-        <input
+      </Field>
+      <Field label="Repeat the new password">
+        <Input
           type="password"
           value={repeat}
           onChange={(e) => setRepeat(e.target.value)}
@@ -74,9 +84,29 @@ function PasswordForm(props: { username: string; onDone: (sessionsEnded: number)
           minLength={12}
           required
         />
-      </label>
+      </Field>
       <ErrorText error={error} />
-      <button type="submit">Change password</button>
+    </div>
+  )
+
+  if (props.inCard) {
+    return (
+      <form onSubmit={submit}>
+        <CardContent className="max-w-md">{fields}</CardContent>
+        <CardFooter>
+          <Button type="submit" variant="primary" loading={busy}>
+            Change password
+          </Button>
+        </CardFooter>
+      </form>
+    )
+  }
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      {fields}
+      <Button type="submit" variant="primary" loading={busy} className="w-full">
+        Change password
+      </Button>
     </form>
   )
 }
@@ -84,16 +114,20 @@ function PasswordForm(props: { username: string; onDone: (sessionsEnded: number)
 /** After an admin reset the password: the only thing the user can do is choose a new one. */
 export function ChangePassword(props: { user: User; onDone: () => void; onSignOut: () => void }) {
   return (
-    <section className="card">
-      <h1>Choose a new password</h1>
-      <p className="muted">
-        An admin reset the password of {props.user.email}. Choose your own before you continue.
-      </p>
+    <AuthLayout
+      title="Choose a new password"
+      description={`An admin reset the password of ${props.user.email}. Choose your own before you continue.`}
+    >
       <PasswordForm username={props.user.email} onDone={props.onDone} />
-      <button type="button" onClick={props.onSignOut}>
+      <Button
+        variant="ghost"
+        className="w-full"
+        onClick={props.onSignOut}
+        icon={<LogOut className="size-4" aria-hidden="true" />}
+      >
         Sign out
-      </button>
-    </section>
+      </Button>
+    </AuthLayout>
   )
 }
 
@@ -108,10 +142,11 @@ interface SessionSummary {
 
 /** The signed-in user's own account: name, password and sessions. */
 export function Profile(props: { onChanged: (user: User) => void }) {
+  const notify = useToast()
   const [user, setUser] = useState<User>()
   const [displayName, setDisplayName] = useState("")
   const [sessions, setSessions] = useState<SessionSummary[]>([])
-  const [notice, setNotice] = useState<string>()
+  const [savingName, setSavingName] = useState(false)
   const [error, setError] = useState<unknown>()
 
   const load = useCallback(async () => {
@@ -133,90 +168,161 @@ export function Profile(props: { onChanged: (user: User) => void }) {
 
   const act = async (action: () => Promise<string>) => {
     setError(undefined)
-    setNotice(undefined)
     try {
-      setNotice(await action())
+      notify(await action())
       await load()
     } catch (caught) {
       setError(caught)
     }
   }
 
-  const saveName = (event: FormEvent) => {
+  const saveName = async (event: FormEvent) => {
     event.preventDefault()
-    void act(async () => {
+    setSavingName(true)
+    await act(async () => {
       const saved = await api<{ user: User }>("PUT", "/profile", {
         displayName: displayName.trim() === "" ? null : displayName,
       })
       props.onChanged(saved.user)
-      return "Saved."
+      return "Name saved."
     })
+    setSavingName(false)
   }
 
-  if (!user) return <ErrorText error={error} />
+  const header = (
+    <PageHeader
+      title="Profile"
+      description="Your account, your password and the browsers where you are signed in."
+    />
+  )
+  if (!user) {
+    return (
+      <div className="max-w-3xl">
+        {header}
+        {error ? (
+          <ErrorText error={error} />
+        ) : (
+          <div className="space-y-4" aria-busy="true">
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-72 w-full" />
+          </div>
+        )}
+      </div>
+    )
+  }
+  const others = sessions.filter((session) => !session.current).length
+  // Forms read best at a comfortable width, not stretched across a wide screen.
   return (
-    <section className="profile">
-      <h1>Profile</h1>
-      {notice ? <p className="notice">{notice}</p> : null}
-      <ErrorText error={error} />
+    <div className="max-w-3xl">
+      {header}
+      <div className="space-y-6">
+        <ErrorText error={error} />
 
-      <h2>Account</h2>
-      <dl className="facts">
-        <dt>Email</dt>
-        <dd>{user.email}</dd>
-        <dt>Role</dt>
-        <dd>{user.role}</dd>
-        <dt>Member since</dt>
-        <dd>{when(user.createdAt)}</dd>
-      </dl>
-      <p className="muted">Only an admin can change your email or role.</p>
-      <form className="stack" onSubmit={saveName}>
-        <label>
-          Display name (optional)
-          <input
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            maxLength={100}
-            autoComplete="name"
+        <Card>
+          <CardHeader title="Account" description="Only an admin can change your email or role." />
+          <form onSubmit={(e) => void saveName(e)}>
+            <CardContent className="space-y-5">
+              <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
+                <div className="min-w-0">
+                  <dt className="text-xs text-fg-subtle">Email</dt>
+                  <dd className="mt-0.5 font-medium break-all">{user.email}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-fg-subtle">Role</dt>
+                  <dd className="mt-0.5">
+                    <Badge tone={user.role === "admin" ? "accent" : "neutral"}>{user.role}</Badge>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-fg-subtle">Member since</dt>
+                  <dd className="mt-0.5">
+                    <DateOnly time={user.createdAt} />
+                  </dd>
+                </div>
+              </dl>
+              <Field label="Display name" hint="optional" className="max-w-md">
+                <Input
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={100}
+                  autoComplete="name"
+                />
+              </Field>
+            </CardContent>
+            <CardFooter>
+              <Button type="submit" loading={savingName}>
+                Save name
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Password"
+            description="Changing it signs you out everywhere else; this session stays."
           />
-        </label>
-        <button type="submit">Save name</button>
-      </form>
+          <PasswordForm
+            inCard
+            username={user.email}
+            onDone={(ended) =>
+              void act(async () => `Password changed. ${ended} other session(s) were signed out.`)
+            }
+          />
+        </Card>
 
-      <h2>Password</h2>
-      <PasswordForm
-        username={user.email}
-        onDone={(ended) =>
-          void act(async () => `Password changed. ${ended} other session(s) were signed out.`)
-        }
-      />
-
-      <h2>Sessions</h2>
-      <table className="sessions">
-        <thead>
-          <tr>
-            <th>Started</th>
-            <th>Last active</th>
-            <th>IP</th>
-            <th>Browser</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {sessions.map((session) => (
-            <tr key={session.ref}>
-              <td>{when(session.createdAt)}</td>
-              <td>{when(session.lastSeenAt)}</td>
-              <td>{session.ip ?? "—"}</td>
-              <td className="wrap" title={session.userAgent ?? undefined}>
-                {deviceName(session.userAgent)}
-              </td>
-              <td>
-                {session.current ? (
-                  <span className="badge ok">this session</span>
-                ) : (
-                  <button
-                    type="button"
+        <Card>
+          <CardHeader
+            title="Sessions"
+            description="Browsers where you are signed in. Sign out any you do not recognize."
+            actions={
+              <Button
+                size="sm"
+                disabled={others === 0}
+                onClick={() =>
+                  void act(async () => {
+                    const result = await api<{ sessionsEnded: number }>(
+                      "POST",
+                      "/profile/sessions/end-others",
+                    )
+                    return `Signed out ${result.sessionsEnded} other session(s).`
+                  })
+                }
+              >
+                Sign out all other sessions
+              </Button>
+            }
+            className="flex-wrap"
+          />
+          <ul className="divide-y divide-border" aria-label="Sessions">
+            {sessions.map((session) => (
+              <li key={session.ref} className="flex items-center gap-x-4 gap-y-2 px-5 py-3.5">
+                <Laptop
+                  className="hidden size-5 shrink-0 text-fg-subtle sm:block"
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium" title={session.userAgent ?? undefined}>
+                      {deviceName(session.userAgent)}
+                    </span>
+                    {session.current ? (
+                      <Badge tone="success" dot>
+                        this session
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-xs break-words text-fg-subtle">
+                    {`${session.ip ?? "unknown address"} · signed in `}
+                    <Ago time={session.createdAt} />
+                    {" · active "}
+                    <Ago time={session.lastSeenAt} />
+                  </p>
+                </div>
+                {session.current ? null : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() =>
                       void act(async () => {
                         await api("DELETE", `/profile/sessions/${encodeURIComponent(session.ref)}`)
@@ -225,28 +331,13 @@ export function Profile(props: { onChanged: (user: User) => void }) {
                     }
                   >
                     Sign out
-                  </button>
+                  </Button>
                 )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <button
-        type="button"
-        disabled={sessions.every((session) => session.current)}
-        onClick={() =>
-          void act(async () => {
-            const result = await api<{ sessionsEnded: number }>(
-              "POST",
-              "/profile/sessions/end-others",
-            )
-            return `Signed out ${result.sessionsEnded} other session(s).`
-          })
-        }
-      >
-        Sign out all other sessions
-      </button>
-    </section>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+    </div>
   )
 }

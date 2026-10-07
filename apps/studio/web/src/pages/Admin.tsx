@@ -1,8 +1,34 @@
-import { type FormEvent, useCallback, useEffect, useState } from "react"
+import {
+  Ellipsis,
+  KeyRound,
+  Mail,
+  RefreshCw,
+  ShieldCheck,
+  UserCheck,
+  UserPlus,
+  UserX,
+} from "lucide-react"
+import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react"
 import { api, type User } from "../api.js"
 import { UsernameField } from "../components/UsernameField.js"
 import { type AuditEntry, AuditTable, ErrorText } from "../components/untrusted.js"
-import { when } from "./Profile.js"
+import { Ago, DateOnly } from "../time.js"
+import { Badge } from "../ui/Badge.js"
+import { Button } from "../ui/Button.js"
+import { CopyButton } from "../ui/Copy.js"
+import { Dialog } from "../ui/Dialog.js"
+import { Checkbox, Field, Input } from "../ui/Field.js"
+import { Alert, PageHeader, Skeleton } from "../ui/Layout.js"
+import { Menu, Select } from "../ui/Radix.js"
+import { Table, TBody, TD, TH, THead, TR } from "../ui/Table.js"
+import { useToast } from "../ui/Toast.js"
+
+type Role = "admin" | "member"
+
+const ROLE_OPTIONS = [
+  { value: "member", label: "member" },
+  { value: "admin", label: "admin" },
+]
 
 interface UserKey {
   id: string
@@ -11,20 +37,81 @@ interface UserKey {
   serverName: string
 }
 
-/** What the page is asking about, below the table. */
+/** The dialog that is open, if any. */
 type Pending =
   | { kind: "deactivate"; user: User; keys: UserKey[] }
   | { kind: "reset"; user: User }
   | { kind: "email"; user: User }
   | { kind: "temporary"; user: User; password: string }
-  | { kind: "role"; user: User; role: "admin" | "member" }
+  | { kind: "role"; user: User }
+  | { kind: "add" }
+
+const userPath = (user: User, rest = "") => `/users/${encodeURIComponent(user.id)}${rest}`
+
+/**
+ * A dialog with a form: runs `onSubmit`, shows its error in the dialog, and keeps the dialog
+ * open until it succeeds.
+ */
+function FormDialog(props: {
+  title: string
+  description?: ReactNode
+  submitLabel: string
+  tone?: "default" | "danger"
+  onSubmit: () => Promise<void>
+  onClose: () => void
+  children: ReactNode
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>()
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setError(undefined)
+    setBusy(true)
+    try {
+      await props.onSubmit()
+    } catch (caught) {
+      setError(caught)
+      setBusy(false)
+    }
+  }
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) props.onClose()
+      }}
+      title={props.title}
+      description={props.description}
+      tone={props.tone ?? "default"}
+      footer={
+        <>
+          <Button onClick={props.onClose}>Cancel</Button>
+          <Button
+            type="submit"
+            form="user-dialog"
+            variant={props.tone === "danger" ? "danger" : "primary"}
+            loading={busy}
+          >
+            {props.submitLabel}
+          </Button>
+        </>
+      }
+    >
+      <form id="user-dialog" className="space-y-4" onSubmit={submit}>
+        {props.children}
+        <ErrorText error={error} />
+      </form>
+    </Dialog>
+  )
+}
 
 /** Users of the workspace (admins only). */
 export function Users(props: { currentUserId?: string; currentUserEmail?: string } = {}) {
-  const [users, setUsers] = useState<User[]>([])
+  const notify = useToast()
+  const [users, setUsers] = useState<User[]>()
   const [pending, setPending] = useState<Pending>()
-  const [notice, setNotice] = useState<string>()
   const [error, setError] = useState<unknown>()
+  const adminEmail = props.currentUserEmail ?? ""
 
   const load = useCallback(
     () =>
@@ -38,446 +125,529 @@ export function Users(props: { currentUserId?: string; currentUserEmail?: string
     void load()
   }, [load])
 
-  /** Runs a change, then reloads; errors (a clash, the last admin) show above the table. */
-  const act = async (action: () => Promise<string | undefined>) => {
+  /** After a change: close the dialog, say what happened, reload. */
+  const done = async (message: string, next?: Pending) => {
+    setPending(next)
+    notify(message)
+    await load()
+  }
+
+  const askToDeactivate = async (user: User) => {
     setError(undefined)
-    setNotice(undefined)
     try {
-      setNotice(await action())
-      await load()
+      const data = await api<{ keys: UserKey[] }>("GET", userPath(user, "/keys"))
+      setPending({ kind: "deactivate", user, keys: data.keys })
     } catch (caught) {
       setError(caught)
     }
   }
-  const path = (user: User, rest = "") => `/users/${encodeURIComponent(user.id)}${rest}`
 
-  const askToDeactivate = (user: User) =>
-    void act(async () => {
-      const data = await api<{ keys: UserKey[] }>("GET", path(user, "/keys"))
-      setPending({ kind: "deactivate", user, keys: data.keys })
-      return undefined
-    })
+  const reactivate = async (user: User) => {
+    setError(undefined)
+    try {
+      await api("PUT", userPath(user), { disabled: false })
+      await done(`${user.email} is active again.`)
+    } catch (caught) {
+      setError(caught)
+    }
+  }
+
+  const close = () => setPending(undefined)
 
   return (
-    <section>
-      <h1>Users</h1>
-      {notice ? <p className="notice">{notice}</p> : null}
-      <ErrorText error={error} />
-      <table className="users">
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th>Created</th>
-            <th>Last login</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user) => {
-            const disabled = typeof user.disabledAt === "number"
-            return (
-              <tr key={user.id} className={disabled ? "revoked" : undefined}>
-                <td>
-                  {user.email}
-                  {user.displayName ? <div className="muted">{user.displayName}</div> : null}
-                </td>
-                <td>
-                  <select
-                    aria-label={`Role of ${user.email}`}
-                    value={user.role}
-                    // A role change asks first, with the admin's own password (the API insists too).
-                    onChange={(e) =>
-                      setPending({
-                        kind: "role",
-                        user,
-                        role: e.target.value === "admin" ? "admin" : "member",
-                      })
-                    }
-                  >
-                    <option value="member">member</option>
-                    <option value="admin">admin</option>
-                  </select>
-                </td>
-                <td>
-                  {disabled ? "deactivated" : "active"}
-                  {user.mustChangePassword ? (
-                    <div className="muted">must change password</div>
-                  ) : null}
-                </td>
-                <td>{when(user.createdAt)}</td>
-                <td>{when(user.lastLoginAt)}</td>
-                <td className="actions">
-                  <button type="button" onClick={() => setPending({ kind: "email", user })}>
-                    Edit email
-                  </button>
-                  {user.id === props.currentUserId ? null : (
-                    <button type="button" onClick={() => setPending({ kind: "reset", user })}>
-                      Reset password
-                    </button>
-                  )}
-                  {disabled ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void act(async () => {
-                          await api("PUT", path(user), { disabled: false })
-                          return `${user.email} is active again.`
-                        })
+    <>
+      <PageHeader
+        title="Users"
+        description="Who can sign in to this Studio. Users are deactivated, never deleted, so the audit log keeps pointing at them."
+        actions={
+          <Button
+            variant="primary"
+            icon={<UserPlus className="size-4" aria-hidden="true" />}
+            onClick={() => setPending({ kind: "add" })}
+          >
+            Add user
+          </Button>
+        }
+      />
+      <ErrorText error={error} className="mb-4" />
+      {users === undefined ? (
+        error ? null : (
+          <div className="space-y-2" aria-busy="true">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+          </div>
+        )
+      ) : (
+        <Table aria-label="Users">
+          <THead>
+            <tr>
+              <TH>User</TH>
+              <TH className="hidden sm:table-cell">Role</TH>
+              <TH className="hidden sm:table-cell">Status</TH>
+              <TH className="hidden lg:table-cell">Created</TH>
+              <TH className="hidden md:table-cell">Last login</TH>
+              <TH className="w-px">
+                <span className="visually-hidden">Actions</span>
+              </TH>
+            </tr>
+          </THead>
+          <TBody>
+            {users.map((user) => {
+              const disabled = typeof user.disabledAt === "number"
+              const self = user.id === props.currentUserId
+              return (
+                <TR key={user.id} muted={disabled} data-disabled={disabled || undefined}>
+                  <TD className="break-all sm:min-w-56">
+                    <span className="font-medium">{user.email}</span>
+                    {self ? <span className="ml-1.5 text-xs text-fg-subtle">(you)</span> : null}
+                    {user.displayName ? (
+                      <span className="block text-xs text-fg-subtle">{user.displayName}</span>
+                    ) : null}
+                    {/* Narrow screens: role, status and last login under the email. */}
+                    <span className="mt-1.5 flex flex-wrap items-center gap-1.5 break-normal sm:hidden">
+                      <Badge tone={user.role === "admin" ? "accent" : "neutral"}>{user.role}</Badge>
+                      {disabled ? <Badge dot>deactivated</Badge> : null}
+                      {user.mustChangePassword ? (
+                        <Badge tone="warning">must change password</Badge>
+                      ) : null}
+                      <span className="text-xs text-fg-subtle">
+                        {"Last login "}
+                        <Ago time={user.lastLoginAt} />
+                      </span>
+                    </span>
+                  </TD>
+                  <TD className="hidden sm:table-cell">
+                    <Badge tone={user.role === "admin" ? "accent" : "neutral"}>{user.role}</Badge>
+                  </TD>
+                  <TD className="hidden sm:table-cell">
+                    <span className="inline-flex flex-wrap gap-1.5">
+                      {disabled ? (
+                        <Badge dot>deactivated</Badge>
+                      ) : (
+                        <Badge tone="success" dot>
+                          active
+                        </Badge>
+                      )}
+                      {user.mustChangePassword ? (
+                        <Badge tone="warning">must change password</Badge>
+                      ) : null}
+                    </span>
+                  </TD>
+                  <TD className="hidden whitespace-nowrap text-fg-muted lg:table-cell">
+                    <DateOnly time={user.createdAt} />
+                  </TD>
+                  <TD className="hidden whitespace-nowrap text-fg-muted md:table-cell">
+                    <Ago time={user.lastLoginAt} />
+                  </TD>
+                  <TD>
+                    <Menu
+                      label={`Actions for ${user.email}`}
+                      trigger={
+                        <Button variant="ghost" size="icon">
+                          <Ellipsis className="size-4" aria-hidden="true" />
+                        </Button>
                       }
-                    >
-                      Reactivate
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => askToDeactivate(user)}>
-                      Deactivate
-                    </button>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                      items={[
+                        {
+                          label: "Edit email",
+                          icon: <Mail />,
+                          onSelect: () => setPending({ kind: "email", user }),
+                        },
+                        {
+                          label: "Change role",
+                          icon: <ShieldCheck />,
+                          onSelect: () => setPending({ kind: "role", user }),
+                        },
+                        ...(self
+                          ? []
+                          : [
+                              {
+                                label: "Reset password",
+                                icon: <KeyRound />,
+                                onSelect: () => setPending({ kind: "reset", user }),
+                              },
+                            ]),
+                        "separator" as const,
+                        disabled
+                          ? {
+                              label: "Reactivate",
+                              icon: <UserCheck />,
+                              onSelect: () => void reactivate(user),
+                            }
+                          : {
+                              label: "Deactivate",
+                              icon: <UserX />,
+                              danger: true,
+                              onSelect: () => void askToDeactivate(user),
+                            },
+                      ]}
+                    />
+                  </TD>
+                </TR>
+              )
+            })}
+          </TBody>
+        </Table>
+      )}
 
+      {pending?.kind === "add" ? (
+        <AddUserDialog onClose={close} onAdded={(email) => done(`Added ${email}.`)} />
+      ) : null}
       {pending?.kind === "deactivate" ? (
-        <DeactivateBox
+        <DeactivateDialog
           pending={pending}
-          onCancel={() => setPending(undefined)}
-          onConfirm={(revokeKeys) =>
-            void act(async () => {
-              setPending(undefined)
-              await api("PUT", path(pending.user), {
-                disabled: true,
-                ...(revokeKeys ? { revokeKeys: true } : {}),
-              })
-              return `${pending.user.email} is deactivated.`
+          onClose={close}
+          onConfirm={async (revokeKeys) => {
+            await api("PUT", userPath(pending.user), {
+              disabled: true,
+              ...(revokeKeys ? { revokeKeys: true } : {}),
             })
-          }
+            await done(`${pending.user.email} is deactivated.`)
+          }}
         />
       ) : null}
       {pending?.kind === "email" ? (
-        <EmailBox
+        <EmailDialog
           user={pending.user}
-          onCancel={() => setPending(undefined)}
-          onSave={(email) =>
-            act(async () => {
-              await api("PUT", path(pending.user, "/email"), { email })
-              setPending(undefined)
-              return `Email changed to ${email.trim().toLowerCase()}.`
-            })
-          }
+          onClose={close}
+          onSave={async (email) => {
+            await api("PUT", userPath(pending.user, "/email"), { email })
+            await done(`Email changed to ${email.trim().toLowerCase()}.`)
+          }}
         />
       ) : null}
       {pending?.kind === "role" ? (
-        <RoleBox
+        <RoleDialog
           user={pending.user}
-          role={pending.role}
-          adminEmail={props.currentUserEmail ?? ""}
-          onCancel={() => setPending(undefined)}
-          onConfirm={(adminPassword) =>
-            act(async () => {
-              await api("PUT", path(pending.user, "/role"), {
-                role: pending.role,
-                adminPassword,
-              })
-              setPending(undefined)
-              return `${pending.user.email} is now ${pending.role}.`
-            })
-          }
+          adminEmail={adminEmail}
+          onClose={close}
+          onConfirm={async (role, adminPassword) => {
+            await api("PUT", userPath(pending.user, "/role"), { role, adminPassword })
+            await done(`${pending.user.email} is now ${role}.`)
+          }}
         />
       ) : null}
       {pending?.kind === "reset" ? (
-        <ResetBox
-          adminEmail={props.currentUserEmail ?? ""}
+        <ResetDialog
+          adminEmail={adminEmail}
           user={pending.user}
-          onCancel={() => setPending(undefined)}
-          onReset={(adminPassword, password) =>
-            act(async () => {
-              const result = await api<{ temporaryPassword?: string; sessionsEnded: number }>(
-                "POST",
-                path(pending.user, "/password-reset"),
-                { adminPassword, ...(password ? { password } : {}) },
-              )
-              setPending(
-                result.temporaryPassword
-                  ? { kind: "temporary", user: pending.user, password: result.temporaryPassword }
-                  : undefined,
-              )
-              return `Password reset for ${pending.user.email}; ${result.sessionsEnded} session(s) ended. They must choose a new one at their next sign-in.`
-            })
-          }
+          onClose={close}
+          onReset={async (adminPassword, password) => {
+            const result = await api<{ temporaryPassword?: string; sessionsEnded: number }>(
+              "POST",
+              userPath(pending.user, "/password-reset"),
+              { adminPassword, ...(password ? { password } : {}) },
+            )
+            await done(
+              `Password reset for ${pending.user.email}; ${result.sessionsEnded} session(s) ended.`,
+              result.temporaryPassword
+                ? { kind: "temporary", user: pending.user, password: result.temporaryPassword }
+                : undefined,
+            )
+          }}
         />
       ) : null}
       {pending?.kind === "temporary" ? (
-        <div className="callout">
-          <p>
-            Temporary password for {pending.user.email}. It is shown once: give it to them
-            privately.
-          </p>
-          <input readOnly value={pending.password} aria-label="Temporary password" />
-          <button
-            type="button"
-            onClick={() => void navigator.clipboard?.writeText(pending.password)}
-          >
-            Copy
-          </button>
-          <button type="button" onClick={() => setPending(undefined)}>
-            Done
-          </button>
-        </div>
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) close()
+          }}
+          title="Password reset"
+          description={`The temporary password for ${pending.user.email} is shown once: give it to them privately. They must choose their own at their next sign-in.`}
+          footer={
+            <Button variant="primary" onClick={close}>
+              Done
+            </Button>
+          }
+        >
+          <div className="flex items-end gap-2">
+            <Field label="Temporary password" className="min-w-0 flex-1">
+              <Input
+                readOnly
+                value={pending.password}
+                className="font-mono"
+                onFocus={(e) => e.target.select()}
+              />
+            </Field>
+            <CopyButton value={pending.password} label="Copy" copiedMessage="Password copied" />
+          </div>
+        </Dialog>
       ) : null}
-
-      <p className="muted">
-        Users are deactivated, never deleted, so the audit log keeps pointing at them. Deactivating
-        signs the user out at once and ends their playground tokens.
-      </p>
-      <AddUser onAdded={(email) => void act(async () => `Added ${email}.`)} />
-    </section>
+    </>
   )
 }
 
-function DeactivateBox(props: {
+function DeactivateDialog(props: {
   pending: Extract<Pending, { kind: "deactivate" }>
-  onCancel: () => void
-  onConfirm: (revokeKeys: boolean) => void
+  onClose: () => void
+  onConfirm: (revokeKeys: boolean) => Promise<void>
 }) {
   const { user, keys } = props.pending
   // Checked by default: a deactivated user's keys are usually meant to stop too.
   const [revokeKeys, setRevokeKeys] = useState(true)
   return (
-    <div className="callout">
-      <p>{`Deactivate ${user.email}? They are signed out at once.`}</p>
+    <FormDialog
+      tone="danger"
+      title={`Deactivate ${user.email}?`}
+      description="They are signed out at once and their playground tokens stop working. You can reactivate them later."
+      submitLabel="Deactivate"
+      onClose={props.onClose}
+      onSubmit={() => props.onConfirm(keys.length > 0 && revokeKeys)}
+    >
       {keys.length > 0 ? (
-        <>
-          <p>{`API keys ${user.email} created:`}</p>
-          <ul>
+        <div className="space-y-3">
+          <p className="text-sm text-fg">{`API keys ${user.email} created:`}</p>
+          <ul className="space-y-1 rounded-md border border-border bg-subtle px-3 py-2 text-sm">
             {keys.map((key) => (
-              <li key={key.id}>{`${key.name} (${key.prefix}…) on ${key.serverName}`}</li>
+              <li key={key.id}>
+                <span className="font-medium">{key.name}</span>{" "}
+                <code className="font-mono text-xs text-fg-subtle">{`${key.prefix}…`}</code>{" "}
+                <span className="text-fg-muted">{`on ${key.serverName}`}</span>
+              </li>
             ))}
           </ul>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={revokeKeys}
-              onChange={(e) => setRevokeKeys(e.target.checked)}
-            />
-            {`Also revoke these ${keys.length} API key(s)`}
-          </label>
-        </>
+          <Checkbox
+            checked={revokeKeys}
+            onChange={setRevokeKeys}
+            label={`Also revoke these ${keys.length} API key(s)`}
+            description="Clients using them are disconnected. Leave it unchecked to keep them working."
+          />
+        </div>
       ) : (
-        <p className="muted">They created no API keys that are still active.</p>
+        <p className="text-sm text-fg-muted">They created no API keys that are still active.</p>
       )}
-      <button type="button" onClick={() => props.onConfirm(keys.length > 0 && revokeKeys)}>
-        Deactivate now
-      </button>
-      <button type="button" onClick={props.onCancel}>
-        Cancel
-      </button>
-    </div>
+    </FormDialog>
   )
 }
 
-function EmailBox(props: {
+function EmailDialog(props: {
   user: User
-  onCancel: () => void
+  onClose: () => void
   onSave: (email: string) => Promise<void>
 }) {
   const [email, setEmail] = useState(props.user.email)
   return (
-    <form
-      className="callout stack"
-      onSubmit={(event) => {
-        event.preventDefault()
-        void props.onSave(email)
-      }}
+    <FormDialog
+      title="Edit email"
+      description={`The address ${props.user.email} signs in with.`}
+      submitLabel="Save email"
+      onClose={props.onClose}
+      onSubmit={() => props.onSave(email)}
     >
-      <label>
-        {`New email for ${props.user.email}`}
-        <input
+      <Field label="New email">
+        <Input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="off"
           required
         />
-      </label>
-      <div className="inline">
-        <button type="submit">Save email</button>
-        <button type="button" onClick={props.onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
+      </Field>
+    </FormDialog>
   )
 }
 
-function RoleBox(props: {
+function RoleDialog(props: {
   user: User
-  role: "admin" | "member"
   adminEmail: string
-  onCancel: () => void
-  onConfirm: (adminPassword: string) => Promise<void>
+  onClose: () => void
+  onConfirm: (role: Role, adminPassword: string) => Promise<void>
 }) {
+  const [role, setRole] = useState<Role>(props.user.role === "admin" ? "member" : "admin")
   const [adminPassword, setAdminPassword] = useState("")
+  const unchanged = role === props.user.role
   return (
-    <form
-      className="callout stack"
-      onSubmit={(event) => {
-        event.preventDefault()
-        void props.onConfirm(adminPassword)
+    <FormDialog
+      title={`Change the role of ${props.user.email}`}
+      submitLabel={`Make ${role}`}
+      onClose={props.onClose}
+      onSubmit={async () => {
+        if (unchanged) throw new Error(`${props.user.email} is already ${role}.`)
+        await props.onConfirm(role, adminPassword)
       }}
     >
-      <p>
-        {props.role === "admin"
-          ? `Make ${props.user.email} an admin? Admins manage users, secrets and API keys, and read the audit log.`
-          : `Make ${props.user.email} a member? They keep editing and publishing specs, but lose access to users, secrets, keys and the audit log.`}
-      </p>
+      <Field label="Role">
+        <Select
+          value={role}
+          onValueChange={(value) => setRole(value === "admin" ? "admin" : "member")}
+          options={ROLE_OPTIONS}
+          className="w-40"
+        />
+      </Field>
+      <Alert tone={unchanged ? "neutral" : "warning"}>
+        {unchanged
+          ? `${props.user.email} is already ${role}.`
+          : role === "admin"
+            ? `Make ${props.user.email} an admin? Admins manage users, secrets and API keys, and read the audit log.`
+            : `Make ${props.user.email} a member? They keep editing and publishing specs, but lose access to users, secrets, keys and the audit log.`}
+      </Alert>
       <UsernameField username={props.adminEmail} />
-      <label>
-        Your password, to confirm
-        <input
+      <Field label="Your password, to confirm">
+        <Input
           type="password"
           value={adminPassword}
           onChange={(e) => setAdminPassword(e.target.value)}
           autoComplete="current-password"
           required
         />
-      </label>
-      <div className="inline">
-        <button type="submit">{`Make ${props.role}`}</button>
-        <button type="button" onClick={props.onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
+      </Field>
+    </FormDialog>
   )
 }
 
-function ResetBox(props: {
+function ResetDialog(props: {
   user: User
   adminEmail: string
-  onCancel: () => void
+  onClose: () => void
   onReset: (adminPassword: string, password: string) => Promise<void>
 }) {
   const [password, setPassword] = useState("")
   const [adminPassword, setAdminPassword] = useState("")
   return (
-    <form
-      className="callout stack"
-      onSubmit={(event) => {
-        event.preventDefault()
-        void props.onReset(adminPassword, password)
-      }}
+    <FormDialog
+      tone="danger"
+      title={`Reset the password of ${props.user.email}?`}
+      description="All their sessions end, and they must choose a new password at their next sign-in."
+      submitLabel="Reset password"
+      onClose={props.onClose}
+      onSubmit={() => props.onReset(adminPassword, password)}
     >
-      <p>
-        {`Reset the password of ${props.user.email}. All their sessions end, and they must choose a new password at their next sign-in.`}
-      </p>
       <UsernameField username={props.adminEmail} />
-      <label>
-        Temporary password (leave empty to generate one)
-        <input
+      <Field
+        label="New temporary password"
+        hint="optional"
+        help="Leave empty to generate one. At least 12 characters."
+      >
+        <Input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="new-password"
           minLength={12}
         />
-      </label>
-      <label>
-        Your password, to confirm
-        <input
+      </Field>
+      <Field label="Your password, to confirm">
+        <Input
           type="password"
           value={adminPassword}
           onChange={(e) => setAdminPassword(e.target.value)}
           autoComplete="current-password"
           required
         />
-      </label>
-      <div className="inline">
-        <button type="submit">Reset password</button>
-        <button type="button" onClick={props.onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
+      </Field>
+    </FormDialog>
   )
 }
 
-function AddUser(props: { onAdded: (email: string) => void }) {
+function AddUserDialog(props: { onClose: () => void; onAdded: (email: string) => Promise<void> }) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [role, setRole] = useState<"member" | "admin">("member")
-  const [error, setError] = useState<unknown>()
-
-  const add = async (event: FormEvent) => {
-    event.preventDefault()
-    setError(undefined)
-    try {
-      await api("POST", "/users", { email, password, role })
-      setEmail("")
-      setPassword("")
-      props.onAdded(email)
-    } catch (caught) {
-      setError(caught)
-    }
-  }
-
+  const [role, setRole] = useState<Role>("member")
   return (
-    <form className="add-user" onSubmit={add}>
-      <h2>Add a user</h2>
-      <div className="fields">
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            autoComplete="off"
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </label>
-        <label>
-          Initial password (at least 12 characters)
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-            minLength={12}
-            required
-          />
-        </label>
-        <label>
-          Role
-          <select value={role} onChange={(e) => setRole(e.target.value as "member" | "admin")}>
-            <option value="member">member</option>
-            <option value="admin">admin</option>
-          </select>
-        </label>
-        <button type="submit">Add user</button>
-      </div>
-      <ErrorText error={error} />
-    </form>
+    <FormDialog
+      title="Add user"
+      description="Give them the initial password privately; they can change it on their profile."
+      submitLabel="Add user"
+      onClose={props.onClose}
+      onSubmit={async () => {
+        await api("POST", "/users", { email, password, role })
+        await props.onAdded(email)
+      }}
+    >
+      <Field label="Email">
+        <Input
+          type="email"
+          value={email}
+          autoComplete="off"
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+      </Field>
+      <Field label="Initial password" help="At least 12 characters.">
+        <Input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          minLength={12}
+          required
+        />
+      </Field>
+      <Field
+        label="Role"
+        help="Members edit, publish and try specs. Admins also manage users, secrets, keys and the audit log."
+      >
+        <Select
+          value={role}
+          onValueChange={(value) => setRole(value === "admin" ? "admin" : "member")}
+          options={ROLE_OPTIONS}
+          className="w-40"
+        />
+      </Field>
+    </FormDialog>
   )
 }
 
-/** The audit log (admins only). */
+/** The audit log (admins only), with users' emails and servers' names for their ids. */
 export function Audit() {
-  const [events, setEvents] = useState<AuditEntry[]>([])
+  const [events, setEvents] = useState<AuditEntry[]>()
+  const [names, setNames] = useState<Map<string, string>>(new Map())
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<unknown>()
-  useEffect(() => {
-    api<{ events: AuditEntry[] }>("GET", "/audit").then(
-      (data) => setEvents(data.events),
-      (caught: unknown) => setError(caught),
-    )
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(undefined)
+    try {
+      const [data, users, servers] = await Promise.all([
+        api<{ events: AuditEntry[] }>("GET", "/audit"),
+        api<{ users: User[] }>("GET", "/users"),
+        api<{ servers: { id: string; name: string }[] }>("GET", "/servers"),
+      ])
+      setNames(
+        new Map([
+          ...users.users.map((user) => [user.id, user.email] as const),
+          ...servers.servers.map((server) => [server.id, server.name] as const),
+        ]),
+      )
+      setEvents(data.events)
+    } catch (caught) {
+      setError(caught)
+    } finally {
+      setLoading(false)
+    }
   }, [])
+  useEffect(() => {
+    void load()
+  }, [load])
   return (
-    <section>
-      <h1>Audit log</h1>
-      <AuditTable events={events} />
-      <ErrorText error={error} />
-    </section>
+    <>
+      <PageHeader
+        title="Audit log"
+        description="Sign-ins, publishes and changes to users, secrets and keys, newest first. Entries cannot be edited or deleted."
+        actions={
+          <Button
+            onClick={() => void load()}
+            loading={loading}
+            icon={<RefreshCw className="size-4" aria-hidden="true" />}
+          >
+            Refresh
+          </Button>
+        }
+      />
+      <ErrorText error={error} className="mb-4" />
+      {events === undefined ? (
+        error ? null : (
+          <div className="space-y-2" aria-busy="true">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        )
+      ) : (
+        <AuditTable events={events} names={names} />
+      )}
+    </>
   )
 }

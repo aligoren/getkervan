@@ -31,6 +31,10 @@ export const users = sqliteTable(
       .notNull()
       .default(false),
     lastLoginAt: integer("last_login_at"),
+    /** The web UI theme this user chose; "system" follows their device. */
+    theme: text("theme", { enum: ["system", "light", "dark"] })
+      .notNull()
+      .default("system"),
   },
   (t) => [uniqueIndex("users_workspace_email").on(t.workspaceId, t.email)],
 )

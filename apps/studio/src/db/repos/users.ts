@@ -4,6 +4,8 @@ import { sessions, users } from "../schema.js"
 import type { WorkspaceScope } from "../scope.js"
 
 export type Role = "admin" | "member"
+export type Theme = "system" | "light" | "dark"
+export const THEMES: readonly Theme[] = ["system", "light", "dark"]
 
 export interface User {
   id: string
@@ -16,6 +18,7 @@ export interface User {
   /** Set after an admin's password reset, until the user picks a new password. */
   mustChangePassword: boolean
   lastLoginAt: number | null
+  theme: Theme
 }
 
 const publicColumns = {
@@ -27,6 +30,7 @@ const publicColumns = {
   displayName: users.displayName,
   mustChangePassword: users.mustChangePassword,
   lastLoginAt: users.lastLoginAt,
+  theme: users.theme,
 }
 
 /** Email addresses are compared case-insensitively and without surrounding spaces. */
@@ -59,6 +63,7 @@ export function createUser(
     displayName: null,
     mustChangePassword: false,
     lastLoginAt: null,
+    theme: "system",
   }
 }
 
@@ -142,7 +147,7 @@ export function updateUser(
   db: Db,
   scope: WorkspaceScope,
   userId: string,
-  fields: { role?: Role; email?: string; displayName?: string | null },
+  fields: { role?: Role; email?: string; displayName?: string | null; theme?: Theme },
   now = Date.now(),
 ): boolean {
   const result = db
@@ -151,6 +156,7 @@ export function updateUser(
       ...(fields.role === undefined ? {} : { role: fields.role }),
       ...(fields.email === undefined ? {} : { email: normalizeEmail(fields.email) }),
       ...(fields.displayName === undefined ? {} : { displayName: fields.displayName }),
+      ...(fields.theme === undefined ? {} : { theme: fields.theme }),
       updatedAt: now,
     })
     .where(and(eq(users.workspaceId, scope.workspaceId), eq(users.id, userId)))

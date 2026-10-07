@@ -26,12 +26,14 @@ export function Dialog(props: {
           className={cn(
             "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col",
             "rounded-xl border border-border bg-surface shadow-lg",
+            // Opening focuses the first field, or the first footer button (Cancel), not the close
+            // button: it comes last in the DOM and sits in the corner.
             "data-[state=open]:animate-[dialog-in_150ms_ease-out]",
             props.size === "lg" ? "max-w-2xl" : props.size === "sm" ? "max-w-sm" : "max-w-lg",
             props.tone === "danger" && "border-t-2 border-t-danger",
           )}
         >
-          <div className="flex items-start justify-between gap-4 px-5 pt-5">
+          <div className="px-5 pt-5 pr-12">
             <div className="min-w-0">
               <RadixDialog.Title className="text-base font-semibold text-fg">
                 {props.title}
@@ -46,12 +48,6 @@ export function Dialog(props: {
                 </RadixDialog.Description>
               )}
             </div>
-            <RadixDialog.Close
-              className="-mt-1 -mr-1 rounded-md p-1 text-fg-subtle transition-colors hover:bg-subtle hover:text-fg"
-              aria-label="Close"
-            >
-              <X className="size-4" aria-hidden="true" />
-            </RadixDialog.Close>
           </div>
           {props.children ? (
             <div className="overflow-y-auto px-5 py-4 text-sm">{props.children}</div>
@@ -63,6 +59,12 @@ export function Dialog(props: {
               {props.footer}
             </div>
           ) : null}
+          <RadixDialog.Close
+            className="absolute top-4 right-4 rounded-md p-1 text-fg-subtle transition-colors hover:bg-subtle hover:text-fg"
+            aria-label="Close"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </RadixDialog.Close>
         </RadixDialog.Content>
       </RadixDialog.Portal>
     </RadixDialog.Root>

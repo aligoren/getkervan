@@ -17,7 +17,7 @@ import { Button } from "../ui/Button.js"
 import { Card, CardContent, CardFooter, CardHeader } from "../ui/Card.js"
 import { CodeBlock, CopyButton } from "../ui/Copy.js"
 import { Dialog } from "../ui/Dialog.js"
-import { Checkbox, Field, Input, NativeSelect, Textarea } from "../ui/Field.js"
+import { Checkbox, Field, Input, Textarea } from "../ui/Field.js"
 import { Alert, EmptyState, PageHeader, Skeleton } from "../ui/Layout.js"
 import { Menu, Select, TabPanel, Tabs, Tooltip, TooltipProvider } from "../ui/Radix.js"
 import { EmptyRow, Table, TBody, TD, TH, THead, TR } from "../ui/Table.js"
@@ -146,7 +146,7 @@ function Demo() {
         title="Form fields"
         description="Always a visible label; help text below; errors replace the help."
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid items-start gap-5 sm:grid-cols-2">
           <Field label="Slug" help="Lowercase letters, numbers and dashes.">
             <Input placeholder="weather" />
           </Field>
@@ -157,10 +157,14 @@ function Demo() {
             <Input placeholder="Ada Lovelace" />
           </Field>
           <Field label="Role">
-            <NativeSelect defaultValue="member">
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
-            </NativeSelect>
+            <Select
+              value={role}
+              onValueChange={setRole}
+              options={[
+                { value: "member", label: "Member" },
+                { value: "admin", label: "Admin" },
+              ]}
+            />
           </Field>
           <Field label="Arguments (JSON)" help="Filled from the tool's input schema.">
             <Textarea
@@ -211,7 +215,7 @@ function Demo() {
       </Section>
 
       <Section title="Card, code and copy">
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid items-start gap-5 lg:grid-cols-2">
           <Card>
             <CardHeader
               title="Connect a client"
@@ -459,7 +463,7 @@ function Demo() {
       </Section>
 
       <Section title="Empty, loading and error states">
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="grid items-start gap-5 lg:grid-cols-3">
           <EmptyState
             icon={<Server className="size-5" />}
             title="No servers yet"

@@ -4,7 +4,6 @@ import {
   isValidElement,
   type ReactElement,
   type ReactNode,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
   useId,
 } from "react"
@@ -23,11 +22,6 @@ export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputEleme
 
 export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={cn(control, "min-h-20 py-2 leading-relaxed", className)} {...rest} />
-}
-
-/** A native select (accessible, works with the keyboard and on phones), styled. */
-export function NativeSelect({ className, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={cn(control, "h-9 cursor-pointer pr-8", className)} {...rest} />
 }
 
 /**

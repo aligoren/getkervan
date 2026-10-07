@@ -145,6 +145,7 @@ pnpm test         # build, then Vitest
 pnpm lint         # Biome
 pnpm typecheck    # sources and tests
 pnpm check:pack   # publint + are-the-types-wrong
+pnpm e2e          # build, then Studio's Playwright tests (opt-in; needs Chromium)
 ```
 
 `prepublishOnly` blocks publishing unless `KERVAN_ALLOW_PUBLISH=1` is set.

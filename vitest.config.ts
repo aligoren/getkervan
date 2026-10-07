@@ -20,6 +20,7 @@ export default defineConfig({
           root: "apps/studio/web",
           include: ["test/**/*.test.tsx"],
           environment: "jsdom",
+          setupFiles: ["test/setup.ts"],
         },
       },
       {

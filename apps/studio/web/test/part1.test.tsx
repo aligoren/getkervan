@@ -3,13 +3,14 @@
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { App } from "../src/App.js"
 import { setCsrfToken } from "../src/api.js"
 import { deviceName } from "../src/device.js"
 import { Users } from "../src/pages/Admin.js"
 import { Profile } from "../src/pages/Profile.js"
+import { chooseMenuItem, chooseOption } from "./helpers.js"
 
 type Handler = (method: string, url: string, body: unknown) => Response
 let handler: Handler
@@ -120,25 +121,32 @@ describe("the users page", () => {
     { id: "m", email: "member@example.test", role: "member", createdAt: 0, disabledAt: null },
   ]
 
+  const actions = () => screen.findByRole("button", { name: "Actions for member@example.test" })
+  const puts = () => requests.filter((r) => r.method === "PUT")
+
   it("asks for confirmation and the admin's password before changing a role", async () => {
     handler = (method) => (method === "GET" ? json({ users }) : json({ user: users[1] }))
-    const page = render(<Users currentUserId="a" currentUserEmail="admin@example.test" />)
-    fireEvent.change(await page.findByLabelText("Role of member@example.test"), {
-      target: { value: "admin" },
-    })
-    await page.findByText(/Make member@example.test an admin\?/)
-    expect(requests.some((r) => r.method === "PUT")).toBe(false)
-    fireEvent.click(page.getByRole("button", { name: "Cancel" }))
-    expect(requests.some((r) => r.method === "PUT")).toBe(false)
-    fireEvent.change(page.getByLabelText("Role of member@example.test"), {
-      target: { value: "admin" },
-    })
-    const password = (await page.findByLabelText("Your password, to confirm")) as HTMLInputElement
+    render(<Users currentUserId="a" currentUserEmail="admin@example.test" />)
+    await chooseMenuItem(await actions(), "Change role")
+    // The dialog proposes the other role and says what it means.
+    await screen.findByText(/Make member@example.test an admin\?/)
+    expect(puts()).toHaveLength(0)
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(puts()).toHaveLength(0)
+
+    await chooseMenuItem(await actions(), "Change role")
+    // The role is a design-system select, used with the keyboard like any other.
+    const role = await screen.findByRole("combobox", { name: "Role" })
+    await chooseOption(role, "member")
+    await screen.findByText("member@example.test is already member.")
+    await chooseOption(role, "admin")
+    const password = screen.getByLabelText("Your password, to confirm") as HTMLInputElement
     expect(password.autocomplete).toBe("current-password")
     fireEvent.change(password, { target: { value: "my admin password" } })
-    fireEvent.click(page.getByRole("button", { name: "Make admin" }))
-    await waitFor(() => expect(requests.some((r) => r.method === "PUT")).toBe(true))
-    expect(requests.find((r) => r.method === "PUT")).toMatchObject({
+    fireEvent.click(screen.getByRole("button", { name: "Make admin" }))
+    await waitFor(() => expect(puts()).toHaveLength(1))
+    expect(puts()[0]).toMatchObject({
       url: "/api/users/m/role",
       body: { role: "admin", adminPassword: "my admin password" },
     })
@@ -152,18 +160,36 @@ describe("the users page", () => {
         : url.endsWith("/password-reset")
           ? json({ temporaryPassword: temporary, sessionsEnded: 0 })
           : json({})
-    const page = render(<Users currentUserId="a" currentUserEmail="admin@example.test" />)
-    const row = await page.findByText("member@example.test")
-    fireEvent.click(row.closest("tr")?.querySelector("button:nth-of-type(2)") as HTMLButtonElement)
-    fireEvent.change(await page.findByLabelText("Your password, to confirm"), {
+    render(<Users currentUserId="a" currentUserEmail="admin@example.test" />)
+    await chooseMenuItem(await actions(), "Reset password")
+    fireEvent.change(await screen.findByLabelText("Your password, to confirm"), {
       target: { value: "my admin password" },
     })
-    const submit = page.container.querySelector<HTMLButtonElement>('form button[type="submit"]')
-    if (submit) fireEvent.click(submit)
-    const shown = (await page.findByLabelText("Temporary password", {
+    fireEvent.click(screen.getByRole("button", { name: "Reset password" }))
+    const shown = (await screen.findByLabelText("Temporary password", {
       exact: true,
     })) as HTMLInputElement
     expect(shown.value).toBe(temporary)
+  })
+
+  it("does not offer a password reset for the admin's own account", async () => {
+    handler = () => json({ users })
+    render(<Users currentUserId="a" currentUserEmail="admin@example.test" />)
+    const own = await screen.findByRole("button", { name: "Actions for admin@example.test" })
+    fireEvent.keyDown(own, { key: "Enter" })
+    await screen.findByRole("menuitem", { name: "Change role" })
+    expect(screen.queryByRole("menuitem", { name: "Reset password" })).toBeNull()
+  })
+
+  it("has no native select left anywhere in the web UI", () => {
+    const src = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src")
+    const files = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const full = path.join(dir, name)
+        return statSync(full).isDirectory() ? files(full) : [full]
+      })
+    const offending = files(src).filter((file) => /<select[\s>]/.test(readFileSync(file, "utf8")))
+    expect(offending).toEqual([])
   })
 })
 

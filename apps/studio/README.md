@@ -69,8 +69,15 @@ On first start, Studio:
     their next sign-in; until then the API refuses everything else.
   - A role change asks for confirmation and your own password (the server insists too).
   - The last active admin cannot be deactivated or made a member.
-- **Navigation:** every user sees Servers (members edit, validate and publish specs and use the
-  playground); Users and the audit log are for admins only.
+- **Navigation:** a sidebar on wide screens and a menu drawer on phones. Every user sees
+  Servers (members edit, validate and publish specs and use the playground), Settings and
+  Profile; Users and the audit log are for admins only.
+- **Theme:** System, Light or Dark, from the switch in the sidebar or on Settings. The choice is
+  saved to your account (not to the browser), so it follows you to every device; signed out,
+  Studio follows the system setting.
+- **Narrow screens:** every page fits a 390px-wide phone without sideways scrolling. Tables move
+  their secondary columns under the first cell, and a table that is still too wide scrolls in
+  its own box, with a fade on the edge that has more.
 - **Profile (everyone):** your email and role (only an admin changes those), an optional display
   name, your password (the current one is required; your other sessions are signed out), and
   your active sessions, which you can sign out one by one or all at once.
@@ -79,7 +86,18 @@ On first start, Studio:
   server shows a "Next steps" checklist until it is set up.
 
 For UI development, run Studio, then `pnpm --filter @kervan/studio dev:web`. Vite serves the UI
-and forwards `/api` and `/s` to Studio on port 4310.
+and forwards `/api` and `/s` to Studio on port 4310. The design system's components and tokens
+are on the development-only styleguide page (`/styleguide.html` on the Vite server); the
+production build does not include it.
+
+End-to-end tests start the built Studio with a throwaway data directory and drive it with
+Playwright's Chromium (setup, servers, users, the forced password change, the profile, the theme,
+and every page at 390px). They are not part of `pnpm test`:
+
+```sh
+pnpm --filter @kervan/studio exec playwright install chromium   # once
+pnpm e2e                                                       # build, then Playwright
+```
 
 ## Gateway
 

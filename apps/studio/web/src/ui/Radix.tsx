@@ -6,6 +6,7 @@ import * as RadixTooltip from "@radix-ui/react-tooltip"
 import { Check, ChevronDown } from "lucide-react"
 import type { ReactNode } from "react"
 import { cn } from "./cn.js"
+import { Scroller } from "./Scroller.js"
 
 export function Tabs(props: {
   value: string
@@ -16,38 +17,41 @@ export function Tabs(props: {
 }) {
   return (
     <RadixTabs.Root value={props.value} onValueChange={props.onValueChange}>
-      <RadixTabs.List
-        aria-label={props["aria-label"]}
-        // overflow-y-hidden: the active tab's underline sits 1px low; no vertical scrollbar for it.
-        className="-mx-1 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-border px-1"
-      >
-        {props.items.map((item) => (
-          <RadixTabs.Trigger
-            key={item.value}
-            value={item.value}
-            className={cn(
-              "-mb-px inline-flex h-10 cursor-pointer items-center gap-1.5 border-b-2 border-transparent px-3 text-sm font-medium whitespace-nowrap text-fg-muted",
-              "transition-colors duration-150 hover:text-fg",
-              "data-[state=active]:border-accent data-[state=active]:text-fg",
-            )}
-          >
-            {item.label}
-            {item.count !== undefined ? (
-              <span className="rounded-full bg-subtle px-1.5 text-xs text-fg-subtle">
-                {item.count}
-              </span>
-            ) : null}
-          </RadixTabs.Trigger>
-        ))}
-      </RadixTabs.List>
+      <Scroller fade="bg" className="border-b border-border">
+        <RadixTabs.List aria-label={props["aria-label"]} className="flex w-max min-w-full gap-1">
+          {props.items.map((item) => (
+            <RadixTabs.Trigger
+              key={item.value}
+              value={item.value}
+              className={cn(
+                "-mb-px inline-flex h-10 cursor-pointer items-center gap-1.5 border-b-2 border-transparent px-3 text-sm font-medium whitespace-nowrap text-fg-muted",
+                "transition-colors duration-150 hover:text-fg",
+                "data-[state=active]:border-accent data-[state=active]:text-fg",
+              )}
+            >
+              {item.label}
+              {item.count !== undefined ? (
+                <span className="rounded-full bg-subtle px-1.5 text-xs text-fg-subtle">
+                  {item.count}
+                </span>
+              ) : null}
+            </RadixTabs.Trigger>
+          ))}
+        </RadixTabs.List>
+      </Scroller>
       {props.children}
     </RadixTabs.Root>
   )
 }
 
-export const TabPanel = ({ value, children }: { value: string; children: ReactNode }) => (
-  <RadixTabs.Content value={value} className="pt-5 focus-visible:outline-none">
-    {children}
+/** A tab's content. `keepMounted` keeps it (hidden) while another tab is open, e.g. an editor. */
+export const TabPanel = (props: { value: string; children: ReactNode; keepMounted?: boolean }) => (
+  <RadixTabs.Content
+    value={props.value}
+    {...(props.keepMounted ? { forceMount: true as const } : {})}
+    className="pt-5 focus-visible:outline-none data-[state=inactive]:hidden"
+  >
+    {props.children}
   </RadixTabs.Content>
 )
 
@@ -126,25 +130,40 @@ export function Tooltip(props: { content: ReactNode; children: ReactNode }) {
   )
 }
 
-/** A styled select for short option lists (use NativeSelect in dense tables and forms). */
+/**
+ * The one select of the design system (Radix: keyboard, typeahead and screen readers work; a
+ * hidden native select keeps form semantics). Works inside a Field, which sets its id.
+ */
 export function Select(props: {
   value: string
   onValueChange: (value: string) => void
-  options: { value: string; label: ReactNode }[]
+  options: { value: string; label: ReactNode; disabled?: boolean }[]
   "aria-label"?: string
+  "aria-describedby"?: string
+  "aria-invalid"?: boolean
+  id?: string
+  placeholder?: string
+  disabled?: boolean
   className?: string
 }) {
   return (
-    <RadixSelect.Root value={props.value} onValueChange={props.onValueChange}>
+    <RadixSelect.Root
+      value={props.value}
+      onValueChange={props.onValueChange}
+      disabled={props.disabled ?? false}
+    >
       <RadixSelect.Trigger
+        id={props.id}
         aria-label={props["aria-label"]}
+        aria-describedby={props["aria-describedby"]}
+        aria-invalid={props["aria-invalid"]}
         className={cn(
           "inline-flex h-9 cursor-pointer items-center justify-between gap-2 rounded-md border border-border-input bg-control px-3 text-sm text-fg shadow-xs",
           "transition-colors duration-150 hover:bg-control-hover",
           props.className,
         )}
       >
-        <RadixSelect.Value />
+        <RadixSelect.Value placeholder={props.placeholder} />
         <RadixSelect.Icon>
           <ChevronDown className="size-4 text-fg-subtle" aria-hidden="true" />
         </RadixSelect.Icon>
@@ -160,6 +179,7 @@ export function Select(props: {
               <RadixSelect.Item
                 key={option.value}
                 value={option.value}
+                disabled={option.disabled ?? false}
                 className="relative flex cursor-pointer items-center rounded-md py-1.5 pr-2 pl-7 outline-none select-none data-[highlighted]:bg-subtle"
               >
                 <RadixSelect.ItemIndicator className="absolute left-2">

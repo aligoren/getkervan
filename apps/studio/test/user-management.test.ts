@@ -1,6 +1,7 @@
 // User management: profile, own password, admin edits (role, email, reset), forced password
 // change, and the rules that protect them. Each describe block is one rule.
 import { afterEach, describe, expect, it } from "vitest"
+import { setTheme } from "../src/accounts.js"
 import { listAudit } from "../src/db/repos/audit.js"
 import { countActiveAdmins, createUser, getUser } from "../src/db/repos/users.js"
 import { createWorkspace } from "../src/db/repos/workspaces.js"
@@ -550,5 +551,58 @@ describe("the web UI's session check", () => {
     expect(listed).toMatchObject({ lastLoginAt: expect.any(Number), createdAt: expect.any(Number) })
     expect(users.text).not.toContain("passwordHash")
     expect(users.text).not.toContain("scrypt$")
+  })
+})
+
+describe("the theme preference", () => {
+  it("is the user's own, follows them to every session, and starts as system", async () => {
+    const { s, admin, member, memberUser, put } = await setup()
+    expect((await s.request("GET", "/api/session", member)).json.user).toMatchObject({
+      theme: "system",
+    })
+    const changed = await put(member, "/profile/theme", { theme: "dark" })
+    expect(changed.status).toBe(200)
+    expect(getUser(s.database.db, s.scope, memberUser.id)?.theme).toBe("dark")
+    // Another device: a new session sees the same choice.
+    const other = await s.signIn("member@example.test")
+    expect((await s.request("GET", "/api/session", other)).json.user).toMatchObject({
+      theme: "dark",
+    })
+    // The admin's choice is untouched.
+    expect((await s.request("GET", "/api/session", admin)).json.user).toMatchObject({
+      theme: "system",
+    })
+  })
+
+  it("refuses unknown values and any attempt to name another user", async () => {
+    const { s, owner, memberUser, member, put } = await setup()
+    const invalid = await put(member, "/profile/theme", { theme: "neon" })
+    const otherUser = await put(member, "/profile/theme", { theme: "dark", userId: owner.id })
+    const extra = await put(member, "/profile/theme", { theme: "dark", id: owner.id })
+    expect([invalid.status, otherUser.status, extra.status]).toEqual([400, 400, 400])
+    expect(getUser(s.database.db, s.scope, owner.id)?.theme).toBe("system")
+    expect(getUser(s.database.db, s.scope, memberUser.id)?.theme).toBe("system")
+    // No CSRF token: refused like every other change.
+    const noToken = await s.request("PUT", "/api/profile/theme", {
+      cookie: member.cookie,
+      body: { theme: "light" },
+    })
+    expect(noToken.status).toBe(403)
+    // Signed out: refused.
+    expect(
+      (await s.request("PUT", "/api/profile/theme", { body: { theme: "light" } })).status,
+    ).toBe(401)
+  })
+
+  it("is checked again below the API, and only ever changes the given user in its workspace", async () => {
+    const { s, owner, memberUser } = await setup()
+    expect(() =>
+      setTheme(s.database.db, s.scope, memberUser.id, "neon" as unknown as "dark"),
+    ).toThrow("Unknown theme.")
+    const elsewhere = createWorkspace(s.database.db, "elsewhere")
+    expect(() => setTheme(s.database.db, elsewhere, memberUser.id, "dark")).toThrow()
+    expect(setTheme(s.database.db, s.scope, memberUser.id, "light")).toBe("light")
+    expect(getUser(s.database.db, s.scope, memberUser.id)?.theme).toBe("light")
+    expect(getUser(s.database.db, s.scope, owner.id)?.theme).toBe("system")
   })
 })

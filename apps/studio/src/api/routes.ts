@@ -8,6 +8,7 @@ import {
   checkPassword,
   listUsers,
   resetPassword,
+  setTheme,
   setUserDisabled,
   setUserEmail,
   setUserRole,
@@ -93,6 +94,7 @@ const passwordBody = z.strictObject({
   currentPassword: z.string().max(1024),
   newPassword: z.string().max(1024),
 })
+const themeBody = z.strictObject({ theme: z.enum(["system", "light", "dark"]) })
 const roleBody = z.strictObject({
   role: z.enum(["admin", "member"]),
   adminPassword: z.string().max(1024),
@@ -111,6 +113,7 @@ function publicUser(user: SessionUser) {
     role: user.role,
     displayName: user.displayName,
     mustChangePassword: user.mustChangePassword,
+    theme: user.theme,
   }
 }
 
@@ -325,6 +328,14 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     return c.json({ user: updateProfile(db, session.scope, session.user.id, body, actor(c)) })
   })
 
+  // The UI theme follows the user across devices. No user id: only one's own can change.
+  api.put("/profile/theme", signedIn(), async (c) => {
+    const body = await parse(c, themeBody)
+    const session = c.get("session")
+    if (!session) throw new StudioError("forbidden", "Sign in first.")
+    return c.json({ theme: setTheme(db, session.scope, session.user.id, body.theme) })
+  })
+
   api.put("/profile/password", signedIn(undefined, duringPasswordChange), async (c) => {
     const body = await parse(c, passwordBody)
     const session = c.get("session")
@@ -415,7 +426,9 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
       ...v,
       check: checks.get(v.id) ?? null,
     }))
-    return c.json({ server, versions })
+    // The same status the server list shows (published version, newest draft, last call).
+    const summary = serverSummaries(db, scope).get(server.id) ?? null
+    return c.json({ server: { ...server, summary }, versions })
   })
 
   api.delete("/servers/:id", signedIn("admin"), async (c) => {
@@ -533,9 +546,14 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     const summary = serverSummaries(db, scope).get(server.id) ?? null
     const admin = c.get("session")?.user.role === "admin"
     const keys = admin ? listApiKeys(db, scope, server.id) : []
+    const published = server.publishedVersionId
+      ? (checksOf(db, scope, [server.publishedVersionId]).get(server.publishedVersionId) ?? null)
+      : null
     return c.json({
       summary,
       anyValid: hasValidVersion(db, scope, server.id),
+      // How many secrets the published version uses (null: nothing published or not checked).
+      publishedSecrets: published ? published.secrets : null,
       ...(admin
         ? {
             secrets: (await studio.listSecrets(scope, server.id)).length,

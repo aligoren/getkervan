@@ -14,6 +14,8 @@
     "packages/*/src",
     "apps/*/test",
     "apps/*/src",
+    "apps/*/e2e",
+    "apps/*/playwright.config.ts",
     "examples/*/test",
     "examples/*/src",
     "vitest.config.ts"

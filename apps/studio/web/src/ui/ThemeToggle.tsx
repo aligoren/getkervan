@@ -20,9 +20,16 @@ const choices: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
 export function ThemeToggle(props: {
   value: ThemeChoice
   onChange: (choice: ThemeChoice) => void
+  /** Full width, equal parts (for the sidebar). */
+  compact?: boolean
 }) {
   return (
-    <fieldset className="m-0 inline-flex min-w-0 rounded-md border border-border bg-subtle p-0.5">
+    <fieldset
+      className={cn(
+        "m-0 min-w-0 rounded-md border border-border bg-subtle p-0.5",
+        props.compact ? "flex w-full" : "inline-flex",
+      )}
+    >
       <legend className="visually-hidden">Theme</legend>
       {choices.map(({ value, label, icon: Icon }) => (
         <button
@@ -32,7 +39,8 @@ export function ThemeToggle(props: {
           onClick={() => props.onChange(value)}
           title={label}
           className={cn(
-            "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors duration-150",
+            "inline-flex h-7 cursor-pointer items-center justify-center gap-1.5 rounded px-2 text-xs font-medium transition-colors duration-150",
+            props.compact && "flex-1",
             props.value === value ? "bg-surface text-fg shadow-xs" : "text-fg-muted hover:text-fg",
           )}
         >
