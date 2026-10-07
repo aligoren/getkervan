@@ -176,6 +176,9 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   deactivated user's correct password gets the same answer as a wrong one. Their open
   playground streams are ended as well. The last active admin cannot be deactivated;
   deactivation and reactivation are audited.
+- Before deactivating, the admin sees the active API keys the user created and can revoke them
+  in the same transaction. Each revoked key gets its own audit event (reason `user.disable`),
+  the `user.disable` event counts them, and their open streams are closed.
 - The web UI returns to the sign-in page as soon as a request is refused because the session
   ended (signed out elsewhere, timed out or deactivated).
 - The CSRF token lives in page memory only, never in web storage.
@@ -374,7 +377,8 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - **Loopback-only setup does not help when a reverse proxy runs on the same machine**, because
   the proxy forwards to loopback. The single-use setup token is what protects a fresh install.
 - **Users are deactivated, not deleted**, so their audit records keep pointing at them. API
-  keys a deactivated user created stay valid: keys belong to servers, not users.
+  keys a deactivated user created stay valid unless the admin chooses to revoke them while
+  deactivating: keys belong to servers, not users.
 - **Unbounded version history.** Every save is kept; there is no cap or pruning per server.
   Members are trusted not to fill the disk.
 - **Members can read bindings** (secret names and hosts, never values) through the export, so

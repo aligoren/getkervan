@@ -1,6 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import { sha256 } from "../src/crypto.js"
-import { createApiKey, listApiKeys, revokeApiKey } from "../src/db/repos/api-keys.js"
+import {
+  createApiKey,
+  listActiveKeysCreatedBy,
+  listApiKeys,
+  revokeApiKey,
+} from "../src/db/repos/api-keys.js"
 import { listAudit, recordAudit } from "../src/db/repos/audit.js"
 import {
   deleteServer,
@@ -53,6 +58,15 @@ async function twoWorkspaces() {
 }
 
 describe("repositories stay inside their workspace", () => {
+  it("lists a user's keys only in that user's workspace", async () => {
+    const { a, b } = await twoWorkspaces()
+    const db = t.database.db
+    const author = "user-from-elsewhere"
+    createApiKey(db, b.scope, { serverId: b.server.id, name: "k", createdBy: author })
+    expect(listActiveKeysCreatedBy(db, b.scope, author)).toHaveLength(1)
+    expect(listActiveKeysCreatedBy(db, a.scope, author)).toEqual([])
+  })
+
   it("cannot read, change or delete another workspace's rows by id", async () => {
     const { a, b } = await twoWorkspaces()
     const db = t.database.db

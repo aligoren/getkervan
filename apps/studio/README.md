@@ -60,8 +60,9 @@ On first start, Studio:
   manage users, secrets and keys, delete servers, and read payloads and the audit log.
 - **Users (admins):** add users and deactivate them. A deactivated user is signed out at once,
   their playground tokens stop working, and they cannot sign in until reactivated. The last
-  active admin cannot be deactivated. API keys belong to servers, not users: revoke them
-  separately.
+  active admin cannot be deactivated. API keys belong to servers, not users, so they keep
+  working; before deactivating, Studio lists the keys the user created and can revoke them in
+  the same step. Reactivating does not bring revoked keys back.
 
 For UI development, run Studio, then `pnpm --filter @kervan/studio dev:web`. Vite serves the UI
 and forwards `/api` and `/s` to Studio on port 4310.
@@ -114,7 +115,10 @@ writes into `X-Forwarded-For` itself is ignored.
 
 Caddy gets and renews the TLS certificate itself. Its `reverse_proxy` keeps the `Host` header,
 sets `X-Forwarded-For` to the client's address (it does not trust what clients send unless you
-configure `trusted_proxies`), and streams `text/event-stream` responses without buffering.
+configure `trusted_proxies`), and streams `text/event-stream` responses without buffering, so
+no `flush_interval` setting is needed. (Tested with Caddy 2.11 and `tls internal`: through the
+proxy, a client's `subscriptions/listen` stream received `list_changed` about 30 ms after a
+publish, also after 65 seconds idle.)
 
 ```caddyfile
 studio.example.com {

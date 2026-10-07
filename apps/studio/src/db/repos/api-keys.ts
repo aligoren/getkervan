@@ -92,6 +92,27 @@ export function listApiKeys(db: Db, scope: WorkspaceScope, serverId: string): Ap
     .all()
 }
 
+/** The active keys a user created, with the server each belongs to. */
+export function listActiveKeysCreatedBy(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+): (ApiKeyInfo & { serverName: string })[] {
+  return db
+    .select({ ...infoColumns, serverName: servers.name })
+    .from(apiKeys)
+    .innerJoin(servers, eq(servers.id, apiKeys.serverId))
+    .where(
+      and(
+        eq(apiKeys.workspaceId, scope.workspaceId),
+        eq(apiKeys.createdBy, userId),
+        isNull(apiKeys.revokedAt),
+      ),
+    )
+    .orderBy(apiKeys.createdAt)
+    .all()
+}
+
 export function revokeApiKey(db: Db, scope: WorkspaceScope, id: string, now = Date.now()): boolean {
   const result = db
     .update(apiKeys)

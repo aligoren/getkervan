@@ -2,7 +2,14 @@ import { z } from "@kervan/core"
 import { type Context, Hono, type MiddlewareHandler } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { deleteCookie, getCookie, setCookie } from "hono/cookie"
-import { addUser, listUsers, setUserDisabled, setupAdmin, verifyLogin } from "../accounts.js"
+import {
+  addUser,
+  listUsers,
+  setUserDisabled,
+  setupAdmin,
+  userApiKeys,
+  verifyLogin,
+} from "../accounts.js"
 import { isSecure, type StudioConfig } from "../config.js"
 import { constantTimeEqual, sha256 } from "../crypto.js"
 import { listApiKeys } from "../db/repos/api-keys.js"
@@ -68,7 +75,7 @@ const secretBody = z.object({
 const deleteSecretBody = z.object({ confirm: z.boolean().optional() })
 const newKey = z.object({ name: z.string().max(200) })
 const settingsBody = z.object({ logPayloads: z.boolean() })
-const userBody = z.object({ disabled: z.boolean() })
+const userBody = z.object({ disabled: z.boolean(), revokeKeys: z.boolean().optional() })
 
 /**
  * The management API, mounted at `/api`. Authentication is a session cookie (HttpOnly,
@@ -386,12 +393,24 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     return c.json({ user: await addUser(db, scopeOf(c), body, actor(c)) }, 201)
   })
 
+  api.get("/users/:id/keys", signedIn("admin"), (c) =>
+    c.json({ keys: userApiKeys(db, scopeOf(c), c.req.param("id")) }),
+  )
+
   api.put("/users/:id", signedIn("admin"), async (c) => {
     const body = await parse(c, userBody)
-    const user = setUserDisabled(db, scopeOf(c), c.req.param("id"), body.disabled, actor(c))
+    const { user, revokedKeys } = setUserDisabled(
+      db,
+      scopeOf(c),
+      c.req.param("id"),
+      body.disabled,
+      actor(c),
+      { revokeKeys: body.revokeKeys === true },
+    )
     // Their sessions are gone, so new playground requests fail; open streams end here too.
     if (body.disabled) studio.gateway.endPlayground(user.id)
-    return c.json({ user })
+    for (const keyId of revokedKeys) studio.gateway.disconnect({ keyId })
+    return c.json({ user, revokedKeys: revokedKeys.length })
   })
 
   api.get("/audit", signedIn("admin"), (c) => c.json({ events: listAudit(db, scopeOf(c)) }))

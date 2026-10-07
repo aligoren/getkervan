@@ -1,5 +1,6 @@
 import { hashPassword, passwordProblem, verifyPassword } from "./crypto.js"
 import type { Db } from "./db/open.js"
+import { listActiveKeysCreatedBy, revokeApiKey } from "./db/repos/api-keys.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
 import { consumeSetupToken, setupTokenValid } from "./db/repos/tokens.js"
 import {
@@ -97,10 +98,18 @@ export async function addUser(
 
 export { listUsers }
 
+/** The active API keys a user created (admins look before deactivating the user). */
+export function userApiKeys(db: Db, scope: WorkspaceScope, userId: string) {
+  if (!getUser(db, scope, userId)) throw new StudioError("not_found", "Not found.")
+  return listActiveKeysCreatedBy(db, scope, userId)
+}
+
 /**
  * Deactivates or reactivates a user (admins only; the API checks the role). Deactivating ends
- * the user's sessions, and with them their playground tokens, at once. The last active admin
- * cannot be deactivated, so someone can always manage Studio.
+ * the user's sessions, and with them their playground tokens, at once. With `revokeKeys`, the
+ * API keys the user created are revoked in the same transaction (each one audited); the caller
+ * ends their open streams with the returned ids. Reactivating does not bring keys back. The
+ * last active admin cannot be deactivated, so someone can always manage Studio.
  */
 export function setUserDisabled(
   db: Db,
@@ -108,23 +117,39 @@ export function setUserDisabled(
   userId: string,
   disabled: boolean,
   actor: Actor,
-): User {
+  options: { revokeKeys?: boolean } = {},
+): { user: User; revokedKeys: string[] } {
+  if (options.revokeKeys && !disabled) {
+    throw new StudioError("invalid", "Keys are revoked only when deactivating a user.")
+  }
   return db.transaction((tx) => {
     const user = getUser(tx, scope, userId)
     if (!user) throw new StudioError("not_found", "Not found.")
-    if (disabled === (user.disabledAt !== null)) return user
+    if (disabled === (user.disabledAt !== null)) return { user, revokedKeys: [] }
     if (disabled && user.role === "admin" && countActiveAdmins(tx, scope, user.id) === 0) {
       throw new StudioError("conflict", "The last active admin cannot be deactivated.")
     }
     const disabledAt = disabled ? Date.now() : null
     setDisabledAt(tx, scope, user.id, disabledAt)
     const sessionsEnded = disabled ? deleteSessionsOf(tx, scope, user.id) : 0
+    const revokedKeys: string[] = []
+    if (options.revokeKeys) {
+      for (const key of listActiveKeysCreatedBy(tx, scope, user.id)) {
+        if (!revokeApiKey(tx, scope, key.id)) continue
+        revokedKeys.push(key.id)
+        recordAudit(tx, scope, actor, {
+          action: "api_key.revoke",
+          target: { type: "api_key", id: key.id },
+          details: { serverId: key.serverId, prefix: key.prefix, reason: "user.disable" },
+        })
+      }
+    }
     recordAudit(tx, scope, actor, {
       action: disabled ? "user.disable" : "user.enable",
       target: { type: "user", id: user.id },
-      ...(disabled ? { details: { sessionsEnded } } : {}),
+      ...(disabled ? { details: { sessionsEnded, keysRevoked: revokedKeys.length } } : {}),
     })
-    return { ...user, disabledAt }
+    return { user: { ...user, disabledAt }, revokedKeys }
   })
 }
 

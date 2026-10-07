@@ -2,13 +2,22 @@ import { type FormEvent, useCallback, useEffect, useState } from "react"
 import { api, type User } from "../api.js"
 import { type AuditEntry, AuditTable, ErrorText } from "../components/untrusted.js"
 
+interface UserKey {
+  id: string
+  name: string
+  prefix: string
+  serverName: string
+}
+
 /** Users of the workspace (admins only). */
 export function Users() {
   const [users, setUsers] = useState<User[]>([])
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [role, setRole] = useState<"member" | "admin">("member")
-  const [confirmDeactivate, setConfirmDeactivate] = useState<string>()
+  // Deactivating asks first, and lists the API keys the user created.
+  const [confirm, setConfirm] = useState<{ user: User; keys: UserKey[] }>()
+  const [revokeKeys, setRevokeKeys] = useState(false)
   const [error, setError] = useState<unknown>()
 
   const load = useCallback(
@@ -23,11 +32,28 @@ export function Users() {
     void load()
   }, [load])
 
-  const setDisabled = async (user: User, disabled: boolean) => {
+  const askToDeactivate = async (user: User) => {
     setError(undefined)
-    setConfirmDeactivate(undefined)
     try {
-      await api("PUT", `/users/${encodeURIComponent(user.id)}`, { disabled })
+      const data = await api<{ keys: UserKey[] }>(
+        "GET",
+        `/users/${encodeURIComponent(user.id)}/keys`,
+      )
+      setRevokeKeys(false)
+      setConfirm({ user, keys: data.keys })
+    } catch (caught) {
+      setError(caught)
+    }
+  }
+
+  const setDisabled = async (user: User, disabled: boolean, alsoRevokeKeys = false) => {
+    setError(undefined)
+    setConfirm(undefined)
+    try {
+      await api("PUT", `/users/${encodeURIComponent(user.id)}`, {
+        disabled,
+        ...(alsoRevokeKeys ? { revokeKeys: true } : {}),
+      })
       await load()
     } catch (caught) {
       setError(caught)
@@ -72,17 +98,8 @@ export function Users() {
                     <button type="button" onClick={() => void setDisabled(user, false)}>
                       Reactivate
                     </button>
-                  ) : confirmDeactivate === user.id ? (
-                    <>
-                      <button type="button" onClick={() => void setDisabled(user, true)}>
-                        Deactivate now
-                      </button>
-                      <button type="button" onClick={() => setConfirmDeactivate(undefined)}>
-                        Cancel
-                      </button>
-                    </>
                   ) : (
-                    <button type="button" onClick={() => setConfirmDeactivate(user.id)}>
+                    <button type="button" onClick={() => void askToDeactivate(user)}>
                       Deactivate
                     </button>
                   )}
@@ -92,9 +109,40 @@ export function Users() {
           })}
         </tbody>
       </table>
+      {confirm ? (
+        <div className="callout">
+          <p>{`Deactivate ${confirm.user.email}? They are signed out at once.`}</p>
+          {confirm.keys.length > 0 ? (
+            <>
+              <p>{`API keys ${confirm.user.email} created (they keep working unless revoked):`}</p>
+              <ul>
+                {confirm.keys.map((key) => (
+                  <li key={key.id}>{`${key.name} (${key.prefix}…) on ${key.serverName}`}</li>
+                ))}
+              </ul>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={revokeKeys}
+                  onChange={(e) => setRevokeKeys(e.target.checked)}
+                />
+                {`Also revoke these ${confirm.keys.length} API key(s)`}
+              </label>
+            </>
+          ) : (
+            <p className="muted">They created no API keys that are still active.</p>
+          )}
+          <button type="button" onClick={() => void setDisabled(confirm.user, true, revokeKeys)}>
+            Deactivate now
+          </button>
+          <button type="button" onClick={() => setConfirm(undefined)}>
+            Cancel
+          </button>
+        </div>
+      ) : null}
       <p className="muted">
         Deactivating signs the user out at once and ends their playground tokens. API keys belong to
-        servers and keep working; revoke them separately.
+        servers and keep working unless you revoke them too.
       </p>
       <form className="inline" onSubmit={add}>
         <input

@@ -95,7 +95,7 @@ describe("deactivating a user", () => {
     expect(users.find((u) => u.id === member.id)?.disabledAt).toEqual(expect.any(Number))
     const event = listAudit(s.database.db, s.scope, { action: "user.disable" })[0]
     expect(event).toMatchObject({ targetId: member.id })
-    expect(event?.details).toEqual({ sessionsEnded: 1 })
+    expect(event?.details).toEqual({ sessionsEnded: 1, keysRevoked: 0 })
   })
 
   it("can be undone: the user signs in again, and that is recorded", async () => {
@@ -180,21 +180,7 @@ describe("deactivating a user ends their open playground streams", () => {
       `/api/servers/${serverId}/versions/${versionId}/playground`,
       { ...session, body: {} },
     )
-    const { Client, StreamableHTTPClientTransport } = await import("@modelcontextprotocol/client")
-    const transport = new StreamableHTTPClientTransport(new URL(`/s/${serverId}/mcp`, ORIGIN), {
-      requestInit: { headers: { authorization: `Bearer ${String(grant.json.token)}` } },
-      fetch: async (url, init) => {
-        const request = new Request(url, init)
-        request.headers.set("host", "studio.test")
-        request.headers.set("origin", ORIGIN)
-        return await s.fetch(request)
-      },
-    })
-    const client = new Client(
-      { name: "playground", version: "0" },
-      { versionNegotiation: { mode: { pin: MODERN } } },
-    )
-    await client.connect(transport)
+    const client = await streamingClient(s, serverId, String(grant.json.token), ORIGIN)
     await client.listen({ toolsListChanged: true })
     const gateway = s.studio.gateway
     for (let i = 0; i < 50 && gateway.openStreams < 1; i++) await sleep(20)
@@ -248,3 +234,131 @@ describe("a refused publish", () => {
     expect(JSON.stringify(event)).not.toContain("a-bound-secret-value-123")
   })
 })
+
+describe("deactivating a user can revoke the API keys they created", () => {
+  async function withKeys() {
+    const base = await setup()
+    const { s, admin } = base
+    // A second admin creates keys on two servers; the first admin creates one too.
+    const second = await s.addUser("second@example.test", "admin")
+    const secondSession = await s.signIn("second@example.test")
+    const server = async (slug: string) => {
+      const created = await s.request("POST", "/api/servers", {
+        ...admin,
+        body: { slug, name: slug },
+      })
+      const id = String((created.json.server as { id: string }).id)
+      const saved = await s.request("POST", `/api/servers/${id}/versions`, {
+        ...admin,
+        body: { yaml: spec(echoTool("https://api.example.com/x")) },
+      })
+      const vid = String((saved.json.version as { id: string }).id)
+      await s.request("POST", `/api/servers/${id}/versions/${vid}/publish`, { ...admin, body: {} })
+      return id
+    }
+    const a = await server("a")
+    const b = await server("b")
+    const key = async (serverId: string, as: typeof admin, name: string) =>
+      String(
+        (await s.request("POST", `/api/servers/${serverId}/keys`, { ...as, body: { name } })).json
+          .key,
+      )
+    const secondKeys = [await key(a, secondSession, "ci-a"), await key(b, secondSession, "ci-b")]
+    const adminKey = await key(a, admin, "mine")
+    return { ...base, second, a, b, secondKeys, adminKey }
+  }
+
+  it("lists the user's active keys first, with their servers", async () => {
+    const { s, admin, second } = await withKeys()
+    const listed = await s.request("GET", `/api/users/${second.id}/keys`, admin)
+    expect(listed.status).toBe(200)
+    const keys = listed.json.keys as { name: string; serverName: string; prefix: string }[]
+    expect(keys.map((k) => `${k.name}@${k.serverName}`)).toEqual(["ci-a@a", "ci-b@b"])
+    expect(JSON.stringify(listed.json)).not.toMatch(/kvn_[A-Za-z0-9_-]{43}/)
+    const member = await s.signIn("member@example.test")
+    expect((await s.request("GET", `/api/users/${second.id}/keys`, member)).status).toBe(403)
+    expect((await s.request("GET", "/api/users/nobody/keys", admin)).status).toBe(404)
+  })
+
+  it("revokes exactly those keys when asked, and records each one", async () => {
+    const { s, admin, second, a, b, secondKeys, adminKey } = await withKeys()
+    const response = await s.request("PUT", `/api/users/${second.id}`, {
+      ...admin,
+      body: { disabled: true, revokeKeys: true },
+    })
+    expect(response.status, response.text).toBe(200)
+    expect(response.json.revokedKeys).toBe(2)
+    expect((await toolsList(s, a, secondKeys[0] ?? "")).status).toBe(401)
+    expect((await toolsList(s, b, secondKeys[1] ?? "")).status).toBe(401)
+    // Another admin's key on the same server keeps working.
+    expect((await toolsList(s, a, adminKey)).status).toBe(200)
+    expect((await s.request("GET", `/api/users/${second.id}/keys`, admin)).json.keys).toEqual([])
+
+    const revoked = listAudit(s.database.db, s.scope, { action: "api_key.revoke" })
+    expect(revoked).toHaveLength(2)
+    expect(revoked.every((e) => e.details?.reason === "user.disable")).toBe(true)
+    const disable = listAudit(s.database.db, s.scope, { action: "user.disable" })[0]
+    expect(disable?.details).toEqual({ sessionsEnded: 1, keysRevoked: 2 })
+  })
+
+  it("ends the open streams of the revoked keys", async () => {
+    const { s, admin, second, a, secondKeys } = await withKeys()
+    const client = await streamingClient(s, a, secondKeys[0] ?? "", "")
+    await client.listen({ toolsListChanged: true })
+    const gateway = s.studio.gateway
+    for (let i = 0; i < 50 && gateway.openStreams < 1; i++) await sleep(20)
+    expect(gateway.openStreams).toBe(1)
+    await s.request("PUT", `/api/users/${second.id}`, {
+      ...admin,
+      body: { disabled: true, revokeKeys: true },
+    })
+    expect(gateway.openStreams).toBe(0)
+    await client.close().catch(() => {})
+  })
+
+  it("leaves the keys alone when not asked, and they stay revoked after reactivation", async () => {
+    const { s, admin, second, a, secondKeys } = await withKeys()
+    await s.request("PUT", `/api/users/${second.id}`, { ...admin, body: { disabled: true } })
+    expect((await toolsList(s, a, secondKeys[0] ?? "")).status).toBe(200)
+    expect(listAudit(s.database.db, s.scope, { action: "user.disable" })[0]?.details).toEqual({
+      sessionsEnded: 1,
+      keysRevoked: 0,
+    })
+    // Revoking keys belongs to deactivation only.
+    const reactivate = await s.request("PUT", `/api/users/${second.id}`, {
+      ...admin,
+      body: { disabled: false, revokeKeys: true },
+    })
+    expect(reactivate.status).toBe(400)
+    await s.request("PUT", `/api/users/${second.id}`, { ...admin, body: { disabled: false } })
+    await s.request("PUT", `/api/users/${second.id}`, {
+      ...admin,
+      body: { disabled: true, revokeKeys: true },
+    })
+    await s.request("PUT", `/api/users/${second.id}`, { ...admin, body: { disabled: false } })
+    expect((await toolsList(s, a, secondKeys[0] ?? "")).status).toBe(401)
+  })
+})
+
+/**
+ * A real MCP client on the gateway through Studio's whole HTTP app, unbuffered so event streams
+ * stay open. `origin` is "" for a client outside a browser.
+ */
+async function streamingClient(s: ApiStudio, serverId: string, bearer: string, origin: string) {
+  const { Client, StreamableHTTPClientTransport } = await import("@modelcontextprotocol/client")
+  const transport = new StreamableHTTPClientTransport(new URL(`/s/${serverId}/mcp`, ORIGIN), {
+    requestInit: { headers: { authorization: `Bearer ${bearer}` } },
+    fetch: async (url, init) => {
+      const request = new Request(url, init)
+      request.headers.set("host", "studio.test")
+      if (origin) request.headers.set("origin", origin)
+      return await s.fetch(request)
+    },
+  })
+  const client = new Client(
+    { name: "test", version: "0" },
+    { versionNegotiation: { mode: { pin: MODERN } } },
+  )
+  await client.connect(transport)
+  return client
+}
