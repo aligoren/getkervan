@@ -8,7 +8,7 @@ import {
   type SpecIssue,
   SpecLoadError,
 } from "@kervan/spec-runtime"
-import type { Db } from "./db/open.js"
+import { type Db, writeTransaction } from "./db/open.js"
 import { type ApiKeyInfo, createApiKey, revokeApiKey } from "./db/repos/api-keys.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
 import { listCalls } from "./db/repos/call-logs.js"
@@ -120,7 +120,7 @@ export class Studio {
       throw new StudioError("invalid", `The name must be 1-${MAX_NAME_LENGTH} characters.`)
     }
     try {
-      return this.db.transaction((tx) => {
+      return writeTransaction(this.db, (tx) => {
         const created = createServer(tx, scope, { slug: input.slug, name })
         recordAudit(tx, scope, actor, {
           action: "server.create",
@@ -138,7 +138,7 @@ export class Studio {
   }
 
   async deleteServer(scope: WorkspaceScope, serverId: string, actor: Actor): Promise<void> {
-    const deleted = this.db.transaction((tx) => {
+    const deleted = writeTransaction(this.db, (tx) => {
       if (!deleteServer(tx, scope, serverId)) return false
       recordAudit(tx, scope, actor, {
         action: "server.delete",
@@ -227,7 +227,7 @@ export class Studio {
       })
       throw new StudioError("invalid", "Not published: fix the problems below.", error.issues)
     }
-    const published = this.db.transaction((tx) => {
+    const published = writeTransaction(this.db, (tx) => {
       const server = getServer(tx, scope, serverId)
       if (!server) return false
       const current =
@@ -265,7 +265,7 @@ export class Studio {
 
   /** Turns logging of (redacted, cut) call arguments and results on or off for a server. */
   setLogPayloads(scope: WorkspaceScope, serverId: string, on: boolean, actor: Actor): void {
-    const changed = this.db.transaction((tx) => {
+    const changed = writeTransaction(this.db, (tx) => {
       if (!setLogPayloads(tx, scope, serverId, on)) return false
       recordAudit(tx, scope, actor, {
         action: "server.settings",
@@ -428,7 +428,7 @@ export class Studio {
     if (trimmed === "" || trimmed.length > MAX_NAME_LENGTH) {
       throw new StudioError("invalid", `The key name must be 1-${MAX_NAME_LENGTH} characters.`)
     }
-    const created = this.db.transaction((tx) => {
+    const created = writeTransaction(this.db, (tx) => {
       const result = createApiKey(tx, scope, {
         serverId,
         name: trimmed,
@@ -448,7 +448,7 @@ export class Studio {
   }
 
   revokeApiKey(scope: WorkspaceScope, keyId: string, actor: Actor): void {
-    const revoked = this.db.transaction((tx) => {
+    const revoked = writeTransaction(this.db, (tx) => {
       if (!revokeApiKey(tx, scope, keyId)) return false
       recordAudit(tx, scope, actor, {
         action: "api_key.revoke",

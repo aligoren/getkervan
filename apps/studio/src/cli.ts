@@ -2,7 +2,7 @@ import path from "node:path"
 import { parseArgs } from "node:util"
 import { ConfigError, loadConfig } from "./config.js"
 import { hashPassword, passwordProblem, randomToken } from "./crypto.js"
-import { DatabaseError, openDatabase } from "./db/open.js"
+import { DatabaseError, openDatabase, writeTransaction } from "./db/open.js"
 import { recordAudit } from "./db/repos/audit.js"
 import {
   deleteSessionsOf,
@@ -124,7 +124,7 @@ async function resetAdmin(argv: string[], io: StudioCliIo): Promise<number> {
     const problem = passwordProblem(password)
     if (problem) throw new UsageError(problem)
     const passwordHash = await hashPassword(password)
-    const signedOut = database.db.transaction((tx) => {
+    const signedOut = writeTransaction(database.db, (tx) => {
       setPasswordHash(tx, scope, admin.id, passwordHash)
       // The operator's recovery path: a deactivated admin is reactivated.
       if (admin.disabledAt !== null) setDisabledAt(tx, scope, admin.id, null)

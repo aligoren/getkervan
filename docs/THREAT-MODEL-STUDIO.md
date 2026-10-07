@@ -188,9 +188,16 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   answers 403 (`password_change_required`) to everything except the session check, the profile,
   the password change and sign-out; hiding the rest in the UI is not what enforces it. A
   generated temporary password is in the reset response only; a chosen one is never echoed.
-- **Last active admin:** deactivation and demotion are checked in the same synchronous SQLite
-  transaction as the change, so two concurrent requests cannot both remove an admin (tested).
-  There is no way to delete a user.
+- **Last active admin:** deactivation and demotion are checked in the same SQLite transaction as
+  the change, so two concurrent requests cannot both remove an admin (tested). There is no way to
+  delete a user.
+- **Every write transaction begins with BEGIN IMMEDIATE** (`writeTransaction`): it takes the
+  write lock before the check, so a second writer, in this process or another Studio process on
+  the same database file, waits and then reads the new state instead of a stale snapshot (tested
+  with two connections). This relies on better-sqlite3 being synchronous; moving to an
+  asynchronous driver means re-evaluating every check-then-write.
+- **A role change** needs the admin's own password, checked by the server and throttled like a
+  sign-in (as for a password reset): a stolen admin session alone cannot make a new admin.
 - **Members** reach only their own profile, which has no user id in its path, and its body is
   strict: a `role`, `email` or `id` field is refused (400), not ignored. Every endpoint about
   another user is admin-only (IDOR tests), and sessions are ended by an opaque reference that

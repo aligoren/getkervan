@@ -1,6 +1,6 @@
 import { and, eq, gt, isNull } from "drizzle-orm"
 import { randomToken, sha256 } from "../../crypto.js"
-import type { Db } from "../open.js"
+import { type Db, writeTransaction } from "../open.js"
 import { oneTimeTokens } from "../schema.js"
 
 export const SETUP_TOKEN_TTL_MS = 30 * 60 * 1000
@@ -12,7 +12,7 @@ export const SETUP_TOKEN_TTL_MS = 30 * 60 * 1000
 export function issueSetupToken(db: Db, now = Date.now()): { token: string; expiresAt: number } {
   const token = randomToken(32)
   const expiresAt = now + SETUP_TOKEN_TTL_MS
-  db.transaction((tx) => {
+  writeTransaction(db, (tx) => {
     tx.update(oneTimeTokens)
       .set({ usedAt: now })
       .where(and(eq(oneTimeTokens.purpose, "setup"), isNull(oneTimeTokens.usedAt)))

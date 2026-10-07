@@ -1,5 +1,5 @@
 import { hashPassword, passwordProblem, randomToken, verifyPassword } from "./crypto.js"
-import type { Db } from "./db/open.js"
+import { type Db, writeTransaction } from "./db/open.js"
 import { listActiveKeysCreatedBy, revokeApiKey } from "./db/repos/api-keys.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
 import { deleteOtherSessions } from "./db/repos/sessions.js"
@@ -49,7 +49,7 @@ export async function setupAdmin(
   if (anyAdminExists(db)) throw new StudioError("conflict", "Studio is already set up.")
   if (!setupTokenValid(db, input.token)) throw invalidSetupToken()
   const passwordHash = await hashPassword(input.password)
-  return db.transaction((tx) => {
+  return writeTransaction(db, (tx) => {
     if (anyAdminExists(tx)) throw new StudioError("conflict", "Studio is already set up.")
     if (!consumeSetupToken(tx, input.token)) throw invalidSetupToken()
     const scope = defaultWorkspace(tx)
@@ -84,7 +84,7 @@ export async function addUser(
   }
   const passwordHash = await hashPassword(input.password)
   try {
-    return db.transaction((tx) => {
+    return writeTransaction(db, (tx) => {
       const user = createUser(tx, scope, { email: input.email, passwordHash, role: input.role })
       recordAudit(tx, scope, actor, {
         action: "user.create",
@@ -127,10 +127,12 @@ export function setUserDisabled(
   if (options.revokeKeys && !disabled) {
     throw new StudioError("invalid", "Keys are revoked only when deactivating a user.")
   }
-  return db.transaction((tx) => {
+  return writeTransaction(db, (tx) => {
     const user = getUser(tx, scope, userId)
     if (!user) throw new StudioError("not_found", "Not found.")
     if (disabled === (user.disabledAt !== null)) return { user, revokedKeys: [] }
+    // Checked inside the write transaction (BEGIN IMMEDIATE, see writeTransaction): this relies on
+    // the synchronous SQLite driver; an asynchronous driver needs this re-evaluated.
     if (disabled && user.role === "admin" && countActiveAdmins(tx, scope, user.id) === 0) {
       throw new StudioError("conflict", "The last active admin cannot be deactivated.")
     }
@@ -192,7 +194,7 @@ export async function changeOwnPassword(
     throw new StudioError("invalid", "Choose a password different from the current one.")
   }
   const passwordHash = await hashPassword(input.newPassword)
-  return db.transaction((tx) => {
+  return writeTransaction(db, (tx) => {
     if (!setPasswordHash(tx, scope, userId, passwordHash)) throw notFound()
     const sessionsEnded = deleteOtherSessions(tx, scope, userId, keepSessionHash)
     recordAudit(tx, scope, actor, {
@@ -225,7 +227,7 @@ export async function resetPassword(
   const problem = passwordProblem(password)
   if (problem) throw new StudioError("invalid", problem)
   const passwordHash = await hashPassword(password)
-  const sessionsEnded = db.transaction((tx) => {
+  const sessionsEnded = writeTransaction(db, (tx) => {
     if (!setPasswordHash(tx, scope, userId, passwordHash, Date.now(), true)) throw notFound()
     const ended = deleteSessionsOf(tx, scope, userId)
     recordAudit(tx, scope, actor, {
@@ -253,7 +255,7 @@ export function setUserRole(
   if (role !== "admin" && role !== "member") {
     throw new StudioError("invalid", 'The role must be "admin" or "member".')
   }
-  return db.transaction((tx) => {
+  return writeTransaction(db, (tx) => {
     const user = getUser(tx, scope, userId)
     if (!user) throw notFound()
     if (user.role === role) return user
@@ -288,7 +290,7 @@ export function setUserEmail(
   if (!EMAIL.test(email.trim())) throw new StudioError("invalid", "Enter a valid email address.")
   const normalized = normalizeEmail(email)
   try {
-    return db.transaction((tx) => {
+    return writeTransaction(db, (tx) => {
       const user = getUser(tx, scope, userId)
       if (!user) throw notFound()
       if (user.email === normalized) return user
@@ -320,7 +322,7 @@ export function updateProfile(
   if (displayName !== null && displayName.length > 100) {
     throw new StudioError("invalid", "The display name can be at most 100 characters.")
   }
-  return db.transaction((tx) => {
+  return writeTransaction(db, (tx) => {
     const user = getUser(tx, scope, userId)
     if (!user) throw notFound()
     updateUser(tx, scope, user.id, { displayName })

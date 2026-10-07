@@ -67,7 +67,10 @@ On first start, Studio:
   - A password reset asks for your own password, sets a temporary one (yours, or a generated
     one shown once), and signs the user out everywhere. They must choose a new password at
     their next sign-in; until then the API refuses everything else.
+  - A role change asks for confirmation and your own password (the server insists too).
   - The last active admin cannot be deactivated or made a member.
+- **Navigation:** every user sees Servers (members edit, validate and publish specs and use the
+  playground); Users and the audit log are for admins only.
 - **Profile (everyone):** your email and role (only an admin changes those), an optional display
   name, your password (the current one is required; your other sessions are signed out), and
   your active sessions, which you can sign out one by one or all at once.

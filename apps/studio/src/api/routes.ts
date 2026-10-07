@@ -33,7 +33,7 @@ import {
   type SessionUser,
 } from "../db/repos/sessions.js"
 import { anyAdminExists, getUser, recordLogin } from "../db/repos/users.js"
-import { checksOf, serverSummaries } from "../db/repos/version-checks.js"
+import { checksOf, hasValidVersion, serverSummaries } from "../db/repos/version-checks.js"
 import { getVersion, listVersions } from "../db/repos/versions.js"
 import { defaultWorkspace } from "../db/repos/workspaces.js"
 import { ExportError } from "../export.js"
@@ -93,7 +93,10 @@ const passwordBody = z.strictObject({
   currentPassword: z.string().max(1024),
   newPassword: z.string().max(1024),
 })
-const roleBody = z.strictObject({ role: z.enum(["admin", "member"]) })
+const roleBody = z.strictObject({
+  role: z.enum(["admin", "member"]),
+  adminPassword: z.string().max(1024),
+})
 const emailBody = z.strictObject({ email: z.string().max(320) })
 const resetBody = z.strictObject({
   adminPassword: z.string().max(1024),
@@ -532,6 +535,7 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     const keys = admin ? listApiKeys(db, scope, server.id) : []
     return c.json({
       summary,
+      anyValid: hasValidVersion(db, scope, server.id),
       ...(admin
         ? {
             secrets: (await studio.listSecrets(scope, server.id)).length,
@@ -588,8 +592,26 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     return c.json({ user, revokedKeys: revokedKeys.length })
   })
 
+  /**
+   * Sensitive admin actions (a password reset, a role change) need the admin's own password,
+   * checked here on the server and throttled like a login: a stolen session alone is not enough.
+   * Returns a response to send instead (429, 403) or `undefined` when confirmed.
+   */
+  const confirmAdmin = async (c: Context<ApiEnv>, password: string) => {
+    const session = c.get("session")
+    if (!session) throw new StudioError("forbidden", "Sign in first.")
+    const attempt = throttle.login(session.user.email, c.get("clientIp"))
+    if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
+    const confirmed = await checkPassword(db, session.scope, session.user.id, password)
+    attempt.done(confirmed)
+    if (!confirmed) throw new StudioError("forbidden", "Your password is wrong.")
+    return undefined
+  }
+
   api.put("/users/:id/role", signedIn("admin"), async (c) => {
     const body = await parse(c, roleBody)
+    const refused = await confirmAdmin(c, body.adminPassword)
+    if (refused) return refused
     return c.json({ user: setUserRole(db, scopeOf(c), c.req.param("id"), body.role, actor(c)) })
   })
 
@@ -602,12 +624,8 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     const body = await parse(c, resetBody)
     const session = c.get("session")
     if (!session) throw new StudioError("forbidden", "Sign in first.")
-    // The admin confirms with their own password, throttled like a login.
-    const attempt = throttle.login(session.user.email, c.get("clientIp"))
-    if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
-    const confirmed = await checkPassword(db, session.scope, session.user.id, body.adminPassword)
-    attempt.done(confirmed)
-    if (!confirmed) throw new StudioError("forbidden", "Your password is wrong.")
+    const refused = await confirmAdmin(c, body.adminPassword)
+    if (refused) return refused
     const userId = c.req.param("id")
     const result = await resetPassword(
       db,

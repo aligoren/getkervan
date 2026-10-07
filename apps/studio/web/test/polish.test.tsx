@@ -75,6 +75,39 @@ describe("next steps", () => {
     expect(page.container.textContent).toBe("")
   })
 
+  it("counts an older valid version when the newest has problems", async () => {
+    const broken = { valid: false, problems: 2, secrets: 0, checkedAt: 0 }
+    handler = () =>
+      json(
+        overview({
+          summary: {
+            latest: { id: "v2", number: 2, check: broken },
+            publishedNumber: null,
+            lastCallAt: null,
+          },
+          anyValid: true,
+        }),
+      )
+    const page = render(<NextSteps serverId="s9" isAdmin={false} refresh={0} />)
+    await page.findByText(/Publish it/)
+    expect(page.container.querySelector("li")?.className).toBe("done")
+    cleanup()
+    handler = () =>
+      json(
+        overview({
+          summary: {
+            latest: { id: "v2", number: 2, check: broken },
+            publishedNumber: null,
+            lastCallAt: null,
+          },
+          anyValid: false,
+        }),
+      )
+    const none = render(<NextSteps serverId="s9" isAdmin={false} refresh={0} />)
+    await none.findByText(/Publish it/)
+    expect(none.container.querySelector("li")?.className).not.toBe("done")
+  })
+
   it("shows members only the steps they can take", async () => {
     handler = () => json({ summary: overview({}).summary })
     const page = render(<NextSteps serverId="s3" isAdmin={false} refresh={0} />)

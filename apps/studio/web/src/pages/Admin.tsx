@@ -1,5 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react"
 import { api, type User } from "../api.js"
+import { UsernameField } from "../components/UsernameField.js"
 import { type AuditEntry, AuditTable, ErrorText } from "../components/untrusted.js"
 import { when } from "./Profile.js"
 
@@ -16,9 +17,10 @@ type Pending =
   | { kind: "reset"; user: User }
   | { kind: "email"; user: User }
   | { kind: "temporary"; user: User; password: string }
+  | { kind: "role"; user: User; role: "admin" | "member" }
 
 /** Users of the workspace (admins only). */
-export function Users(props: { currentUserId?: string } = {}) {
+export function Users(props: { currentUserId?: string; currentUserEmail?: string } = {}) {
   const [users, setUsers] = useState<User[]>([])
   const [pending, setPending] = useState<Pending>()
   const [notice, setNotice] = useState<string>()
@@ -85,13 +87,14 @@ export function Users(props: { currentUserId?: string } = {}) {
                   <select
                     aria-label={`Role of ${user.email}`}
                     value={user.role}
-                    onChange={(e) => {
-                      const role = e.target.value
-                      void act(async () => {
-                        await api("PUT", path(user, "/role"), { role })
-                        return `${user.email} is now ${role}.`
+                    // A role change asks first, with the admin's own password (the API insists too).
+                    onChange={(e) =>
+                      setPending({
+                        kind: "role",
+                        user,
+                        role: e.target.value === "admin" ? "admin" : "member",
                       })
-                    }}
+                    }
                   >
                     <option value="member">member</option>
                     <option value="admin">admin</option>
@@ -167,8 +170,27 @@ export function Users(props: { currentUserId?: string } = {}) {
           }
         />
       ) : null}
+      {pending?.kind === "role" ? (
+        <RoleBox
+          user={pending.user}
+          role={pending.role}
+          adminEmail={props.currentUserEmail ?? ""}
+          onCancel={() => setPending(undefined)}
+          onConfirm={(adminPassword) =>
+            act(async () => {
+              await api("PUT", path(pending.user, "/role"), {
+                role: pending.role,
+                adminPassword,
+              })
+              setPending(undefined)
+              return `${pending.user.email} is now ${pending.role}.`
+            })
+          }
+        />
+      ) : null}
       {pending?.kind === "reset" ? (
         <ResetBox
+          adminEmail={props.currentUserEmail ?? ""}
           user={pending.user}
           onCancel={() => setPending(undefined)}
           onReset={(adminPassword, password) =>
@@ -291,8 +313,51 @@ function EmailBox(props: {
   )
 }
 
+function RoleBox(props: {
+  user: User
+  role: "admin" | "member"
+  adminEmail: string
+  onCancel: () => void
+  onConfirm: (adminPassword: string) => Promise<void>
+}) {
+  const [adminPassword, setAdminPassword] = useState("")
+  return (
+    <form
+      className="callout stack"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void props.onConfirm(adminPassword)
+      }}
+    >
+      <p>
+        {props.role === "admin"
+          ? `Make ${props.user.email} an admin? Admins manage users, secrets and API keys, and read the audit log.`
+          : `Make ${props.user.email} a member? They keep editing and publishing specs, but lose access to users, secrets, keys and the audit log.`}
+      </p>
+      <UsernameField username={props.adminEmail} />
+      <label>
+        Your password, to confirm
+        <input
+          type="password"
+          value={adminPassword}
+          onChange={(e) => setAdminPassword(e.target.value)}
+          autoComplete="current-password"
+          required
+        />
+      </label>
+      <div className="inline">
+        <button type="submit">{`Make ${props.role}`}</button>
+        <button type="button" onClick={props.onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
 function ResetBox(props: {
   user: User
+  adminEmail: string
   onCancel: () => void
   onReset: (adminPassword: string, password: string) => Promise<void>
 }) {
@@ -309,6 +374,7 @@ function ResetBox(props: {
       <p>
         {`Reset the password of ${props.user.email}. All their sessions end, and they must choose a new password at their next sign-in.`}
       </p>
+      <UsernameField username={props.adminEmail} />
       <label>
         Temporary password (leave empty to generate one)
         <input

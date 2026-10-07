@@ -50,6 +50,24 @@ export function checksOf(
   )
 }
 
+/** Whether any version of a server passed its latest check (not only the newest version). */
+export function hasValidVersion(db: Db, scope: WorkspaceScope, serverId: string): boolean {
+  const row = db
+    .select({ id: versionChecks.versionId })
+    .from(versionChecks)
+    .innerJoin(specVersions, eq(specVersions.id, versionChecks.versionId))
+    .where(
+      and(
+        eq(versionChecks.workspaceId, scope.workspaceId),
+        eq(specVersions.serverId, serverId),
+        eq(versionChecks.valid, true),
+      ),
+    )
+    .limit(1)
+    .get()
+  return row !== undefined
+}
+
 export interface ServerSummary {
   /** The newest version, with its latest check (`null` when it was never checked). */
   latest: { id: string; number: number; check: VersionCheck | null } | null

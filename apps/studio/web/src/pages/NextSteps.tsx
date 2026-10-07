@@ -3,6 +3,8 @@ import { api, type ServerSummary } from "../api.js"
 
 interface Overview {
   summary: ServerSummary | null
+  /** Whether any saved version is valid (an older one counts too). */
+  anyValid?: boolean
   /** Admins only. */
   secrets?: number
   activeKeys?: number
@@ -39,7 +41,11 @@ export function NextSteps(props: { serverId: string; isAdmin: boolean; refresh: 
   const latest = overview.summary?.latest
   const valid = latest?.check?.valid === true
   const steps: { label: string; done: boolean }[] = [
-    { label: "Save a version of the spec that is valid", done: valid },
+    // Any valid version counts: a broken newer draft does not undo this step.
+    {
+      label: "Save a version of the spec that is valid",
+      done: valid || overview.anyValid === true,
+    },
     { label: "Publish it", done: (overview.summary?.publishedNumber ?? null) !== null },
   ]
   if (props.isAdmin) {

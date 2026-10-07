@@ -182,6 +182,20 @@ describe("version checks", () => {
     expect(forMember.json).not.toHaveProperty("activeKeys")
   })
 
+  it("reports a valid version even when the newest one has problems (next steps)", async () => {
+    const { s, admin, id, save } = await setup()
+    const overview = async () => (await s.request("GET", `/api/servers/${id}/overview`, admin)).json
+    const broken = "specVersion: 1\nname: x\nversion: 1\ntools: [{ name: 1 }]\n"
+    expect((await overview()).anyValid).toBe(false)
+    await save(broken)
+    expect((await overview()).anyValid).toBe(false)
+    await save(spec(echoTool("https://api.example.com/x")))
+    await save(broken)
+    const after = await overview()
+    expect(after.anyValid).toBe(true)
+    expect(after.summary).toMatchObject({ latest: { number: 3, check: { valid: false } } })
+  })
+
   it("accepts the starter spec a new server begins with (timezone: auto included)", async () => {
     const { save } = await setup()
     expect(STARTER_SPEC).toContain("timezone: auto")

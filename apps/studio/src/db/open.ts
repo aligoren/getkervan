@@ -21,6 +21,20 @@ export class DatabaseError extends Error {
   override name = "DatabaseError"
 }
 
+/**
+ * Runs `fn` in a write transaction that takes SQLite's write lock when it begins (BEGIN
+ * IMMEDIATE). A check and the write that depends on it (the last active admin, a free email, a
+ * setup token) then see the same state, even when another Studio process uses the same database
+ * file: a second writer waits for the lock (busy_timeout) and then reads the new state, instead
+ * of working on a snapshot that went stale.
+ *
+ * This relies on better-sqlite3 being synchronous: nothing else in this process runs between the
+ * check and the write. Moving to an asynchronous driver means re-evaluating every caller.
+ */
+export function writeTransaction<T>(db: Db, fn: (tx: Db) => T): T {
+  return db.transaction(fn, { behavior: "immediate" })
+}
+
 /** The migrations shipped with Studio: `apps/studio/drizzle`, next to `src` and `dist`. */
 export const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../drizzle", import.meta.url))
 

@@ -1,6 +1,6 @@
 import { and, desc, eq, max } from "drizzle-orm"
 import { sha256 } from "../../crypto.js"
-import type { Db } from "../open.js"
+import { type Db, writeTransaction } from "../open.js"
 import { servers, specVersions } from "../schema.js"
 import type { WorkspaceScope } from "../scope.js"
 
@@ -36,7 +36,7 @@ export function saveVersion(
   createdBy: string | null,
   now = Date.now(),
 ): SpecVersion | undefined {
-  return db.transaction((tx) => {
+  return writeTransaction(db, (tx) => {
     const server = tx
       .select({ id: servers.id })
       .from(servers)

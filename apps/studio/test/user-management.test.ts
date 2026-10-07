@@ -40,7 +40,10 @@ describe("rule: the last active admin stays an active admin", () => {
   it("cannot deactivate or demote themselves when they are the only admin", async () => {
     const { s, owner, admin, put } = await setup()
     const deactivate = await put(admin, `/users/${owner.id}`, { disabled: true })
-    const demote = await put(admin, `/users/${owner.id}/role`, { role: "member" })
+    const demote = await put(admin, `/users/${owner.id}/role`, {
+      role: "member",
+      adminPassword: PASSWORD,
+    })
     expect([deactivate.status, demote.status]).toEqual([409, 409])
     expect(demote.json.error).toBe("The last active admin cannot stop being an admin.")
     expect(getUser(s.database.db, s.scope, owner.id)).toMatchObject({
@@ -53,11 +56,20 @@ describe("rule: the last active admin stays an active admin", () => {
     const { s, owner, admin, put } = await setup()
     const second = await s.addUser("second@example.test", "admin")
     expect((await put(admin, `/users/${second.id}`, { disabled: true })).status).toBe(200)
-    expect((await put(admin, `/users/${owner.id}/role`, { role: "member" })).status).toBe(409)
+    expect(
+      (await put(admin, `/users/${owner.id}/role`, { role: "member", adminPassword: PASSWORD }))
+        .status,
+    ).toBe(409)
     // Once the second is back, either may become a member.
     expect((await put(admin, `/users/${second.id}`, { disabled: false })).status).toBe(200)
-    expect((await put(admin, `/users/${second.id}/role`, { role: "member" })).status).toBe(200)
-    expect((await put(admin, `/users/${owner.id}/role`, { role: "member" })).status).toBe(409)
+    expect(
+      (await put(admin, `/users/${second.id}/role`, { role: "member", adminPassword: PASSWORD }))
+        .status,
+    ).toBe(200)
+    expect(
+      (await put(admin, `/users/${owner.id}/role`, { role: "member", adminPassword: PASSWORD }))
+        .status,
+    ).toBe(409)
   })
 
   it("holds when two requests race to remove the two admins", async () => {
@@ -74,7 +86,7 @@ describe("rule: the last active admin stays an active admin", () => {
     const t = await setup()
     const third = await t.s.addUser("third@example.test", "admin")
     const raced = await Promise.all([
-      t.put(t.admin, `/users/${t.owner.id}/role`, { role: "member" }),
+      t.put(t.admin, `/users/${t.owner.id}/role`, { role: "member", adminPassword: PASSWORD }),
       t.put(t.admin, `/users/${third.id}`, { disabled: true }),
     ])
     expect(raced.map((r) => r.status).sort()).toEqual([200, 409])
@@ -89,6 +101,36 @@ describe("rule: the last active admin stays an active admin", () => {
   })
 })
 
+describe("rule: a role change needs the admin's own password, checked by the server", () => {
+  it("refuses a role change without the password, or with a wrong one", async () => {
+    const { s, memberUser, admin, put } = await setup()
+    const missing = await put(admin, `/users/${memberUser.id}/role`, { role: "admin" })
+    const wrong = await put(admin, `/users/${memberUser.id}/role`, {
+      role: "admin",
+      adminPassword: "not my password",
+    })
+    expect([missing.status, wrong.status]).toEqual([400, 403])
+    expect(wrong.json.error).toBe("Your password is wrong.")
+    expect(getUser(s.database.db, s.scope, memberUser.id)?.role).toBe("member")
+    const right = await put(admin, `/users/${memberUser.id}/role`, {
+      role: "admin",
+      adminPassword: PASSWORD,
+    })
+    expect(right.status).toBe(200)
+    expect(getUser(s.database.db, s.scope, memberUser.id)?.role).toBe("admin")
+  })
+
+  it("locks after too many wrong passwords, like a sign-in", async () => {
+    const { memberUser, admin, put } = await setup({
+      throttle: { accountFailures: 3, ipFailures: 1000 },
+    })
+    const promote = (adminPassword: string) =>
+      put(admin, `/users/${memberUser.id}/role`, { role: "admin", adminPassword })
+    for (let i = 0; i < 3; i++) expect((await promote(`wrong pw ${i}`)).status).toBe(403)
+    expect((await promote(PASSWORD)).status).toBe(429)
+  })
+})
+
 describe("rule: a member edits only their own profile", () => {
   it("gets 403 from every admin endpoint about another user (IDOR)", async () => {
     const { s, owner, member, put, post } = await setup()
@@ -96,7 +138,7 @@ describe("rule: a member edits only their own profile", () => {
       await s.request("GET", "/api/users", member),
       await s.request("GET", `/api/users/${owner.id}/keys`, member),
       await put(member, `/users/${owner.id}`, { disabled: true }),
-      await put(member, `/users/${owner.id}/role`, { role: "member" }),
+      await put(member, `/users/${owner.id}/role`, { role: "member", adminPassword: PASSWORD }),
       await put(member, `/users/${owner.id}/email`, { email: "mine@example.test" }),
       await post(member, `/users/${owner.id}/password-reset`, { adminPassword: PASSWORD }),
     ]
@@ -120,7 +162,14 @@ describe("rule: a member edits only their own profile", () => {
       displayName: null,
     })
     // Their own role through the admin endpoint: 403, as above.
-    expect((await put(member, `/users/${memberUser.id}/role`, { role: "admin" })).status).toBe(403)
+    expect(
+      (
+        await put(member, `/users/${memberUser.id}/role`, {
+          role: "admin",
+          adminPassword: PASSWORD,
+        })
+      ).status,
+    ).toBe(403)
   })
 
   it("changes only their own display name (the profile has no user id to point elsewhere)", async () => {
@@ -152,7 +201,7 @@ describe("rule: a member edits only their own profile", () => {
       role: "admin",
     })
     const attempts = [
-      await put(admin, `/users/${stranger.id}/role`, { role: "member" }),
+      await put(admin, `/users/${stranger.id}/role`, { role: "member", adminPassword: PASSWORD }),
       await put(admin, `/users/${stranger.id}/email`, { email: "taken@example.test" }),
       await post(admin, `/users/${stranger.id}/password-reset`, { adminPassword: PASSWORD }),
     ]
@@ -240,7 +289,7 @@ describe("rule: every change needs the session's CSRF token and Studio's origin,
       ["PUT", "/api/profile", { displayName: "x" }],
       ["PUT", "/api/profile/password", { currentPassword: PASSWORD, newPassword: NEW_PASSWORD }],
       ["POST", "/api/profile/sessions/end-others", {}],
-      ["PUT", `/api/users/${memberId}/role`, { role: "admin" }],
+      ["PUT", `/api/users/${memberId}/role`, { role: "admin", adminPassword: PASSWORD }],
       ["PUT", `/api/users/${memberId}/email`, { email: "x@example.test" }],
       ["POST", `/api/users/${memberId}/password-reset`, { adminPassword: PASSWORD }],
     ] as const
@@ -266,8 +315,8 @@ describe("rule: every change needs the session's CSRF token and Studio's origin,
   it("records who did what to whom, and never a password", async () => {
     const { s, owner, memberUser, admin, member, put, post } = await setup()
     await put(member, "/profile", { displayName: "Mem" })
-    await put(admin, `/users/${memberUser.id}/role`, { role: "admin" })
-    await put(admin, `/users/${memberUser.id}/role`, { role: "member" })
+    await put(admin, `/users/${memberUser.id}/role`, { role: "admin", adminPassword: PASSWORD })
+    await put(admin, `/users/${memberUser.id}/role`, { role: "member", adminPassword: PASSWORD })
     await put(admin, `/users/${memberUser.id}/email`, { email: "renamed@example.test" })
     const reset = await post(admin, `/users/${memberUser.id}/password-reset`, {
       adminPassword: PASSWORD,

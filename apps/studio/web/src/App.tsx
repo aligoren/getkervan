@@ -91,7 +91,7 @@ export function App() {
   const page = serverId ? (
     <ServerPage serverId={decodeURIComponent(serverId)} user={phase.user} />
   ) : hash === "#/users" && isAdmin ? (
-    <Users currentUserId={phase.user.id} />
+    <Users currentUserId={phase.user.id} currentUserEmail={phase.user.email} />
   ) : hash === "#/audit" && isAdmin ? (
     <Audit />
   ) : hash === "#/profile" ? (
@@ -105,6 +105,8 @@ export function App() {
         <a href="#/" className="brand">
           Kervan Studio
         </a>
+        {/* Every signed-in user works on servers (members edit and publish specs). */}
+        <a href="#/">Servers</a>
         {isAdmin ? (
           <>
             <a href="#/users">Users</a>

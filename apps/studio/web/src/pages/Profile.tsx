@@ -1,6 +1,8 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react"
 import { api, type User } from "../api.js"
+import { UsernameField } from "../components/UsernameField.js"
 import { ErrorText } from "../components/untrusted.js"
+import { deviceName } from "../device.js"
 
 /** A time, or "—" when there is none. */
 export function when(time: number | null | undefined): string {
@@ -11,7 +13,7 @@ export function when(time: number | null | undefined): string {
  * Changes the signed-in user's password. The current password is required; the new one needs
  * at least 12 characters. Every other session ends.
  */
-function PasswordForm(props: { onDone: (sessionsEnded: number) => void }) {
+function PasswordForm(props: { username: string; onDone: (sessionsEnded: number) => void }) {
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
   const [repeat, setRepeat] = useState("")
@@ -40,6 +42,7 @@ function PasswordForm(props: { onDone: (sessionsEnded: number) => void }) {
 
   return (
     <form className="stack" onSubmit={submit}>
+      <UsernameField username={props.username} />
       <label>
         Current password
         <input
@@ -86,7 +89,7 @@ export function ChangePassword(props: { user: User; onDone: () => void; onSignOu
       <p className="muted">
         An admin reset the password of {props.user.email}. Choose your own before you continue.
       </p>
-      <PasswordForm onDone={props.onDone} />
+      <PasswordForm username={props.user.email} onDone={props.onDone} />
       <button type="button" onClick={props.onSignOut}>
         Sign out
       </button>
@@ -182,6 +185,7 @@ export function Profile(props: { onChanged: (user: User) => void }) {
 
       <h2>Password</h2>
       <PasswordForm
+        username={user.email}
         onDone={(ended) =>
           void act(async () => `Password changed. ${ended} other session(s) were signed out.`)
         }
@@ -204,10 +208,12 @@ export function Profile(props: { onChanged: (user: User) => void }) {
               <td>{when(session.createdAt)}</td>
               <td>{when(session.lastSeenAt)}</td>
               <td>{session.ip ?? "—"}</td>
-              <td className="wrap">{session.userAgent ?? "—"}</td>
+              <td className="wrap" title={session.userAgent ?? undefined}>
+                {deviceName(session.userAgent)}
+              </td>
               <td>
                 {session.current ? (
-                  "this session"
+                  <span className="badge ok">this session</span>
                 ) : (
                   <button
                     type="button"
