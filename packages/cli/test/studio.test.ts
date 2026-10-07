@@ -26,7 +26,8 @@ describe("kervan studio", () => {
     expect(err.join("\n")).toMatch(/Kervan Studio is not installed/)
   })
 
-  it("forwards to Studio's command line when it is installed", async () => {
+  // Loads all of Studio (its server, database driver and spec runtime): slow under a busy test run.
+  it("forwards to Studio's command line when it is installed", { timeout: 30_000 }, async () => {
     const { io, out } = capture(studioDir)
     expect(await run(["studio", "--help"], io)).toBe(0)
     expect(out.join("\n")).toContain("Usage: kervan-studio <command>")
