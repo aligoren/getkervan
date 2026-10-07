@@ -7,6 +7,7 @@ import {
   changeOwnPassword,
   checkPassword,
   listUsers,
+  prepareLoginTiming,
   resetPassword,
   setTheme,
   setUserDisabled,
@@ -37,6 +38,7 @@ import { anyAdminExists, getUser, recordLogin } from "../db/repos/users.js"
 import { checksOf, hasValidVersion, serverSummaries } from "../db/repos/version-checks.js"
 import { getVersion, listVersions } from "../db/repos/versions.js"
 import { defaultWorkspace } from "../db/repos/workspaces.js"
+import { sanitizeDisplayText } from "../display-text.js"
 import { ExportError } from "../export.js"
 import { SecretInputError } from "../secrets.js"
 import { type Studio, StudioError } from "../studio.js"
@@ -126,6 +128,8 @@ function publicUser(user: SessionUser) {
 export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
   const api = new Hono<ApiEnv>()
   const db = studio.db
+  // Ready before the first sign-in, so an unknown email is not slower than a known one even once.
+  void prepareLoginTiming()
   const origin = options.config.publicUrl.origin
   const secure = isSecure(options.config)
   const cookieName = sessionCookieName(secure)
@@ -273,7 +277,8 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
         { type: "user", ip },
         {
           action: "login.failure",
-          details: { email: body.email.trim().toLowerCase().slice(0, 320) },
+          // Kept for the record, but shown so that it cannot mislead (display-text.ts).
+          details: { email: sanitizeDisplayText(body.email.trim().toLowerCase(), 320) },
         },
       )
       // The same answer whether or not the account exists.

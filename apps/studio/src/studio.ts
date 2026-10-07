@@ -24,6 +24,7 @@ import { recordCheck } from "./db/repos/version-checks.js"
 import { getVersion, type SpecVersion, saveVersion } from "./db/repos/versions.js"
 import type { WorkspaceScope } from "./db/scope.js"
 import { diffLines } from "./diff.js"
+import { unsafeTextProblem } from "./display-text.js"
 import { exportSpec } from "./export.js"
 import { Gateway } from "./gateway.js"
 import { PlaygroundTokens } from "./playground.js"
@@ -119,6 +120,8 @@ export class Studio {
     if (name === "" || name.length > MAX_NAME_LENGTH) {
       throw new StudioError("invalid", `The name must be 1-${MAX_NAME_LENGTH} characters.`)
     }
+    const unsafe = unsafeTextProblem(name, "The name")
+    if (unsafe) throw new StudioError("invalid", unsafe)
     try {
       return writeTransaction(this.db, (tx) => {
         const created = createServer(tx, scope, { slug: input.slug, name })
@@ -428,6 +431,8 @@ export class Studio {
     if (trimmed === "" || trimmed.length > MAX_NAME_LENGTH) {
       throw new StudioError("invalid", `The key name must be 1-${MAX_NAME_LENGTH} characters.`)
     }
+    const unsafe = unsafeTextProblem(trimmed, "The key name")
+    if (unsafe) throw new StudioError("invalid", unsafe)
     const created = writeTransaction(this.db, (tx) => {
       const result = createApiKey(tx, scope, {
         serverId,

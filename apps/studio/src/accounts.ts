@@ -24,6 +24,7 @@ import {
 } from "./db/repos/users.js"
 import { defaultWorkspace } from "./db/repos/workspaces.js"
 import type { WorkspaceScope } from "./db/scope.js"
+import { identitySkeleton, RESERVED_NAMES, unsafeTextProblem } from "./display-text.js"
 import { isUniqueViolation, StudioError } from "./studio.js"
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/
@@ -31,10 +32,45 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/
 /** Compared against when an email is unknown, so a login takes as long either way. */
 let dummyHash: Promise<string> | undefined
 
-function checkCredentials(email: string, password: string): void {
+/**
+ * Computes the hash a sign-in for an unknown email is checked against. Called when the API is
+ * created, so even the first unknown-account attempt takes no longer than a known one.
+ */
+export function prepareLoginTiming(): Promise<string> {
+  dummyHash ??= hashPassword("kervan-dummy-password")
+  return dummyHash
+}
+
+/** Whether `prepareLoginTiming` has run (tests). */
+export function loginTimingPrepared(): boolean {
+  return dummyHash !== undefined
+}
+
+/** An email people can sign in with, and that shows the same to everyone: no invisible characters. */
+function checkEmail(email: string): void {
+  const unsafe = unsafeTextProblem(email, "The email")
+  if (unsafe) throw new StudioError("invalid", unsafe)
   if (!EMAIL.test(email.trim())) throw new StudioError("invalid", "Enter a valid email address.")
+}
+
+function checkCredentials(email: string, password: string): void {
+  checkEmail(email)
   const problem = passwordProblem(password)
   if (problem) throw new StudioError("invalid", problem)
+}
+
+/** An email may not read as another user's display name (the reverse is checked on names). */
+function checkEmailNotAName(tx: Db, scope: WorkspaceScope, email: string, userId?: string): void {
+  const key = identitySkeleton(email)
+  const clash = listUsers(tx, scope).some(
+    (other) =>
+      other.id !== userId &&
+      other.displayName !== null &&
+      identitySkeleton(other.displayName) === key,
+  )
+  if (clash) {
+    throw new StudioError("conflict", "That email reads like another user's display name.")
+  }
 }
 
 /**
@@ -87,6 +123,7 @@ export async function addUser(
   const passwordHash = await hashPassword(input.password)
   try {
     return writeTransaction(db, (tx) => {
+      checkEmailNotAName(tx, scope, input.email)
       const user = createUser(tx, scope, { email: input.email, passwordHash, role: input.role })
       recordAudit(tx, scope, actor, {
         action: "user.create",
@@ -289,13 +326,14 @@ export function setUserEmail(
   email: string,
   actor: Actor,
 ): User {
-  if (!EMAIL.test(email.trim())) throw new StudioError("invalid", "Enter a valid email address.")
+  checkEmail(email)
   const normalized = normalizeEmail(email)
   try {
     return writeTransaction(db, (tx) => {
       const user = getUser(tx, scope, userId)
       if (!user) throw notFound()
       if (user.email === normalized) return user
+      checkEmailNotAName(tx, scope, normalized, user.id)
       updateUser(tx, scope, user.id, { email: normalized })
       recordAudit(tx, scope, actor, {
         action: "user.email",
@@ -324,9 +362,25 @@ export function updateProfile(
   if (displayName !== null && displayName.length > 100) {
     throw new StudioError("invalid", "The display name can be at most 100 characters.")
   }
+  const unsafe =
+    displayName === null ? undefined : unsafeTextProblem(displayName, "The display name")
+  if (unsafe) throw new StudioError("invalid", unsafe)
+  const key = displayName === null ? "" : identitySkeleton(displayName)
+  if (displayName !== null && RESERVED_NAMES.some((name) => identitySkeleton(name) === key)) {
+    throw new StudioError("invalid", `"${displayName}" is reserved: choose another display name.`)
+  }
   return writeTransaction(db, (tx) => {
     const user = getUser(tx, scope, userId)
     if (!user) throw notFound()
+    // A name that reads as someone else's email would let one user pass for another.
+    if (
+      displayName !== null &&
+      listUsers(tx, scope).some(
+        (other) => other.id !== user.id && identitySkeleton(other.email) === key,
+      )
+    ) {
+      throw new StudioError("invalid", "A display name cannot be another user's email.")
+    }
     updateUser(tx, scope, user.id, { displayName })
     recordAudit(tx, scope, actor, {
       action: "user.profile",
@@ -378,8 +432,7 @@ export async function verifyLogin(
 ): Promise<User | undefined> {
   if (password.length === 0 || password.length > 1024 || email.length > 320) return undefined
   const user = findUserByEmail(db, scope, email)
-  dummyHash ??= hashPassword("kervan-dummy-password")
-  const ok = await verifyPassword(password, user?.passwordHash ?? (await dummyHash))
+  const ok = await verifyPassword(password, user?.passwordHash ?? (await prepareLoginTiming()))
   // A deactivated user gets the same answer as a wrong password.
   if (!user || !ok || user.disabledAt !== null) return undefined
   const { passwordHash: _hash, ...rest } = user

@@ -78,6 +78,11 @@ On first start, Studio:
 - **Audit log (admins):** sign-ins and sign-outs, user and profile changes (including the theme),
   servers (created, published, rolled back, refused, settings, deleted), secrets and API keys;
   the latest 100 entries. Passwords, secret values and keys are never recorded.
+- **Names and emails** that others see cannot hide anything: invisible, control and
+  text-direction characters are refused in emails, display names, server names and key names. A
+  display name cannot be "admin" or another reserved label, or another user's email, in any
+  lookalike form. A failed sign-in's email is kept in the audit log with such characters shown as
+  visible escapes (`\u202E`).
 - **Dates and times** are always in English (`Oct 7, 2026`, `3 minutes ago`), whatever the
   browser's language, like the rest of the UI. Hovering one shows the exact time.
 - **Focus rings** show when you use the keyboard, not after mouse clicks; text fields always show

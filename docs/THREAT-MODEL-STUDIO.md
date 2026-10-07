@@ -312,6 +312,27 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Spec tools keep the runtime limits: timeouts, response sizes, per-tool rate limits and the DNS
   lookup cap.
 
+### T16: Misleading text (names, emails, failed sign-ins)
+
+- Text people type and others see may not hide anything (`apps/studio/src/display-text.ts`):
+  controls including line breaks and NUL, bidi controls, zero-width and other format characters,
+  and blank-looking letters.
+  - Refused (400, naming the code point) where people choose the text and can fix it: emails
+    (setup, adding a user, changing an email), display names, server names, API key names. Slugs
+    and secret names were already plain ASCII.
+  - Escaped visibly (a backslash, "u" and the code point; backslashes doubled) where Studio must
+    keep what was sent: the email of a failed sign-in in the audit log. The 320-character limit
+    applies after escaping, ending in "…".
+- A display name may not read as a privileged label ("admin", "system", "Kervan Studio", ...) or
+  as another user's email, compared after folding case, width, accents, spaces, invisible
+  characters and common Cyrillic, Greek and Turkish lookalikes. An email may not read as another
+  user's display name either. The lookalike table is not exhaustive.
+- A failed sign-in looks the same whether or not the account exists: the same answer and lock-out,
+  the same audit row (no user id either way), and the same work: an unknown email is checked
+  against a dummy hash computed when the API starts, so even the first attempt is not faster or
+  slower (tested as "within 10x", not a fixed time).
+- No source file contains invisible or text-direction characters (a repository test).
+
 ### T13: Repudiation (4a–4c)
 
 - The audit log is append-only (database triggers refuse `UPDATE` and `DELETE`). Admins can read
