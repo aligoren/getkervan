@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from "node:fs"
+import { request as httpRequest } from "node:http"
 import { type AddressInfo, createServer as createNetServer } from "node:net"
 import os from "node:os"
 import path from "node:path"
@@ -9,7 +10,7 @@ import { hashPassword, verifyPassword } from "../src/crypto.js"
 import { openDatabase } from "../src/db/open.js"
 import { listAudit } from "../src/db/repos/audit.js"
 import { consumeSetupToken } from "../src/db/repos/tokens.js"
-import { createUser, findUserByEmail } from "../src/db/repos/users.js"
+import { createUser, findUserByEmail, setDisabledAt } from "../src/db/repos/users.js"
 import { defaultWorkspace } from "../src/db/repos/workspaces.js"
 import { sessions } from "../src/db/schema.js"
 import { staticKeyProvider } from "../src/keys.js"
@@ -94,6 +95,39 @@ describe("starting Studio", () => {
     expect(output).toContain(`${token}`)
     expect(output).toContain("https://studio.example.test/setup")
     expect(consumeSetupToken(running.database.db, token ?? "")).toBe(true)
+  })
+
+  it("accepts the public URL's origin at the gateway, and no other", async () => {
+    const { running } = await start({
+      KERVAN_STUDIO_DATA_DIR: dataDir(),
+      KERVAN_STUDIO_PUBLIC_URL: "https://studio.example.test",
+    })
+    const post = (origin: string) =>
+      new Promise<number>((resolve, reject) => {
+        const req = httpRequest(
+          {
+            host: running.url.hostname,
+            port: running.url.port,
+            method: "POST",
+            path: "/s/some-server/mcp",
+            headers: {
+              host: "studio.example.test",
+              origin,
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+            },
+          },
+          (response) => {
+            response.resume()
+            resolve(response.statusCode ?? 0)
+          },
+        )
+        req.on("error", reject)
+        req.end('{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+      })
+    // Past the origin check, the gateway asks for a key.
+    expect(await post("https://studio.example.test")).toBe(401)
+    expect(await post("http://studio.example.test")).toBe(403)
   })
 
   async function freePort(): Promise<number> {
@@ -315,6 +349,21 @@ describe("kervan-studio reset-admin", () => {
       const event = listAudit(db, scope, { action: "user.password_reset" })[0]
       expect(event).toMatchObject({ actorType: "cli", targetId: admin.id })
       expect(JSON.stringify(event)).not.toContain(password)
+    })
+  })
+
+  it("reactivates a deactivated admin (the operator's recovery path)", async () => {
+    const dir = dataDir()
+    const admin = await addAdmin(dir, "admin@example.test")
+    await withDatabase(dir, (db) => setDisabledAt(db, defaultWorkspace(db), admin.id, 1))
+    const { io: cli, out } = io(dir)
+    expect(await runStudioCli(["reset-admin"], cli)).toBe(0)
+    expect(out.join("\n")).toContain("active again")
+    await withDatabase(dir, (db) => {
+      const scope = defaultWorkspace(db)
+      expect(findUserByEmail(db, scope, "admin@example.test")?.disabledAt).toBeNull()
+      const event = listAudit(db, scope, { action: "user.password_reset" })[0]
+      expect(event?.details).toMatchObject({ reactivated: true })
     })
   })
 

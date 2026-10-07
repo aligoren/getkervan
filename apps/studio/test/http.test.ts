@@ -100,6 +100,7 @@ async function startStudioHttp(options: {
     secrets: new InMemorySecretStore(),
     network: TEST_ONLY_NETWORK,
     allowedHosts: allowedHostNames({ publicUrl: new URL(options.publicUrl) }),
+    allowedOrigins: [new URL(options.publicUrl).origin],
     logger: recordingLogger(),
   })
   const http = createStudioHttp(
@@ -211,6 +212,49 @@ describe("Studio behind a reverse proxy", () => {
     ]) {
       // Node itself answers 400 to a malformed Host; Studio answers 403 to a foreign one.
       expect([400, 403], bad).toContain(await get(proxy, { host: bad }))
+    }
+  })
+
+  it("accepts only Studio's exact origin (scheme, host and port) at the gateway", async () => {
+    const studio = await startStudioHttp({ publicUrl, trustProxy: 0, ipRateLimit: 100 })
+    const post = (origin?: string) =>
+      new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const req = httpRequest(
+          {
+            host: "127.0.0.1",
+            port: studio,
+            method: "POST",
+            path: "/s/some-server/mcp",
+            headers: {
+              ...host,
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+              ...(origin === undefined ? {} : { origin }),
+            },
+          },
+          (response) => {
+            let body = ""
+            response.on("data", (chunk) => {
+              body += chunk
+            })
+            response.on("end", () => resolve({ status: response.statusCode ?? 0, body }))
+          },
+        )
+        req.on("error", reject)
+        req.end('{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+      })
+    // No key: past the origin check, the gateway asks for one.
+    expect((await post()).status).toBe(401)
+    expect((await post(publicUrl)).status).toBe(401)
+    for (const other of [
+      "http://studio.example.test",
+      "https://studio.example.test:8443",
+      "https://evil.test",
+      "null",
+    ]) {
+      const response = await post(other)
+      expect(response.status, other).toBe(403)
+      expect(response.body, other).not.toContain("studio.example.test")
     }
   })
 

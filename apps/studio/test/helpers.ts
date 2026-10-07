@@ -107,6 +107,8 @@ export async function startTestStudio(
     secrets,
     network: options.network ?? TEST_ONLY_NETWORK,
     allowedHosts: ["127.0.0.1", "localhost"],
+    // Clients in these tests are not browsers: they send no Origin.
+    allowedOrigins: [],
     logger,
     allowSecretsOverHttp: options.allowSecretsOverHttp ?? true,
     ...(options.keyRateLimit === undefined ? {} : { keyRateLimit: options.keyRateLimit }),

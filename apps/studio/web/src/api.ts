@@ -11,6 +11,8 @@ export interface User {
   id: string
   email: string
   role: "admin" | "member"
+  /** Set while the user is deactivated (only in the admin's user list). */
+  disabledAt?: number | null
 }
 
 export interface Server {

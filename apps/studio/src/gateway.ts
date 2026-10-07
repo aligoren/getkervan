@@ -40,6 +40,11 @@ export interface GatewayOptions {
   network: NetworkPolicy
   /** Host names accepted in `Host` and `Origin` headers. */
   allowedHosts: readonly string[]
+  /**
+   * Exact origins (`scheme://host[:port]`) accepted in the `Origin` header: Studio's public URL.
+   * Requests without `Origin` (MCP clients outside a browser) pass.
+   */
+  allowedOrigins: readonly string[]
   logger: Logger
   /** For tests against a local http API only (see `StudioOptions`). */
   allowSecretsOverHttp?: boolean
@@ -172,6 +177,15 @@ export class Gateway {
    * is revoked or the server deleted.
    */
   async fetch(request: Request): Promise<Response> {
+    // The SDK compares host names only; a browser page on another scheme or port of the same
+    // host is another origin.
+    const origin = request.headers.get("origin")
+    if (origin !== null && !this.#options.allowedOrigins.includes(origin)) {
+      return Response.json(
+        { jsonrpc: "2.0", error: { code: -32000, message: "Forbidden origin" }, id: null },
+        { status: 403 },
+      )
+    }
     const response = await this.handler.fetch(request)
     const isStream = response.headers.get("content-type")?.startsWith("text/event-stream")
     if (!isStream || !response.body) return response

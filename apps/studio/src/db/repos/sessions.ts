@@ -68,6 +68,7 @@ export function findSession(db: Db, id: string, now = Date.now()): ActiveSession
       email: users.email,
       role: users.role,
       userWorkspaceId: users.workspaceId,
+      disabledAt: users.disabledAt,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -75,7 +76,7 @@ export function findSession(db: Db, id: string, now = Date.now()): ActiveSession
     .get()
   if (!row) return undefined
   const expired = now >= row.expiresAt || now - row.lastSeenAt >= SESSION_IDLE_MS
-  if (expired || row.userWorkspaceId !== row.workspaceId) {
+  if (expired || row.disabledAt !== null || row.userWorkspaceId !== row.workspaceId) {
     deleteSession(db, idHash)
     return undefined
   }
@@ -96,11 +97,21 @@ export function findSession(db: Db, id: string, now = Date.now()): ActiveSession
  */
 export function sessionAlive(db: Db, idHash: string, userId: string, now = Date.now()): boolean {
   const row = db
-    .select({ lastSeenAt: sessions.lastSeenAt, expiresAt: sessions.expiresAt })
+    .select({
+      lastSeenAt: sessions.lastSeenAt,
+      expiresAt: sessions.expiresAt,
+      disabledAt: users.disabledAt,
+    })
     .from(sessions)
+    .innerJoin(users, eq(users.id, sessions.userId))
     .where(and(eq(sessions.idHash, idHash), eq(sessions.userId, userId)))
     .get()
-  return row !== undefined && now < row.expiresAt && now - row.lastSeenAt < SESSION_IDLE_MS
+  return (
+    row !== undefined &&
+    row.disabledAt === null &&
+    now < row.expiresAt &&
+    now - row.lastSeenAt < SESSION_IDLE_MS
+  )
 }
 
 export function deleteSession(db: Db, idHash: string): void {

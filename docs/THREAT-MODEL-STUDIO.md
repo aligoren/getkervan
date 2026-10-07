@@ -170,6 +170,11 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Sessions end after 2 hours idle and after 24 hours in any case. An expired session is deleted
   when seen, and logout (which also needs the CSRF token) deletes the session.
 - `reset-admin` ends all of the admin's sessions.
+- **Deactivating a user** (admins only) deletes their sessions in the same transaction, which
+  also ends their playground tokens. Sign-in, session lookup and the playground's session check
+  each refuse a deactivated user on their own, so a session left behind is still refused. A
+  deactivated user's correct password gets the same answer as a wrong one. The last active admin
+  cannot be deactivated; deactivation and reactivation are audited.
 - The CSRF token lives in page memory only, never in web storage.
 
 ### T7: Login brute force (4b)
@@ -244,6 +249,9 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Each server has its own registry, SDK handler and notification channel, so `list_changed`
   never crosses servers (tested in both protocol eras).
 - An unpublished or deleted server returns a fixed 404 or 401 that does not echo the server.
+- A gateway request with an `Origin` header must come from Studio's exact public origin
+  (scheme, host and port), so a page on another port or scheme of the same host cannot use the
+  playground's same-origin access. MCP clients outside a browser send no `Origin`.
 
 ### T11: Prompt injection through upstream output (4a, residual)
 
@@ -360,12 +368,10 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   addresses, or new ones after a DNS change.
 - **Loopback-only setup does not help when a reverse proxy runs on the same machine**, because
   the proxy forwards to loopback. The single-use setup token is what protects a fresh install.
-- **No way to deactivate a user yet.** An admin can reset a password (which ends the user's
-  sessions and playground tokens) but cannot remove an account.
+- **Users are deactivated, not deleted**, so their audit records keep pointing at them. API
+  keys a deactivated user created stay valid: keys belong to servers, not users.
 - **Unbounded version history.** Every save is kept; there is no cap or pruning per server.
   Members are trusted not to fill the disk.
-- **The gateway's `Origin` check compares host names**, not scheme and port. Browsers cannot
-  send the API key cross-origin without CORS, which the gateway does not grant.
 - **Members can read bindings** (secret names and hosts, never values) through the export, so
   they can write specs that use them.
 - **An open playground stream survives sign-out** until its token expires (at most 15

@@ -27,7 +27,7 @@ import {
   SETUP_TOKEN_TTL_MS,
   setupTokenValid,
 } from "../src/db/repos/tokens.js"
-import { createUser } from "../src/db/repos/users.js"
+import { createUser, setDisabledAt } from "../src/db/repos/users.js"
 import { saveVersion } from "../src/db/repos/versions.js"
 import { createWorkspace, defaultWorkspace } from "../src/db/repos/workspaces.js"
 import { sessions } from "../src/db/schema.js"
@@ -199,6 +199,10 @@ describe("session liveness (for playground tokens)", () => {
       const now = 1_000_000
       const hash = sha256(createSession(db, scope, alice, now).id)
       expect(sessionAlive(db, hash, alice, now + 1)).toBe(true)
+      // A deactivated user's session is not live, even before it is deleted.
+      setDisabledAt(db, scope, alice, now)
+      expect(sessionAlive(db, hash, alice, now + 1)).toBe(false)
+      setDisabledAt(db, scope, alice, null)
       expect(sessionAlive(db, hash, bob, now + 1)).toBe(false)
       expect(sessionAlive(db, "unknown", alice, now + 1)).toBe(false)
       expect(sessionAlive(db, hash, alice, now + SESSION_IDLE_MS)).toBe(false)

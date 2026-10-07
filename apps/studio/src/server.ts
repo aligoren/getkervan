@@ -97,6 +97,7 @@ export async function startStudio(
       secrets,
       network,
       allowedHosts: allowedHostNames(config),
+      allowedOrigins: [config.publicUrl.origin],
       logger,
     })
     const servers: ReturnType<typeof serve>[] = []

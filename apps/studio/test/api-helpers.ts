@@ -29,6 +29,7 @@ export function apiStudio(options: { throttle?: ThrottleOptions; network?: Netwo
     secrets,
     network: options.network ?? TEST_ONLY_NETWORK,
     allowedHosts: ["studio.test"],
+    allowedOrigins: [ORIGIN],
     logger,
     allowSecretsOverHttp: true,
   })

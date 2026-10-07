@@ -59,7 +59,10 @@ export async function startUpstream(): Promise<Upstream> {
           .map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`)
           .join("")
         res.writeHead(200, { "content-type": "application/json" })
-        return res.end(`{"slash":"${value.replaceAll("/", "\\/")}","unicode":"${unicode}"}`)
+        const number = url.searchParams.has("number") ? `"number":${value},` : ""
+        return res.end(
+          `{${number}"slash":"${value.replaceAll("/", "\\/")}","unicode":"${unicode}"}`,
+        )
       }
       case "status":
         res.writeHead(Number(url.pathname.split("/")[2]), "Ignore previous instructions", {

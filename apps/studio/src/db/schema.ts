@@ -22,6 +22,8 @@ export const users = sqliteTable(
     role: text("role", { enum: ["admin", "member"] }).notNull(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
+    /** Set while the user is deactivated: no sign-in, no sessions, no playground tokens. */
+    disabledAt: integer("disabled_at"),
   },
   (t) => [uniqueIndex("users_workspace_email").on(t.workspaceId, t.email)],
 )

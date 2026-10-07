@@ -2,7 +2,7 @@ import { z } from "@kervan/core"
 import { type Context, Hono, type MiddlewareHandler } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { deleteCookie, getCookie, setCookie } from "hono/cookie"
-import { addUser, listUsers, setupAdmin, verifyLogin } from "../accounts.js"
+import { addUser, listUsers, setUserDisabled, setupAdmin, verifyLogin } from "../accounts.js"
 import { isSecure, type StudioConfig } from "../config.js"
 import { constantTimeEqual, sha256 } from "../crypto.js"
 import { listApiKeys } from "../db/repos/api-keys.js"
@@ -68,6 +68,7 @@ const secretBody = z.object({
 const deleteSecretBody = z.object({ confirm: z.boolean().optional() })
 const newKey = z.object({ name: z.string().max(200) })
 const settingsBody = z.object({ logPayloads: z.boolean() })
+const userBody = z.object({ disabled: z.boolean() })
 
 /**
  * The management API, mounted at `/api`. Authentication is a session cookie (HttpOnly,
@@ -383,6 +384,12 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
   api.post("/users", signedIn("admin"), async (c) => {
     const body = await parse(c, newUser)
     return c.json({ user: await addUser(db, scopeOf(c), body, actor(c)) }, 201)
+  })
+
+  api.put("/users/:id", signedIn("admin"), async (c) => {
+    const body = await parse(c, userBody)
+    const user = setUserDisabled(db, scopeOf(c), c.req.param("id"), body.disabled, actor(c))
+    return c.json({ user })
   })
 
   api.get("/audit", signedIn("admin"), (c) => c.json({ events: listAudit(db, scopeOf(c)) }))

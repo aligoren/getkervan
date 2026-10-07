@@ -34,10 +34,10 @@ const network: NetworkPolicy = {
 }
 
 /** Answers only for bound.test, like Studio's store. */
-const source: SecretSource = {
+const sourceOf = (value: string): SecretSource => ({
   get: (name, context) =>
-    name === "API_KEY" && context?.host === `bound.test:${port}` ? SECRET : undefined,
-}
+    name === "API_KEY" && context?.host === `bound.test:${port}` ? value : undefined,
+})
 
 /** One tool that sends the key to the bound host's /reflect endpoint (it echoes X-Key back). */
 const reflectSpec = (output: string, path = "reflect") => `specVersion: 1
@@ -53,10 +53,10 @@ tools:
       headers: { X-Key: "{{secrets.API_KEY}}" }
     output: ${output}`
 
-async function call(output: string, path?: string): Promise<string> {
+async function call(output: string, path?: string, secret = SECRET): Promise<string> {
   // The local test API speaks http; secrets over http need the development opt-in.
   const loaded = await loadSpec(reflectSpec(output, path), {
-    secrets: source,
+    secrets: sourceOf(secret),
     network,
     allowSecretsOverHttp: true,
   })
@@ -119,5 +119,23 @@ describe("review 2: raw JSON output", () => {
     const text = await call("{ raw: true }", "reflect-escaped")
     expect(text).toContain("[redacted]")
     expect(JSON.stringify(JSON.parse(text))).not.toContain(SECRET)
+  })
+
+  // A body that holds the secret both as a JSON number and behind escapes: the escapes make the
+  // body be re-encoded, and the re-encoded number must be redacted before the output is cut.
+  // (The result is redacted again after the cut, but a cut secret no longer matches.)
+  it("redacts a numeric secret that is also a JSON number before cutting the re-encoded body", async () => {
+    const numeric = "820461937520"
+    const whole = await call("{ raw: true }", "reflect-escaped?number=1", numeric)
+    expect(whole).toContain("[redacted]")
+    expect(whole).not.toContain(numeric)
+    // Cut in the middle of where the number was.
+    const keep = '{"number":'.length + 6
+    const cut = await call(
+      `{ raw: true, maxOutputChars: ${keep} }`,
+      "reflect-escaped?number=1",
+      numeric,
+    )
+    expect(cut).not.toContain(numeric.slice(0, 6))
   })
 })

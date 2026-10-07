@@ -57,6 +57,10 @@ On first start, Studio:
   results (redacted, cut to 4 KiB).
 - **Roles:** members edit, publish, use the playground and see call metadata. Admins also
   manage users, secrets and keys, delete servers, and read payloads and the audit log.
+- **Users (admins):** add users and deactivate them. A deactivated user is signed out at once,
+  their playground tokens stop working, and they cannot sign in until reactivated. The last
+  active admin cannot be deactivated. API keys belong to servers, not users: revoke them
+  separately.
 
 For UI development, run Studio, then `pnpm --filter @kervan/studio dev:web`. Vite serves the UI
 and forwards `/api` and `/s` to Studio on port 4310.
@@ -105,6 +109,34 @@ Terminate TLS at the proxy, and make Studio reachable **only** through it: bind 
 Studio takes the client IP from the entry its outermost trusted proxy wrote. Anything a client
 writes into `X-Forwarded-For` itself is ignored.
 
+### Example: Caddy
+
+Caddy gets and renews the TLS certificate itself. Its `reverse_proxy` keeps the `Host` header,
+sets `X-Forwarded-For` to the client's address (it does not trust what clients send unless you
+configure `trusted_proxies`), and streams `text/event-stream` responses without buffering.
+
+```caddyfile
+studio.example.com {
+	reverse_proxy 127.0.0.1:4310
+}
+```
+
+```sh
+KERVAN_STUDIO_PUBLIC_URL=https://studio.example.com \
+KERVAN_STUDIO_TRUST_PROXY=1 \
+KERVAN_STUDIO_HOST=127.0.0.1 \
+KERVAN_STUDIO_MASTER_KEY=... \
+node apps/studio/bin/kervan-studio.js start
+```
+
+With Studio on `127.0.0.1`, only processes on the same machine (Caddy) reach it. The browser
+must use exactly `https://studio.example.com`: the management API and the gateway compare the
+whole origin (scheme, host and port).
+
+Until the first admin exists Studio listens on `127.0.0.1` only, and Caddy on the same machine
+forwards to it. Create the first admin soon after the first start: the setup token, printed
+on Studio's console, is what protects a fresh install.
+
 > **Warning:** with `KERVAN_STUDIO_TRUST_PROXY` set, Studio must not be reachable except
 > through the proxy. Firewall its port. A client that connects directly can put any address
 > in `X-Forwarded-For`, which defeats per-IP rate limits and falsifies audit records.
@@ -119,11 +151,23 @@ This command:
 
 - sets a new password, generated and shown once, or read from stdin;
 - ends that admin's sessions;
+- reactivates the admin if they were deactivated;
 - writes an audit event (without the password).
 
 It needs access to the data directory, so only someone with a shell on the host can run it.
 
 ## Data and backups
+
+A Studio installation has two things to keep, and they belong in **different** places:
+
+| What | Where | Without it |
+| --- | --- | --- |
+| The database | `studio.db` in the data directory | Servers, versions, users, keys and logs are gone. |
+| The master key | `KERVAN_STUDIO_MASTER_KEY` (outside the data directory) | Stored secrets cannot be decrypted. Studio refuses to start until they are deleted from the database or the key is found. |
+
+Back up the master key once (a password manager or your secret store), and the database
+regularly. Keep them apart: someone who gets a database backup should not also get the key,
+and the database alone reveals no secret values.
 
 - The database is one SQLite file, `studio.db`, opened in WAL mode.
 - On Linux and macOS, the data directory is made `0700` and the files `0600`. On Windows, keep
@@ -142,6 +186,34 @@ sqlite3 .kervan-studio/studio.db ".backup 'studio-backup.db'"
 If you copy files while Studio is stopped, copy `studio.db` together with any `studio.db-wal`
 and `studio.db-shm` next to it.
 
+To restore, stop Studio, put the backup in place as `studio.db` (with no stale `-wal` or `-shm`
+files next to it), and start Studio with the master key that was current when the backup was
+made, or a newer one that lists it in `KERVAN_STUDIO_PREVIOUS_MASTER_KEYS`.
+
+## Rotating the master key
+
+1. Create a new key and give it the next version number:
+   `KERVAN_STUDIO_MASTER_KEY=2:<new base64>`. A key without a version is version 1.
+2. Move the old key to `KERVAN_STUDIO_PREVIOUS_MASTER_KEYS=1:<old base64>` (comma-separated if
+   there are several).
+3. Restart Studio. It re-encrypts every stored secret with the new key before it serves
+   requests, and prints how many it re-encrypted.
+4. Back up the database, then remove the old key from `KERVAN_STUDIO_PREVIOUS_MASTER_KEYS`.
+
+If a secret cannot be decrypted with any configured key, Studio does not start and nothing is
+changed. Database backups made before the rotation still need the old key: keep it as long as
+you keep those backups.
+
+## Upgrading
+
+1. Stop Studio and back up the database (see above).
+2. Update the code and rebuild: `pnpm install --frozen-lockfile && pnpm build`.
+3. Start Studio. Pending database migrations run at startup; if one fails, Studio does not
+   start and reports which.
+
+Migrations only move forward. An older Studio refuses to open a database a newer one has
+migrated, so going back to an older version means restoring the backup from step 1.
+
 ## Known limits
 
 - **Master key in an environment variable.** A `KeyProvider` (KMS, HSM) can be plugged in from
@@ -151,3 +223,4 @@ and `studio.db-shm` next to it.
 - **One process.** Rate limits and the gateway's registries are in memory, so Studio does not
   run as several instances.
 - **No sub-path.** Studio must be served at the root of its origin.
+- **Users can be deactivated, not deleted.** Their audit records stay attributed to them.

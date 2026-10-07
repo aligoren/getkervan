@@ -4,10 +4,14 @@ import { type Actor, recordAudit } from "./db/repos/audit.js"
 import { consumeSetupToken, setupTokenValid } from "./db/repos/tokens.js"
 import {
   anyAdminExists,
+  countActiveAdmins,
   createUser,
+  deleteSessionsOf,
   findUserByEmail,
+  getUser,
   listUsers,
   type Role,
+  setDisabledAt,
   type User,
 } from "./db/repos/users.js"
 import { defaultWorkspace } from "./db/repos/workspaces.js"
@@ -94,6 +98,37 @@ export async function addUser(
 export { listUsers }
 
 /**
+ * Deactivates or reactivates a user (admins only; the API checks the role). Deactivating ends
+ * the user's sessions, and with them their playground tokens, at once. The last active admin
+ * cannot be deactivated, so someone can always manage Studio.
+ */
+export function setUserDisabled(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  disabled: boolean,
+  actor: Actor,
+): User {
+  return db.transaction((tx) => {
+    const user = getUser(tx, scope, userId)
+    if (!user) throw new StudioError("not_found", "Not found.")
+    if (disabled === (user.disabledAt !== null)) return user
+    if (disabled && user.role === "admin" && countActiveAdmins(tx, scope, user.id) === 0) {
+      throw new StudioError("conflict", "The last active admin cannot be deactivated.")
+    }
+    const disabledAt = disabled ? Date.now() : null
+    setDisabledAt(tx, scope, user.id, disabledAt)
+    const sessionsEnded = disabled ? deleteSessionsOf(tx, scope, user.id) : 0
+    recordAudit(tx, scope, actor, {
+      action: disabled ? "user.disable" : "user.enable",
+      target: { type: "user", id: user.id },
+      ...(disabled ? { details: { sessionsEnded } } : {}),
+    })
+    return { ...user, disabledAt }
+  })
+}
+
+/**
  * The user these credentials belong to, or `undefined`. Unknown emails cost the same password
  * check as known ones, so timing does not reveal which accounts exist.
  */
@@ -107,6 +142,8 @@ export async function verifyLogin(
   const user = findUserByEmail(db, scope, email)
   dummyHash ??= hashPassword("kervan-dummy-password")
   const ok = await verifyPassword(password, user?.passwordHash ?? (await dummyHash))
-  if (!user || !ok) return undefined
-  return { id: user.id, email: user.email, role: user.role, createdAt: user.createdAt }
+  // A deactivated user gets the same answer as a wrong password.
+  if (!user || !ok || user.disabledAt !== null) return undefined
+  const { passwordHash: _hash, ...rest } = user
+  return rest
 }

@@ -4,7 +4,13 @@ import { ConfigError, loadConfig } from "./config.js"
 import { hashPassword, passwordProblem, randomToken } from "./crypto.js"
 import { DatabaseError, openDatabase } from "./db/open.js"
 import { recordAudit } from "./db/repos/audit.js"
-import { deleteSessionsOf, listAdmins, normalizeEmail, setPasswordHash } from "./db/repos/users.js"
+import {
+  deleteSessionsOf,
+  listAdmins,
+  normalizeEmail,
+  setDisabledAt,
+  setPasswordHash,
+} from "./db/repos/users.js"
 import { defaultWorkspace } from "./db/repos/workspaces.js"
 import { envKeyProvider, KeyError } from "./keys.js"
 import { DATABASE_FILE, startStudio } from "./server.js"
@@ -23,7 +29,8 @@ const HELP = `Usage: kervan-studio <command> [options]
 
 Commands:
   start          Start Studio (the default)
-  reset-admin    Set a new password for an admin and sign them out everywhere
+  reset-admin    Set a new password for an admin, sign them out everywhere, and reactivate
+                 them if they were deactivated
     --email <e>        Which admin (required when there are several)
     --password-stdin   Read the new password from stdin instead of generating one
 
@@ -119,6 +126,8 @@ async function resetAdmin(argv: string[], io: StudioCliIo): Promise<number> {
     const passwordHash = await hashPassword(password)
     const signedOut = database.db.transaction((tx) => {
       setPasswordHash(tx, scope, admin.id, passwordHash)
+      // The operator's recovery path: a deactivated admin is reactivated.
+      if (admin.disabledAt !== null) setDisabledAt(tx, scope, admin.id, null)
       const count = deleteSessionsOf(tx, scope, admin.id)
       recordAudit(
         tx,
@@ -127,12 +136,16 @@ async function resetAdmin(argv: string[], io: StudioCliIo): Promise<number> {
         {
           action: "user.password_reset",
           target: { type: "user", id: admin.id },
-          details: { sessionsEnded: count },
+          details: {
+            sessionsEnded: count,
+            ...(admin.disabledAt !== null ? { reactivated: true } : {}),
+          },
         },
       )
       return count
     })
     io.out(`Reset the password of ${admin.email}; ended ${signedOut} session(s).`)
+    if (admin.disabledAt !== null) io.out(`${admin.email} was deactivated and is active again.`)
     if (generated) io.out(`New password (shown once): ${password}`)
     return 0
   } finally {

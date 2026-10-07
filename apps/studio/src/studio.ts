@@ -38,6 +38,8 @@ export interface StudioOptions {
   secrets: WritableSecretStore
   network: NetworkPolicy
   allowedHosts: readonly string[]
+  /** Exact origins accepted in the gateway's `Origin` header (see `GatewayOptions`). */
+  allowedOrigins: readonly string[]
   logger: Logger
   keyRateLimit?: number
   /**
@@ -97,6 +99,7 @@ export class Studio {
       secrets: options.secrets,
       network: options.network,
       allowedHosts: options.allowedHosts,
+      allowedOrigins: options.allowedOrigins,
       logger: options.logger,
       allowSecretsOverHttp: options.allowSecretsOverHttp === true,
       playground: this.playground,

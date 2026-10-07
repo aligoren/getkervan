@@ -171,6 +171,7 @@ describe("review: Host header (DNS rebinding)", () => {
       secrets: new InMemorySecretStore(),
       network: TEST_ONLY_NETWORK,
       allowedHosts: allowedHostNames({ publicUrl: new URL(publicUrl) }),
+      allowedOrigins: [new URL(publicUrl).origin],
       logger: recordingLogger(),
     })
     const http = createStudioHttp(studio, { publicUrl: new URL(publicUrl), trustProxy: 0 })

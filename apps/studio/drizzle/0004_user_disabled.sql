@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `disabled_at` integer;

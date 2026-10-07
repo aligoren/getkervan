@@ -22,6 +22,16 @@ export function Users() {
     void load()
   }, [load])
 
+  const setDisabled = async (user: User, disabled: boolean) => {
+    setError(undefined)
+    try {
+      await api("PUT", `/users/${encodeURIComponent(user.id)}`, { disabled })
+      await load()
+    } catch (caught) {
+      setError(caught)
+    }
+  }
+
   const add = async (event: FormEvent) => {
     event.preventDefault()
     setError(undefined)
@@ -38,13 +48,37 @@ export function Users() {
   return (
     <section>
       <h1>Users</h1>
-      <ul className="servers">
-        {users.map((user) => (
-          <li key={user.id}>
-            {user.email} <span className="muted">{user.role}</span>
-          </li>
-        ))}
-      </ul>
+      <table className="users">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((user) => {
+            const disabled = typeof user.disabledAt === "number"
+            return (
+              <tr key={user.id} className={disabled ? "revoked" : undefined}>
+                <td>{user.email}</td>
+                <td>{user.role}</td>
+                <td>{disabled ? "deactivated" : "active"}</td>
+                <td>
+                  <button type="button" onClick={() => void setDisabled(user, !disabled)}>
+                    {disabled ? "Reactivate" : "Deactivate"}
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <p className="muted">
+        Deactivating signs the user out at once and ends their playground tokens. API keys belong to
+        servers and keep working; revoke them separately.
+      </p>
       <form className="inline" onSubmit={add}>
         <input
           type="email"

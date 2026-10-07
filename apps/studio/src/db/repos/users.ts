@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNull, ne } from "drizzle-orm"
 import type { Db } from "../open.js"
 import { sessions, users } from "../schema.js"
 import type { WorkspaceScope } from "../scope.js"
@@ -10,6 +10,8 @@ export interface User {
   email: string
   role: Role
   createdAt: number
+  /** Set while the user is deactivated. */
+  disabledAt: number | null
 }
 
 const publicColumns = {
@@ -17,6 +19,7 @@ const publicColumns = {
   email: users.email,
   role: users.role,
   createdAt: users.createdAt,
+  disabledAt: users.disabledAt,
 }
 
 /** Email addresses are compared case-insensitively and without surrounding spaces. */
@@ -40,7 +43,7 @@ export function createUser(
     updatedAt: now,
   }
   db.insert(users).values(user).run()
-  return { id: user.id, email: user.email, role: user.role, createdAt: now }
+  return { id: user.id, email: user.email, role: user.role, createdAt: now, disabledAt: null }
 }
 
 export function findUserByEmail(
@@ -77,6 +80,46 @@ export function setPasswordHash(
     .where(and(eq(users.workspaceId, scope.workspaceId), eq(users.id, userId)))
     .run()
   return result.changes === 1
+}
+
+export function getUser(db: Db, scope: WorkspaceScope, userId: string): User | undefined {
+  return db
+    .select(publicColumns)
+    .from(users)
+    .where(and(eq(users.workspaceId, scope.workspaceId), eq(users.id, userId)))
+    .get()
+}
+
+/** Deactivates (a time) or reactivates (`null`) a user. */
+export function setDisabledAt(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  disabledAt: number | null,
+  now = Date.now(),
+): boolean {
+  const result = db
+    .update(users)
+    .set({ disabledAt, updatedAt: now })
+    .where(and(eq(users.workspaceId, scope.workspaceId), eq(users.id, userId)))
+    .run()
+  return result.changes === 1
+}
+
+/** How many admins of the workspace are active, not counting `except`. */
+export function countActiveAdmins(db: Db, scope: WorkspaceScope, except?: string): number {
+  return db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      and(
+        eq(users.workspaceId, scope.workspaceId),
+        eq(users.role, "admin"),
+        isNull(users.disabledAt),
+        except === undefined ? undefined : ne(users.id, except),
+      ),
+    )
+    .all().length
 }
 
 /** Signs the user out everywhere. Returns how many sessions ended. */
