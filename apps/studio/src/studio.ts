@@ -203,7 +203,18 @@ export class Studio {
   ): Promise<SpecVersion> {
     const version = getVersion(this.db, scope, serverId, versionId)
     if (!version) throw notFound()
-    await this.validate(scope, serverId, versionId)
+    try {
+      await this.validate(scope, serverId, versionId)
+    } catch (error) {
+      if (!(error instanceof StudioError) || error.code !== "invalid") throw error
+      // A refused publish can be an attempt to send a secret somewhere else: keep a record.
+      recordAudit(this.db, scope, actor, {
+        action: "server.publish_refused",
+        target: { type: "server", id: serverId },
+        details: { version: version.number, versionId, problems: error.issues.length },
+      })
+      throw new StudioError("invalid", "Not published: fix the problems below.", error.issues)
+    }
     const published = this.db.transaction((tx) => {
       const server = getServer(tx, scope, serverId)
       if (!server) return false

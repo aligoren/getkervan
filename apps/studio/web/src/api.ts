@@ -51,6 +51,19 @@ export function setCsrfToken(token: string | undefined): void {
   csrfToken = token
 }
 
+let sessionEnded: (() => void) | undefined
+
+/**
+ * Called when a request is refused because the session ended (signed out elsewhere, timed out,
+ * or the user was deactivated), so the app can return to the sign-in page.
+ */
+export function onSessionEnded(handler: (() => void) | undefined): void {
+  sessionEnded = handler
+}
+
+// Endpoints whose 401 is an answer, not a sign that the session ended.
+const SIGN_IN_PATHS = new Set(["/me", "/login", "/setup"])
+
 /** Calls the management API on Studio's own origin, with the session cookie and CSRF token. */
 export async function api<T>(
   method: "GET" | "POST" | "PUT" | "DELETE",
@@ -75,6 +88,7 @@ export async function api<T>(
   } catch {
     // Not JSON: keep the status.
   }
+  if (response.status === 401 && !SIGN_IN_PATHS.has(path)) sessionEnded?.()
   if (!response.ok) {
     const message =
       typeof data.error === "string" ? data.error : `Request failed (${response.status})`

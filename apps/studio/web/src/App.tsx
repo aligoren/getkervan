@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ApiError, api, setCsrfToken, type User } from "./api.js"
+import { ApiError, api, onSessionEnded, setCsrfToken, type User } from "./api.js"
 import { ErrorText } from "./components/untrusted.js"
 import { Audit, Users } from "./pages/Admin.js"
 import { Login, Setup } from "./pages/Auth.js"
@@ -25,7 +25,17 @@ function useHash(): string {
 export function App() {
   const [phase, setPhase] = useState<Phase>({ kind: "loading" })
   const [error, setError] = useState<unknown>()
+  const [ended, setEnded] = useState(false)
   const hash = useHash()
+
+  useEffect(() => {
+    onSessionEnded(() => {
+      setCsrfToken(undefined)
+      setEnded(true)
+      setPhase({ kind: "login" })
+    })
+    return () => onSessionEnded(undefined)
+  }, [])
 
   useEffect(() => {
     api<{ user: User; csrfToken: string }>("GET", "/me").then(
@@ -49,9 +59,23 @@ export function App() {
 
   if (error) return <ErrorText error={error} />
   if (phase.kind === "loading") return <p className="muted">Loading…</p>
-  const ready = (user: User) => setPhase({ kind: "ready", user })
+  const ready = (user: User) => {
+    setEnded(false)
+    // The console prints /setup; once it is done, the address should not suggest otherwise.
+    if (window.location.pathname !== "/") {
+      window.history.replaceState(null, "", `/${window.location.hash}`)
+    }
+    setPhase({ kind: "ready", user })
+  }
   if (phase.kind === "setup") return <Setup onDone={ready} />
-  if (phase.kind === "login") return <Login onDone={ready} />
+  if (phase.kind === "login") {
+    return (
+      <>
+        {ended ? <p className="notice">Your session ended. Sign in again.</p> : null}
+        <Login onDone={ready} />
+      </>
+    )
+  }
 
   const serverId = /^#\/servers\/([^/]+)$/.exec(hash)?.[1]
   const isAdmin = phase.user.role === "admin"

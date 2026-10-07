@@ -389,6 +389,8 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
   api.put("/users/:id", signedIn("admin"), async (c) => {
     const body = await parse(c, userBody)
     const user = setUserDisabled(db, scopeOf(c), c.req.param("id"), body.disabled, actor(c))
+    // Their sessions are gone, so new playground requests fail; open streams end here too.
+    if (body.disabled) studio.gateway.endPlayground(user.id)
     return c.json({ user })
   })
 

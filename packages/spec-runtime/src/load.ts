@@ -127,7 +127,7 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
   const declared = declaredSecrets(spec, at)
   const used = new Set<string>()
   const names = new Set<string>()
-  const plans: [SpecTool, ToolPlan][] = []
+  const plans: [SpecTool, ToolPlan, number][] = []
   spec.tools.forEach((tool, index) => {
     if (names.has(tool.name)) at(["tools", index, "name"], `Duplicate tool name "${tool.name}".`)
     names.add(tool.name)
@@ -136,7 +136,7 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
     })
     if (plan) {
       for (const name of plan.secrets) used.add(name)
-      plans.push([tool, plan])
+      plans.push([tool, plan, index])
     }
   })
   const secretIndex = new Map((spec.secrets ?? []).map((entry, i) => [secretEntryName(entry), i]))
@@ -155,7 +155,7 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
   const source = options.secrets ?? envSecrets()
   const vault = options.vault ?? new SecretVault()
   const asked = new Set<string>()
-  for (const [, plan] of plans) {
+  for (const [, plan, index] of plans) {
     for (const name of plan.secrets) {
       const key = JSON.stringify([name, plan.host])
       if (asked.has(key)) continue
@@ -163,11 +163,19 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
       const path = ["secrets", secretIndex.get(name) ?? 0]
       const value = await source.get(name, { host: plan.host, tool: plan.name })
       if (value === undefined || value === "") {
-        at(
-          path,
-          `Secret ${name} is not configured for ${plan.host}; tools that use it there fail until it is.`,
-          options.requireSecrets ? "error" : "warning",
-        )
+        // Point at the URL that would receive the secret: that is the line to fix.
+        if (options.requireSecrets) {
+          at(
+            ["tools", index, "http", "url"],
+            `Secret ${name} is not configured for ${plan.host}, so tool "${plan.name}" cannot send it there.`,
+          )
+        } else {
+          at(
+            path,
+            `Secret ${name} is not configured for ${plan.host}; tools that use it there fail until it is.`,
+            "warning",
+          )
+        }
         continue
       }
       try {

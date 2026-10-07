@@ -173,8 +173,11 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - **Deactivating a user** (admins only) deletes their sessions in the same transaction, which
   also ends their playground tokens. Sign-in, session lookup and the playground's session check
   each refuse a deactivated user on their own, so a session left behind is still refused. A
-  deactivated user's correct password gets the same answer as a wrong one. The last active admin
-  cannot be deactivated; deactivation and reactivation are audited.
+  deactivated user's correct password gets the same answer as a wrong one. Their open
+  playground streams are ended as well. The last active admin cannot be deactivated;
+  deactivation and reactivation are audited.
+- The web UI returns to the sign-in page as soon as a request is refused because the session
+  ended (signed out elsewhere, timed out or deactivated).
 - The CSRF token lives in page memory only, never in web storage.
 
 ### T7: Login brute force (4b)
@@ -284,6 +287,8 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   - users created, password resets;
   - servers created and deleted, and the server's call-log setting;
   - publish and rollback, with the version and the previous version;
+  - refused publishes (for example a spec that would send a secret to an unbound host), with
+    who tried and how many problems were found;
   - secrets created, rotated, rebound and deleted (with the tools that used a deleted one);
   - API keys created and revoked.
 - Details hold names, ids, hosts and counts, never values, keys or passwords.
@@ -375,7 +380,8 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - **Members can read bindings** (secret names and hosts, never values) through the export, so
   they can write specs that use them.
 - **An open playground stream survives sign-out** until its token expires (at most 15
-  minutes); new requests with the token are refused at once.
+  minutes); new requests with the token are refused at once. Deactivating the user ends their
+  open streams too.
 - **Encodings the vault does not know.** If a bound upstream reflects a secret in another
   encoding (for example base64 or HTML entities), it is not redacted. Bind secrets to APIs you
   trust not to echo them.

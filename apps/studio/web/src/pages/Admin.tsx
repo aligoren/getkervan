@@ -8,6 +8,7 @@ export function Users() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [role, setRole] = useState<"member" | "admin">("member")
+  const [confirmDeactivate, setConfirmDeactivate] = useState<string>()
   const [error, setError] = useState<unknown>()
 
   const load = useCallback(
@@ -24,6 +25,7 @@ export function Users() {
 
   const setDisabled = async (user: User, disabled: boolean) => {
     setError(undefined)
+    setConfirmDeactivate(undefined)
     try {
       await api("PUT", `/users/${encodeURIComponent(user.id)}`, { disabled })
       await load()
@@ -66,9 +68,24 @@ export function Users() {
                 <td>{user.role}</td>
                 <td>{disabled ? "deactivated" : "active"}</td>
                 <td>
-                  <button type="button" onClick={() => void setDisabled(user, !disabled)}>
-                    {disabled ? "Reactivate" : "Deactivate"}
-                  </button>
+                  {disabled ? (
+                    <button type="button" onClick={() => void setDisabled(user, false)}>
+                      Reactivate
+                    </button>
+                  ) : confirmDeactivate === user.id ? (
+                    <>
+                      <button type="button" onClick={() => void setDisabled(user, true)}>
+                        Deactivate now
+                      </button>
+                      <button type="button" onClick={() => setConfirmDeactivate(undefined)}>
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => setConfirmDeactivate(user.id)}>
+                      Deactivate
+                    </button>
+                  )}
                 </td>
               </tr>
             )
@@ -84,6 +101,7 @@ export function Users() {
           type="email"
           placeholder="Email"
           value={email}
+          autoComplete="off"
           onChange={(e) => setEmail(e.target.value)}
           required
         />

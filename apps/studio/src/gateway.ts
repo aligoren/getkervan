@@ -248,6 +248,11 @@ export class Gateway {
     }
   }
 
+  /** Ends a user's open playground streams (after the user was deactivated). */
+  endPlayground(userId: string): void {
+    this.disconnect({ keyId: playgroundCallerId(userId) })
+  }
+
   /** How many playground drafts are loaded (for tests and status pages). */
   get loadedDrafts(): number {
     return this.#drafts.size
@@ -354,7 +359,7 @@ export class Gateway {
         return undefined
       }
       return {
-        id: `playground:${grant.userId}`,
+        id: playgroundCallerId(grant.userId),
         scope: workspaceScope(grant.workspaceId),
         serverId: grant.serverId,
         versionId: grant.versionId,
@@ -544,6 +549,10 @@ function servedKey(scope: WorkspaceScope, serverId: string): string {
 
 function bearer(request: Request): string | undefined {
   return /^Bearer (\S+)$/.exec(request.headers.get("authorization") ?? "")?.[1]
+}
+
+function playgroundCallerId(userId: string): string {
+  return `playground:${userId}`
 }
 
 function unauthorized(): Response {

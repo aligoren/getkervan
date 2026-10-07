@@ -151,7 +151,7 @@ export function ServerPage(props: { serverId: string; user: User }) {
         />
       ) : null}
       {tab === "secrets" ? <SecretsPanel serverId={server.id} /> : null}
-      {tab === "keys" ? <KeysPanel serverId={server.id} /> : null}
+      {tab === "keys" ? <KeysPanel serverId={server.id} serverSlug={server.slug} /> : null}
       {tab === "logs" ? <LogsPanel server={server} isAdmin={isAdmin} onChanged={reload} /> : null}
       <div className="columns" hidden={tab !== "editor"}>
         <div className="main">

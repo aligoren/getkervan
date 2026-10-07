@@ -180,7 +180,7 @@ describe("secrets bound to hosts", () => {
       .then(() => undefined)
       .catch((e: unknown) => e as StudioError)
     expect(error?.issues.map((issue) => issue.message)).toContain(
-      `Secret API_KEY is not configured for attacker.test:${upstream.port}; tools that use it there fail until it is.`,
+      `Secret API_KEY is not configured for attacker.test:${upstream.port}, so tool "keyed" cannot send it there.`,
     )
     expect(requestsTo("/echo/stolen")).toEqual([])
   })

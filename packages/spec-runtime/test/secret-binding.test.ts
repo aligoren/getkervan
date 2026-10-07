@@ -199,9 +199,18 @@ describe("secret bindings at load time", () => {
       "Secret API_KEY is not configured for api.example.com:443; tools that use it there fail until it is."
     const loaded = await loadSpec(text, { secrets: source, network })
     expect(loaded.warnings.map((warning) => warning.message)).toContain(message)
-    await expect(
-      loadSpec(text, { secrets: source, network, requireSecrets: true }),
-    ).rejects.toMatchObject({ issues: [expect.objectContaining({ message })] })
+    // As an error, it names the tool and points at the URL that would receive the secret.
+    const refused = await loadSpec(text, { secrets: source, network, requireSecrets: true }).then(
+      () => undefined,
+      (error: unknown) => error as { issues: { message: string; path: unknown[] }[] },
+    )
+    expect(refused?.issues).toEqual([
+      expect.objectContaining({
+        message:
+          'Secret API_KEY is not configured for api.example.com:443, so tool "call" cannot send it there.',
+        path: ["tools", 0, "http", "url"],
+      }),
+    ])
   })
 
   it("treats a binding change as a tool change", async () => {

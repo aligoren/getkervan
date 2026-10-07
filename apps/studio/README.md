@@ -51,8 +51,9 @@ On first start, Studio:
 - **Secrets (admins):** values are encrypted and write-only. Each secret has allowed hosts
   (`host` or `host:port`). Before a secret the published version uses can be deleted, Studio
   lists the tools that use it and asks for confirmation.
-- **API keys (admins):** a key is shown once when created; the list shows its prefix and last
-  use. Revoking takes effect at once.
+- **API keys (admins):** a key is shown once when created, with a ready `claude mcp add`
+  command for the server's full endpoint URL; the list shows its prefix and last use. Revoking
+  asks for confirmation and takes effect at once: open streams of that key are closed.
 - **Calls:** tool, status and duration of recent calls. Admins can also log arguments and
   results (redacted, cut to 4 KiB).
 - **Roles:** members edit, publish, use the playground and see call metadata. Admins also

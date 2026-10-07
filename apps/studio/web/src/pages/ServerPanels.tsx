@@ -120,6 +120,7 @@ export function SecretsPanel(props: { serverId: string }) {
   const [value, setValue] = useState("")
   const [hosts, setHosts] = useState("")
   const [pendingDelete, setPendingDelete] = useState<{ name: string; message: string }>()
+  const [notice, setNotice] = useState<string>()
   const [error, setError] = useState<unknown>()
 
   const load = useCallback(
@@ -137,6 +138,7 @@ export function SecretsPanel(props: { serverId: string }) {
   const save = async (event: FormEvent) => {
     event.preventDefault()
     setError(undefined)
+    setNotice(undefined)
     try {
       await api("PUT", path(props.serverId, `/secrets/${encodeURIComponent(name)}`), {
         ...(value === "" ? {} : { value }),
@@ -147,6 +149,9 @@ export function SecretsPanel(props: { serverId: string }) {
       })
       // The value leaves the page as soon as it is saved.
       setValue("")
+      setNotice(`Saved ${name}.`)
+      setName("")
+      setHosts("")
       await load()
     } catch (caught) {
       setError(caught)
@@ -221,6 +226,7 @@ export function SecretsPanel(props: { serverId: string }) {
         />
         <button type="submit">Save secret</button>
       </form>
+      {notice ? <p className="notice">{notice}</p> : null}
       <ErrorText error={error} />
     </section>
   )
@@ -236,11 +242,24 @@ interface KeyInfo {
 }
 
 /** API keys (admins): created keys are shown once. */
-export function KeysPanel(props: { serverId: string }) {
+export function KeysPanel(props: { serverId: string; serverSlug?: string }) {
   const [keys, setKeys] = useState<KeyInfo[]>([])
   const [name, setName] = useState("")
   const [created, setCreated] = useState<string>()
+  const [confirmRevoke, setConfirmRevoke] = useState<string>()
+  const [copied, setCopied] = useState<string>()
   const [error, setError] = useState<unknown>()
+  const endpoint = `${window.location.origin}/s/${encodeURIComponent(props.serverId)}/mcp`
+  const command = (key: string) =>
+    `claude mcp add --transport http ${props.serverSlug ?? "studio"} ${endpoint} --header "Authorization: Bearer ${key}"`
+  const copy = async (label: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(label)
+    } catch {
+      setCopied(undefined)
+    }
+  }
 
   const load = useCallback(
     () =>
@@ -269,6 +288,7 @@ export function KeysPanel(props: { serverId: string }) {
 
   const revoke = async (keyId: string) => {
     setError(undefined)
+    setConfirmRevoke(undefined)
     try {
       await api("DELETE", path(props.serverId, `/keys/${encodeURIComponent(keyId)}`))
       await load()
@@ -280,6 +300,9 @@ export function KeysPanel(props: { serverId: string }) {
   return (
     <section>
       <h2>API keys</h2>
+      <p className="muted">
+        MCP endpoint: <code>{endpoint}</code>
+      </p>
       {created ? (
         <div className="callout">
           <p>Copy this key now. It is not stored and will not be shown again.</p>
@@ -289,7 +312,21 @@ export function KeysPanel(props: { serverId: string }) {
             aria-label="New API key"
             onFocus={(e) => e.target.select()}
           />
-          <button type="button" onClick={() => setCreated(undefined)}>
+          <button type="button" onClick={() => void copy("key", created)}>
+            {copied === "key" ? "Copied" : "Copy key"}
+          </button>
+          <p>To connect Claude Code:</p>
+          <input readOnly value={command(created)} aria-label="Connect command" />
+          <button type="button" onClick={() => void copy("command", command(created))}>
+            {copied === "command" ? "Copied" : "Copy command"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCreated(undefined)
+              setCopied(undefined)
+            }}
+          >
             Done
           </button>
         </div>
@@ -316,8 +353,17 @@ export function KeysPanel(props: { serverId: string }) {
               <td>
                 {key.revokedAt ? (
                   "revoked"
+                ) : confirmRevoke === key.id ? (
+                  <>
+                    <button type="button" onClick={() => void revoke(key.id)}>
+                      Revoke now
+                    </button>
+                    <button type="button" onClick={() => setConfirmRevoke(undefined)}>
+                      Cancel
+                    </button>
+                  </>
                 ) : (
-                  <button type="button" onClick={() => void revoke(key.id)}>
+                  <button type="button" onClick={() => setConfirmRevoke(key.id)}>
                     Revoke
                   </button>
                 )}

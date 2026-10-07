@@ -33,7 +33,12 @@ describe("the users page", () => {
     const page = render(<Users />)
     const deactivate = await page.findByRole("button", { name: "Deactivate" })
     expect(page.container.textContent).toContain("active")
+    // Two steps: the first click only asks; Cancel goes back.
     fireEvent.click(deactivate)
+    fireEvent.click(await page.findByRole("button", { name: "Cancel" }))
+    fireEvent.click(await page.findByRole("button", { name: "Deactivate" }))
+    expect(requests.filter((r) => r.method === "PUT")).toHaveLength(0)
+    fireEvent.click(await page.findByRole("button", { name: "Deactivate now" }))
     const reactivate = await page.findByRole("button", { name: "Reactivate" })
     expect(page.container.textContent).toContain("deactivated")
     expect(requests.find((r) => r.method === "PUT")).toMatchObject({

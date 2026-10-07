@@ -126,6 +126,8 @@ export function apiStudio(options: { throttle?: ThrottleOptions; network?: Netwo
     logger,
     scope,
     request,
+    /** Studio's whole HTTP app, unbuffered (event streams stay open). */
+    fetch: (request: Request) => http.fetch(request),
     signIn,
     addUser,
     setupToken: () => issueSetupToken(database.db).token,

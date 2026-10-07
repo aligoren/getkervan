@@ -10,6 +10,7 @@ import {
   type ToolSummary,
 } from "../components/untrusted.js"
 import { connectPlayground } from "./client.js"
+import { argumentSkeleton } from "./skeleton.js"
 
 interface Grant {
   token: string
@@ -20,7 +21,7 @@ interface Grant {
 /** Calls one saved version (draft or published) through the gateway, as a real client would. */
 export function Playground(props: { serverId: string; versionId: string | undefined }) {
   const [client, setClient] = useState<Client>()
-  const [tools, setTools] = useState<ToolSummary[]>([])
+  const [tools, setTools] = useState<(ToolSummary & { inputSchema?: unknown })[]>([])
   const [selected, setSelected] = useState<string>()
   const [args, setArgs] = useState("{}")
   const [result, setResult] = useState<unknown>()
@@ -95,7 +96,14 @@ export function Playground(props: { serverId: string; versionId: string | undefi
         {client ? "Reconnect" : "Connect"}
       </button>
       <ErrorText error={error} />
-      <ToolList tools={tools} selected={selected} onSelect={setSelected} />
+      <ToolList
+        tools={tools}
+        selected={selected}
+        onSelect={(name) => {
+          setSelected(name)
+          setArgs(argumentSkeleton(tools.find((tool) => tool.name === name)?.inputSchema))
+        }}
+      />
       {selected ? (
         <div className="call">
           <label>
