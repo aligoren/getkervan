@@ -225,7 +225,9 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   and other-server tokens all get the same 401.
 - A draft loads with the same secret store, host bindings and network policy as a published
   version, so a member cannot use the playground to send a secret anywhere publishing would
-  refuse.
+  refuse. A test uses one draft for both: publishing refuses its tools that send the secret to
+  another host and to another port of the bound host, and the playground refuses the same calls
+  without sending anything.
 - Drafts unused for 15 minutes are unloaded.
 - The token is never written to the page or the raw traffic log.
 - A token is bound to the session that asked for it. The gateway checks that this session is
