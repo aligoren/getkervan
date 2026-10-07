@@ -1,0 +1,247 @@
+/*
+ * Kervan Studio design tokens: the only place colors, type, spacing, radii and shadows are
+ * defined. Components use the semantic names (bg, surface, border, text, accent, ...), never raw
+ * colors, so the dark theme is a swap of these variables and needs no per-component rules.
+ *
+ * Theme: light by default; dark when the system prefers it, unless the page says otherwise with
+ * <html data-theme="light|dark"> (the user's choice).
+ *
+ * Contrast (WCAG 2.1 AA, computed for every pair the components use, both themes): text 16.7+,
+ * muted text 7.0+, subtle text 4.9+ (also on the subtle background), links 6.4+, text on accent
+ * 5.0+, text on danger 6.3+, status text on its subtle background 4.5+, form field outlines
+ * 3.3+ against what surrounds them (WCAG 1.4.11).
+ */
+@import "tailwindcss";
+@import "@fontsource-variable/inter/wght.css";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Type scale: dense dashboard; body is text-sm (14px). */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.875rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2.25rem;
+
+  /* 4px grid: Tailwind's spacing unit is 0.25rem (p-1 = 4px, p-4 = 16px). */
+  --spacing: 0.25rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --color-bg: var(--k-bg);
+  --color-surface: var(--k-surface);
+  --color-subtle: var(--k-subtle);
+  --color-control: var(--k-control);
+  --color-control-hover: var(--k-control-hover);
+  --color-muted: var(--k-muted);
+  --color-border: var(--k-border);
+  --color-border-strong: var(--k-border-strong);
+  --color-border-input: var(--k-border-input);
+  --color-fg: var(--k-fg);
+  --color-fg-muted: var(--k-fg-muted);
+  --color-fg-subtle: var(--k-fg-subtle);
+  --color-accent: var(--k-accent);
+  --color-accent-hover: var(--k-accent-hover);
+  --color-accent-fg: var(--k-accent-fg);
+  --color-accent-subtle: var(--k-accent-subtle);
+  --color-accent-text: var(--k-accent-text);
+  --color-success: var(--k-success);
+  --color-success-subtle: var(--k-success-subtle);
+  --color-warning: var(--k-warning);
+  --color-warning-subtle: var(--k-warning-subtle);
+  --color-danger: var(--k-danger);
+  --color-danger-hover: var(--k-danger-hover);
+  --color-danger-fg: var(--k-danger-fg);
+  --color-danger-subtle: var(--k-danger-subtle);
+  --color-ring: var(--k-ring);
+
+  --shadow-xs: 0 1px 2px 0 var(--k-shadow);
+  --shadow-sm: 0 1px 3px 0 var(--k-shadow), 0 1px 2px -1px var(--k-shadow);
+  --shadow-lg: 0 10px 30px -10px var(--k-shadow-strong), 0 4px 12px -6px var(--k-shadow);
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Light (default). Neutral: stone-like warm grays; accent: Kervan amber. */
+:root {
+  --k-bg: #fafaf9;
+  --k-surface: #ffffff;
+  --k-subtle: #f5f5f4;
+  /* Buttons and form fields: set apart from the surface they sit on. */
+  --k-control: #ffffff;
+  --k-control-hover: #f5f5f4;
+  --k-muted: #e7e5e4;
+  --k-border: #e7e5e4;
+  --k-border-strong: #d6d3d1;
+  --k-border-input: #8f8883; /* form field outline: 3.5:1 on surface (WCAG 1.4.11) */
+  --k-fg: #1c1917; /* 16.7:1 on bg */
+  --k-fg-muted: #57534e; /* 7.3:1 on bg, 7.0:1 on subtle */
+  --k-fg-subtle: #6b645f; /* 5.6:1 on bg, 5.3:1 on subtle */
+  --k-accent: #b45309; /* white text 5.0:1 */
+  --k-accent-hover: #92400e;
+  --k-accent-fg: #ffffff;
+  --k-accent-subtle: #fef3c7;
+  --k-accent-text: #92400e; /* 7.1:1 on surface, 6.4:1 on accent-subtle */
+  --k-success: #15803d; /* 5.0:1 on surface, 4.6:1 on success-subtle */
+  --k-success-subtle: #dcfce7;
+  --k-warning: #a16207; /* 4.9:1 on surface, 4.6:1 on warning-subtle */
+  --k-warning-subtle: #fef9c3;
+  --k-danger: #b91c1c; /* 6.5:1 on surface, 5.3:1 on danger-subtle */
+  --k-danger-hover: #991b1b;
+  --k-danger-fg: #ffffff; /* 6.5:1 on danger */
+  --k-danger-subtle: #fee2e2;
+  --k-ring: #d97706;
+  --k-shadow: rgb(28 25 23 / 0.06);
+  --k-shadow-strong: rgb(28 25 23 / 0.18);
+  color-scheme: light;
+}
+
+/* Dark: the system's choice, unless the user picked light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --k-bg: #0f0e0d;
+    --k-surface: #181716;
+    --k-subtle: #201e1c;
+    --k-control: #262321;
+    --k-control-hover: #302c29;
+    --k-muted: #2b2826;
+    --k-border: #2b2826;
+    --k-border-strong: #3d3936;
+    --k-border-input: #736c66; /* 3.5:1 on surface */
+    --k-fg: #f5f5f4; /* 17.7:1 on bg */
+    --k-fg-muted: #b8b2ac; /* 9.2:1 on bg */
+    --k-fg-subtle: #918a83; /* 5.7:1 on bg, 4.9:1 on subtle */
+    --k-accent: #f59e0b;
+    --k-accent-hover: #fbbf24;
+    --k-accent-fg: #1c1917; /* 8.1:1 on accent */
+    --k-accent-subtle: #3a2a10;
+    --k-accent-text: #fbbf24; /* 10.7:1 on surface */
+    --k-success: #4ade80;
+    --k-success-subtle: #12301d;
+    --k-warning: #facc15;
+    --k-warning-subtle: #332b0b;
+    --k-danger: #f87171; /* 6.5:1 on surface */
+    --k-danger-hover: #fca5a5;
+    --k-danger-fg: #1c1917; /* 6.3:1 on danger: white would be 2.8:1 */
+    --k-danger-subtle: #3b1414;
+    --k-ring: #f59e0b;
+    --k-shadow: rgb(0 0 0 / 0.4);
+    --k-shadow-strong: rgb(0 0 0 / 0.6);
+    color-scheme: dark;
+  }
+}
+
+/* Dark, chosen by the user (same values as above). */
+:root[data-theme="dark"] {
+  --k-bg: #0f0e0d;
+  --k-surface: #181716;
+  --k-subtle: #201e1c;
+  --k-control: #262321;
+  --k-control-hover: #302c29;
+  --k-muted: #2b2826;
+  --k-border: #2b2826;
+  --k-border-strong: #3d3936;
+  --k-border-input: #736c66; /* 3.5:1 on surface */
+  --k-fg: #f5f5f4;
+  --k-fg-muted: #b8b2ac;
+  --k-fg-subtle: #918a83;
+  --k-accent: #f59e0b;
+  --k-accent-hover: #fbbf24;
+  --k-accent-fg: #1c1917;
+  --k-accent-subtle: #3a2a10;
+  --k-accent-text: #fbbf24;
+  --k-success: #4ade80;
+  --k-success-subtle: #12301d;
+  --k-warning: #facc15;
+  --k-warning-subtle: #332b0b;
+  --k-danger: #f87171;
+  --k-danger-hover: #fca5a5;
+  --k-danger-fg: #1c1917;
+  --k-danger-subtle: #3b1414;
+  --k-ring: #f59e0b;
+  --k-shadow: rgb(0 0 0 / 0.4);
+  --k-shadow-strong: rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-bg text-fg font-sans text-sm;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  /* Links look like links: accent text, underline on hover, a visible focus ring. */
+  a {
+    @apply text-accent-text underline-offset-2 transition-colors duration-150 hover:underline;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
+  ::selection {
+    @apply bg-accent-subtle text-fg;
+  }
+}
+
+@utility visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Short, quiet transitions (150ms); none at all for people who ask for less motion. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 4px)) scale(0.98);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    /* biome-ignore lint/complexity/noImportantStyles: must win over every component's transition */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: must win over every component's transition */
+    transition-duration: 0.01ms !important;
+  }
+}
