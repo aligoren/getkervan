@@ -53,7 +53,8 @@ describe("a generated project", () => {
       { encoding: "utf8" },
     )
     expect(tsc.status, tsc.stdout + tsc.stderr).toBe(0)
-  })
+    // A whole tsc run: room for a busy machine (a full test run in parallel).
+  }, 60_000)
 
   it.each(["legacy", "modern"] as const)(
     "runs its TypeScript sources directly over stdio (%s era)",
@@ -90,5 +91,5 @@ describe("a generated project", () => {
     )
     expect(vitest.status, vitest.stdout + vitest.stderr).toBe(0)
     expect(vitest.stdout).toMatch(/Tests\s+2 passed/)
-  })
+  }, 60_000)
 })
