@@ -21,8 +21,20 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 KERVAN_STUDIO_MASTER_KEY=<that key> node apps/studio/bin/kervan-studio.js start
 ```
 
+In Windows PowerShell, set the variable first:
+
+```powershell
+$env:KERVAN_STUDIO_MASTER_KEY = "<that key>"
+node apps/studio/bin/kervan-studio.js start
+```
+
 Studio encrypts secrets with the master key and does not start without it. A lost master key
 means the stored secrets are lost; set them again in the UI.
+
+The database goes into `.kervan-studio/` in the current directory. When you start Studio from
+the repository, that folder is inside the repository: set `KERVAN_STUDIO_DATA_DIR` to a folder
+elsewhere, or take care not to commit it. Studio runs in the foreground; stop it with Ctrl+C, and
+start it again with the same data directory and master key.
 
 `pnpm build` also builds the web UI (`apps/studio/dist-web`). Then open the URL Studio prints.
 
@@ -47,7 +59,8 @@ On first start, Studio:
   ends it). It lists and calls tools, and shows the raw requests and responses. Everything a
   tool or upstream returns is shown as text.
 - **Versions:** compare any two versions line by line. Publish an older one to roll back:
-  connected clients get `list_changed`, and the audit log records a rollback.
+  connected clients get `list_changed` (see Gateway for which clients), and the audit log
+  records a rollback.
 - **Secrets (admins):** values are encrypted and write-only. Each secret has allowed hosts
   (`host` or `host:port`). Before a secret the published version uses can be deleted, Studio
   lists the tools that use it and asks for confirmation.
@@ -123,8 +136,10 @@ claude mcp add --transport http weather https://studio.example.com/s/<serverId>/
 
 - A key works for its own server only.
 - Missing, unknown, revoked and other-server keys all get the same `401`.
-- Publishing a version, or publishing an older one again, updates the server in place, and
-  connected clients get `list_changed`.
+- Publishing a version, or publishing an older one again, updates the server in place.
+  Clients on MCP 2026-07-28 that listen (`subscriptions/listen`) get `list_changed` at once;
+  2025-era clients, served statelessly over HTTP, see the new tools on their next `tools/list`.
+- There is no "unpublish": publish another version, or delete the server.
 
 ## Configuration
 

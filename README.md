@@ -159,6 +159,26 @@ pnpm check:site   # website date checks (security.txt expiry), kept out of pnpm 
 
 `prepublishOnly` blocks publishing unless `KERVAN_ALLOW_PUBLISH=1` is set.
 
+### Trying a new project before the packages are published
+
+`kervan create` cannot install `@kervan/*` from npm yet. Pack the local packages and install the
+tarballs instead (all four together: the CLI depends on the spec runtime). From the repository
+root, after `pnpm install && pnpm build`:
+
+```sh
+pnpm -r --filter "./packages/*" pack --pack-destination ../kervan-tarballs
+cd ..
+node kervan/packages/cli/bin/kervan.js create my-server --no-install
+cd my-server
+npm install ../kervan-tarballs/kervan-core-0.1.0.tgz ../kervan-tarballs/kervan-transport-0.1.0.tgz \
+  ../kervan-tarballs/kervan-spec-runtime-0.1.0.tgz ../kervan-tarballs/kervan-0.1.0.tgz
+npm test
+npm run dev
+```
+
+(Replace `kervan/` with the folder you cloned into.) `npx kervan ...` then works inside the
+project.
+
 ## Contact
 
 - Questions and feedback: [hello@getkervan.dev](mailto:hello@getkervan.dev)
