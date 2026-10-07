@@ -24,6 +24,13 @@ export const users = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
     /** Set while the user is deactivated: no sign-in, no sessions, no playground tokens. */
     disabledAt: integer("disabled_at"),
+    /** Optional name shown instead of the email. */
+    displayName: text("display_name"),
+    /** Set by an admin's password reset: the user must choose a new password before anything else. */
+    mustChangePassword: integer("must_change_password", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    lastLoginAt: integer("last_login_at"),
   },
   (t) => [uniqueIndex("users_workspace_email").on(t.workspaceId, t.email)],
 )
@@ -42,6 +49,9 @@ export const sessions = sqliteTable(
     createdAt: integer("created_at").notNull(),
     lastSeenAt: integer("last_seen_at").notNull(),
     expiresAt: integer("expires_at").notNull(),
+    /** Where the session was started, so its owner can tell sessions apart. */
+    ip: text("ip"),
+    userAgent: text("user_agent"),
   },
   (t) => [index("sessions_user").on(t.userId)],
 )
@@ -84,6 +94,24 @@ export const specVersions = sqliteTable(
   },
   (t) => [uniqueIndex("spec_versions_server_number").on(t.serverId, t.number)],
 )
+
+/**
+ * The latest validation result of a spec version. Kept apart from `spec_versions`, which is
+ * immutable, because a version's validity changes with its server's secrets.
+ */
+export const versionChecks = sqliteTable("version_checks", {
+  versionId: text("version_id")
+    .primaryKey()
+    .references(() => specVersions.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id")
+    .notNull()
+    .references(() => workspaces.id),
+  valid: integer("valid", { mode: "boolean" }).notNull(),
+  problems: integer("problems").notNull(),
+  /** How many secrets the spec declares (when it could be read). */
+  secrets: integer("secrets").notNull(),
+  checkedAt: integer("checked_at").notNull(),
+})
 
 /** Encrypted at rest (AES-256-GCM); values are never read back through any API. */
 export const secrets = sqliteTable(

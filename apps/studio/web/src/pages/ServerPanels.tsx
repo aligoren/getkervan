@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react"
-import { ApiError, api, type Server, type VersionInfo } from "../api.js"
+import { ApiError, api, type Server, type VersionCheck, type VersionInfo } from "../api.js"
 import {
   type CallLogEntry,
   CallLogTable,
@@ -60,6 +60,7 @@ export function VersionsPanel(props: {
           <tr>
             <th>Version</th>
             <th>Saved</th>
+            <th>Check</th>
             <th />
           </tr>
         </thead>
@@ -71,6 +72,9 @@ export function VersionsPanel(props: {
               <tr key={version.id}>
                 <td>{`v${version.number}${isPublished ? " (published)" : ""}`}</td>
                 <td>{new Date(version.createdAt).toLocaleString()}</td>
+                <td>
+                  <CheckBadge check={version.check} />
+                </td>
                 <td>
                   <button type="button" onClick={() => props.onOpen(version.id)}>
                     Open
@@ -202,28 +206,34 @@ export function SecretsPanel(props: { serverId: string }) {
         </div>
       ) : null}
       <form className="stack" onSubmit={save}>
-        <input
-          placeholder="NAME"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          aria-label="Secret name"
-        />
-        <input
-          type="password"
-          placeholder="Value (leave empty to keep the current one)"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          autoComplete="off"
-          aria-label="Secret value"
-        />
-        <input
-          placeholder="Allowed hosts, e.g. api.example.com, api.example.com:8443"
-          value={hosts}
-          onChange={(e) => setHosts(e.target.value)}
-          required
-          aria-label="Allowed hosts"
-        />
+        <label>
+          Secret name
+          <input
+            placeholder="API_KEY"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </label>
+        <label>
+          Secret value
+          <input
+            type="password"
+            placeholder="Leave empty to keep the current value"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            autoComplete="new-password"
+          />
+        </label>
+        <label>
+          Allowed hosts
+          <input
+            placeholder="api.example.com, api.example.com:8443"
+            value={hosts}
+            onChange={(e) => setHosts(e.target.value)}
+            required
+          />
+        </label>
         <button type="submit">Save secret</button>
       </form>
       {notice ? <p className="notice">{notice}</p> : null}
@@ -242,7 +252,12 @@ interface KeyInfo {
 }
 
 /** API keys (admins): created keys are shown once. */
-export function KeysPanel(props: { serverId: string; serverSlug?: string }) {
+export function KeysPanel(props: {
+  serverId: string
+  serverSlug?: string
+  /** Called when the connect command was copied (the "next steps" list ticks it off). */
+  onCommandCopied?: () => void
+}) {
   const [keys, setKeys] = useState<KeyInfo[]>([])
   const [name, setName] = useState("")
   const [created, setCreated] = useState<string>()
@@ -256,6 +271,7 @@ export function KeysPanel(props: { serverId: string; serverSlug?: string }) {
     try {
       await navigator.clipboard.writeText(text)
       setCopied(label)
+      if (label === "command") props.onCommandCopied?.()
     } catch {
       setCopied(undefined)
     }
@@ -315,8 +331,10 @@ export function KeysPanel(props: { serverId: string; serverSlug?: string }) {
           <button type="button" onClick={() => void copy("key", created)}>
             {copied === "key" ? "Copied" : "Copy key"}
           </button>
-          <p>To connect Claude Code:</p>
-          <input readOnly value={command(created)} aria-label="Connect command" />
+          <label>
+            Connect command for Claude Code
+            <textarea readOnly value={command(created)} rows={3} className="command" />
+          </label>
           <button type="button" onClick={() => void copy("command", command(created))}>
             {copied === "command" ? "Copied" : "Copy command"}
           </button>
@@ -373,12 +391,15 @@ export function KeysPanel(props: { serverId: string; serverSlug?: string }) {
         </tbody>
       </table>
       <form className="inline" onSubmit={create}>
-        <input
-          placeholder="Key name (e.g. claude-code)"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
+        <label className="grow">
+          Key name
+          <input
+            placeholder="e.g. claude-code"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </label>
         <button type="submit">Create key</button>
       </form>
       <ErrorText error={error} />
@@ -432,5 +453,16 @@ export function LogsPanel(props: { server: Server; isAdmin: boolean; onChanged: 
       <CallLogTable calls={calls} />
       <ErrorText error={error} />
     </section>
+  )
+}
+
+/** A version's latest validation: valid, has problems, or not checked yet. */
+export function CheckBadge(props: { check: VersionCheck | null | undefined }) {
+  if (!props.check) return <span className="badge">not checked</span>
+  if (props.check.valid) return <span className="badge ok">valid</span>
+  return (
+    <span className="badge bad">
+      {`${props.check.problems} problem${props.check.problems === 1 ? "" : "s"}`}
+    </span>
   )
 }

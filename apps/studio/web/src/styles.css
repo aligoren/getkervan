@@ -4,6 +4,8 @@
   --muted: #78716c;
   --line: #e7e5e4;
   --accent: #b45309;
+  --link: #1d4ed8;
+  --link-hover: #1e3a8a;
   --error: #b91c1c;
   --warning: #a16207;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -224,9 +226,15 @@ tr.revoked td {
   margin: 0.5rem 0;
 }
 
-.callout input {
+.callout input:not([type="checkbox"]) {
   width: 100%;
+  box-sizing: border-box;
   font-family: ui-monospace, monospace;
+}
+
+.callout input[type="password"],
+.callout input[type="email"] {
+  font-family: inherit;
 }
 
 .stack {
@@ -251,6 +259,160 @@ tr.revoked td {
   color: var(--error);
 }
 
-nav a {
-  color: var(--fg);
+/* Links look like links everywhere, including the top bar, with a visible focus ring. */
+a {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--link-hover);
+  text-decoration-thickness: 2px;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+.app nav a:not(.brand) {
+  color: var(--link);
+}
+
+.badge {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.badge.ok {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.badge.bad {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: var(--error);
+}
+
+.next-steps {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.next-steps h2 {
+  font-size: 1rem;
+  margin: 0.25rem 0;
+}
+
+.next-steps ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.next-steps li {
+  padding: 0.15rem 0;
+}
+
+.next-steps li.done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Forms in a row: labels above their fields, the button lined up with the fields. */
+.inline {
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.inline label input {
+  min-width: 14rem;
+}
+
+label.grow {
+  flex: 1 1 20rem;
+}
+
+textarea.command {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.add-user {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.add-user h2 {
+  font-size: 1.1rem;
+  margin-top: 0;
+}
+
+.add-user .fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.add-user .fields label {
+  flex: 1 1 16rem;
+}
+
+td.actions button {
+  margin: 0 0.25rem 0.25rem 0;
+}
+
+td.wrap {
+  word-break: break-word;
+  max-width: 28rem;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.profile h2 {
+  margin-top: 1.75rem;
 }

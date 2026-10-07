@@ -20,6 +20,7 @@ import {
   setLogPayloads,
   setPublishedVersion,
 } from "./db/repos/servers.js"
+import { recordCheck } from "./db/repos/version-checks.js"
 import { getVersion, type SpecVersion, saveVersion } from "./db/repos/versions.js"
 import type { WorkspaceScope } from "./db/scope.js"
 import { diffLines } from "./diff.js"
@@ -182,9 +183,20 @@ export class Studio {
         requireSecrets: true,
         allowSecretsOverHttp: this.#options.allowSecretsOverHttp === true,
       })
+      // Remembered for the server list and the version history ("valid", "has problems").
+      recordCheck(this.db, scope, versionId, {
+        valid: true,
+        problems: 0,
+        secrets: loaded.spec.secrets?.length ?? 0,
+      })
       return loaded.warnings
     } catch (error) {
       if (error instanceof SpecLoadError) {
+        recordCheck(this.db, scope, versionId, {
+          valid: false,
+          problems: error.issues.length,
+          secrets: 0,
+        })
         throw new StudioError("invalid", "The spec is not valid.", error.issues)
       }
       throw error

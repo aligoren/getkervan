@@ -181,6 +181,21 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   the `user.disable` event counts them, and their open streams are closed.
 - The web UI returns to the sign-in page as soon as a request is refused because the session
   ended (signed out elsewhere, timed out or deactivated).
+- **Changing one's own password** needs the current password and ends every other session of
+  the user (and so their playground tokens); the session that made the change stays.
+- **An admin's password reset** needs the admin's own password, ends all of the user's
+  sessions, and sets `must_change_password`. Until the user picks a new password, the API
+  answers 403 (`password_change_required`) to everything except the session check, the profile,
+  the password change and sign-out; hiding the rest in the UI is not what enforces it. A
+  generated temporary password is in the reset response only; a chosen one is never echoed.
+- **Last active admin:** deactivation and demotion are checked in the same synchronous SQLite
+  transaction as the change, so two concurrent requests cannot both remove an admin (tested).
+  There is no way to delete a user.
+- **Members** reach only their own profile, which has no user id in its path, and its body is
+  strict: a `role`, `email` or `id` field is refused (400), not ignored. Every endpoint about
+  another user is admin-only (IDOR tests), and sessions are ended by an opaque reference that
+  only matches the owner's sessions.
+- Session listings never contain a session id or its hash.
 - The CSRF token lives in page memory only, never in web storage.
 
 ### T7: Login brute force (4b)
@@ -199,6 +214,13 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Passwords need at least 12 characters, are hashed with scrypt (N=2^15, r=8, p=1) and are
   compared in constant time.
 - Login successes and failures go to the audit log, with the client IP and never a password.
+- A wrong current password on a password change, and a wrong admin password on a reset, count
+  against the same account and IP limits as failed logins (the same lock).
+- Emails are unique per workspace, compared case-insensitively. An admin changing an email gets
+  a clear "already used" error; the sign-in page still answers the same for known and unknown
+  emails.
+- Role, email, profile, password changes and resets, and session sign-outs are audited with who
+  did what to whom; never a password.
 - Roles: members write, validate and publish specs and use the playground. Only admins manage
   users, delete servers and read the audit log (and, in 4c, secrets and keys). Tests check
   every admin-only endpoint with a member session.
@@ -379,8 +401,13 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - **Loopback-only setup does not help when a reverse proxy runs on the same machine**, because
   the proxy forwards to loopback. The single-use setup token is what protects a fresh install.
 - **Users are deactivated, not deleted**, so their audit records keep pointing at them. API
-  keys a deactivated user created stay valid unless the admin chooses to revoke them while
-  deactivating: keys belong to servers, not users.
+  keys a deactivated user created stay valid if the admin unchecks "also revoke": keys belong to
+  servers, not users.
+- **Users cannot change their own email.** It is the sign-in identifier and Studio does not
+  verify email addresses, so only an admin changes it.
+- **A password change ends the user's open playground streams in every session**, including the
+  current one (streams are tracked per user); the current session's tokens stay valid, so the
+  playground reconnects.
 - **Unbounded version history.** Every save is kept; there is no cap or pruning per server.
   Members are trusted not to fill the disk.
 - **Members can read bindings** (secret names and hosts, never values) through the export, so

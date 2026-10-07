@@ -12,6 +12,10 @@ export interface User {
   createdAt: number
   /** Set while the user is deactivated. */
   disabledAt: number | null
+  displayName: string | null
+  /** Set after an admin's password reset, until the user picks a new password. */
+  mustChangePassword: boolean
+  lastLoginAt: number | null
 }
 
 const publicColumns = {
@@ -20,6 +24,9 @@ const publicColumns = {
   role: users.role,
   createdAt: users.createdAt,
   disabledAt: users.disabledAt,
+  displayName: users.displayName,
+  mustChangePassword: users.mustChangePassword,
+  lastLoginAt: users.lastLoginAt,
 }
 
 /** Email addresses are compared case-insensitively and without surrounding spaces. */
@@ -43,7 +50,16 @@ export function createUser(
     updatedAt: now,
   }
   db.insert(users).values(user).run()
-  return { id: user.id, email: user.email, role: user.role, createdAt: now, disabledAt: null }
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    createdAt: now,
+    disabledAt: null,
+    displayName: null,
+    mustChangePassword: false,
+    lastLoginAt: null,
+  }
 }
 
 export function findUserByEmail(
@@ -58,6 +74,19 @@ export function findUserByEmail(
     .get()
 }
 
+/** A user with their password hash (to check a current password). */
+export function getUserWithHash(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+): (User & { passwordHash: string }) | undefined {
+  return db
+    .select({ ...publicColumns, passwordHash: users.passwordHash })
+    .from(users)
+    .where(and(eq(users.workspaceId, scope.workspaceId), eq(users.id, userId)))
+    .get()
+}
+
 export function listAdmins(db: Db, scope: WorkspaceScope): User[] {
   return db
     .select(publicColumns)
@@ -67,16 +96,18 @@ export function listAdmins(db: Db, scope: WorkspaceScope): User[] {
     .all()
 }
 
+/** Sets a new password hash; `mustChange` marks it as temporary (an admin's reset). */
 export function setPasswordHash(
   db: Db,
   scope: WorkspaceScope,
   userId: string,
   passwordHash: string,
   now = Date.now(),
+  mustChange = false,
 ): boolean {
   const result = db
     .update(users)
-    .set({ passwordHash, updatedAt: now })
+    .set({ passwordHash, mustChangePassword: mustChange, updatedAt: now })
     .where(and(eq(users.workspaceId, scope.workspaceId), eq(users.id, userId)))
     .run()
   return result.changes === 1
@@ -104,6 +135,34 @@ export function setDisabledAt(
     .where(and(eq(users.workspaceId, scope.workspaceId), eq(users.id, userId)))
     .run()
   return result.changes === 1
+}
+
+/** Updates the fields an admin or the user may change. */
+export function updateUser(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  fields: { role?: Role; email?: string; displayName?: string | null },
+  now = Date.now(),
+): boolean {
+  const result = db
+    .update(users)
+    .set({
+      ...(fields.role === undefined ? {} : { role: fields.role }),
+      ...(fields.email === undefined ? {} : { email: normalizeEmail(fields.email) }),
+      ...(fields.displayName === undefined ? {} : { displayName: fields.displayName }),
+      updatedAt: now,
+    })
+    .where(and(eq(users.workspaceId, scope.workspaceId), eq(users.id, userId)))
+    .run()
+  return result.changes === 1
+}
+
+export function recordLogin(db: Db, scope: WorkspaceScope, userId: string, now = Date.now()) {
+  db.update(users)
+    .set({ lastLoginAt: now })
+    .where(and(eq(users.workspaceId, scope.workspaceId), eq(users.id, userId)))
+    .run()
 }
 
 /** How many admins of the workspace are active, not counting `except`. */

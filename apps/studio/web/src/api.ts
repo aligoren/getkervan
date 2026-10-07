@@ -11,8 +11,27 @@ export interface User {
   id: string
   email: string
   role: "admin" | "member"
+  displayName?: string | null
+  /** An admin reset the password: the user must choose a new one before anything else. */
+  mustChangePassword?: boolean
   /** Set while the user is deactivated (only in the admin's user list). */
   disabledAt?: number | null
+  createdAt?: number
+  lastLoginAt?: number | null
+}
+
+/** The latest validation of a version (`null`: never checked). */
+export interface VersionCheck {
+  valid: boolean
+  problems: number
+  secrets: number
+  checkedAt: number
+}
+
+export interface ServerSummary {
+  latest: { id: string; number: number; check: VersionCheck | null } | null
+  publishedNumber: number | null
+  lastCallAt: number | null
 }
 
 export interface Server {
@@ -23,6 +42,7 @@ export interface Server {
   logPayloads: boolean
   createdAt: number
   updatedAt: number
+  summary?: ServerSummary | null
 }
 
 export interface VersionInfo {
@@ -31,6 +51,7 @@ export interface VersionInfo {
   number: number
   sha256: string
   createdAt: number
+  check?: VersionCheck | null
 }
 
 export class ApiError extends Error {
@@ -62,7 +83,7 @@ export function onSessionEnded(handler: (() => void) | undefined): void {
 }
 
 // Endpoints whose 401 is an answer, not a sign that the session ended.
-const SIGN_IN_PATHS = new Set(["/me", "/login", "/setup"])
+const SIGN_IN_PATHS = new Set(["/session", "/me", "/login", "/setup"])
 
 /** Calls the management API on Studio's own origin, with the session cookie and CSRF token. */
 export async function api<T>(

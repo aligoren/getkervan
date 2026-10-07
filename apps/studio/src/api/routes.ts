@@ -4,9 +4,15 @@ import { bodyLimit } from "hono/body-limit"
 import { deleteCookie, getCookie, setCookie } from "hono/cookie"
 import {
   addUser,
+  changeOwnPassword,
+  checkPassword,
   listUsers,
+  resetPassword,
   setUserDisabled,
+  setUserEmail,
+  setUserRole,
   setupAdmin,
+  updateProfile,
   userApiKeys,
   verifyLogin,
 } from "../accounts.js"
@@ -18,11 +24,16 @@ import { getServer, listServers } from "../db/repos/servers.js"
 import {
   type ActiveSession,
   createSession,
+  deleteOtherSessions,
   deleteSession,
+  deleteSessionByRef,
   findSession,
+  listSessionsOf,
   SESSION_ABSOLUTE_MS,
+  type SessionUser,
 } from "../db/repos/sessions.js"
-import { anyAdminExists } from "../db/repos/users.js"
+import { anyAdminExists, getUser, recordLogin } from "../db/repos/users.js"
+import { checksOf, serverSummaries } from "../db/repos/version-checks.js"
 import { getVersion, listVersions } from "../db/repos/versions.js"
 import { defaultWorkspace } from "../db/repos/workspaces.js"
 import { ExportError } from "../export.js"
@@ -76,6 +87,29 @@ const deleteSecretBody = z.object({ confirm: z.boolean().optional() })
 const newKey = z.object({ name: z.string().max(200) })
 const settingsBody = z.object({ logPayloads: z.boolean() })
 const userBody = z.object({ disabled: z.boolean(), revokeKeys: z.boolean().optional() })
+// Strict: a field these endpoints do not take (say, "role" on a profile) is refused, not ignored.
+const profileBody = z.strictObject({ displayName: z.string().max(200).nullable() })
+const passwordBody = z.strictObject({
+  currentPassword: z.string().max(1024),
+  newPassword: z.string().max(1024),
+})
+const roleBody = z.strictObject({ role: z.enum(["admin", "member"]) })
+const emailBody = z.strictObject({ email: z.string().max(320) })
+const resetBody = z.strictObject({
+  adminPassword: z.string().max(1024),
+  password: z.string().max(1024).optional(),
+})
+
+/** What the web UI knows about the signed-in user. */
+function publicUser(user: SessionUser) {
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    displayName: user.displayName,
+    mustChangePassword: user.mustChangePassword,
+  }
+}
 
 /**
  * The management API, mounted at `/api`. Authentication is a session cookie (HttpOnly,
@@ -130,9 +164,13 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     return next()
   })
 
-  /** Requires a signed-in user (and the CSRF token on state-changing requests). */
+  /**
+   * Requires a signed-in user (and the CSRF token on state-changing requests). A user whose
+   * password an admin reset may only reach the endpoints marked `duringPasswordChange` until they
+   * choose a new one: hiding the rest in the UI would not be enough.
+   */
   const signedIn =
-    (role?: "admin"): MiddlewareHandler<ApiEnv> =>
+    (role?: "admin", options: { duringPasswordChange?: boolean } = {}): MiddlewareHandler<ApiEnv> =>
     async (c, next) => {
       const session = c.get("session")
       const sessionId = c.get("sessionId")
@@ -143,18 +181,28 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
           return c.json({ error: "Missing or invalid CSRF token. Reload the page." }, 403)
         }
       }
+      if (session.user.mustChangePassword && !options.duringPasswordChange) {
+        return c.json(
+          { error: "Choose a new password first.", code: "password_change_required" },
+          403,
+        )
+      }
       if (role === "admin" && session.user.role !== "admin") {
         return c.json({ error: "Only admins can do this." }, 403)
       }
       return next()
     }
+  const duringPasswordChange = { duringPasswordChange: true }
 
-  const startSession = (c: Context<ApiEnv>, user: { id: string; email: string; role: string }) => {
+  const startSession = (c: Context<ApiEnv>, user: SessionUser) => {
     // Never reuse an id the browser brought along (session fixation): always a new one.
     const previous = c.get("sessionId")
     if (previous) deleteSession(db, sha256(previous))
     const scope = defaultWorkspace(db)
-    const session = createSession(db, scope, user.id)
+    const session = createSession(db, scope, user.id, Date.now(), {
+      ip: c.get("clientIp"),
+      userAgent: c.req.header("user-agent"),
+    })
     setCookie(c, cookieName, session.id, {
       path: "/",
       httpOnly: true,
@@ -162,10 +210,7 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
       secure,
       maxAge: Math.floor(SESSION_ABSOLUTE_MS / 1000),
     })
-    return {
-      user: { id: user.id, email: user.email, role: user.role },
-      csrfToken: csrfTokenFor(session.id),
-    }
+    return { user: publicUser(user), csrfToken: csrfTokenFor(session.id) }
   }
 
   const actor = (c: Context<ApiEnv>) => ({
@@ -187,8 +232,10 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     const attempt = throttle.setup(ip)
     if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
     try {
-      const { user } = await setupAdmin(db, body, ip)
+      const { scope, user } = await setupAdmin(db, body, ip)
       attempt.done(true)
+      // Setup signs the first admin in: that is their first login.
+      recordLogin(db, scope, user.id)
       options.onAdminCreated?.()
       return c.json(startSession(c, user), 201)
     } catch (error) {
@@ -227,11 +274,21 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
       return c.json({ error: "Wrong email or password." }, 401)
     }
     const started = startSession(c, user)
+    recordLogin(db, scope, user.id)
     recordAudit(db, scope, { type: "user", id: user.id, ip }, { action: "login.success" })
     return c.json(started)
   })
 
-  api.post("/logout", signedIn(), (c) => {
+  // The web UI's first request: who is signed in, if anyone. No session is an answer, not an
+  // error, so it is a 200 (the browser does not log it as a failed request).
+  api.get("/session", (c) => {
+    const session = c.get("session")
+    const sessionId = c.get("sessionId")
+    if (!session || !sessionId) return c.json({ user: null, setupNeeded: !anyAdminExists(db) })
+    return c.json({ user: publicUser(session.user), csrfToken: csrfTokenFor(sessionId) })
+  })
+
+  api.post("/logout", signedIn(undefined, duringPasswordChange), (c) => {
     const session = c.get("session")
     if (session) {
       deleteSession(db, session.idHash)
@@ -241,12 +298,100 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     return c.json({ ok: true })
   })
 
-  api.get("/me", signedIn(), (c) => {
+  api.get("/me", signedIn(undefined, duringPasswordChange), (c) => {
     const sessionId = c.get("sessionId") ?? ""
-    return c.json({ user: c.get("session")?.user, csrfToken: csrfTokenFor(sessionId) })
+    const session = c.get("session")
+    return c.json({
+      user: session ? publicUser(session.user) : undefined,
+      csrfToken: csrfTokenFor(sessionId),
+    })
   })
 
-  api.get("/servers", signedIn(), (c) => c.json({ servers: listServers(db, scopeOf(c)) }))
+  // Profile: the signed-in user's own account. Members reach only their own; there is no id.
+  api.get("/profile", signedIn(undefined, duringPasswordChange), (c) => {
+    const session = c.get("session")
+    const user = session && getUser(db, session.scope, session.user.id)
+    if (!user) throw new StudioError("not_found", "Not found.")
+    return c.json({ user })
+  })
+
+  api.put("/profile", signedIn(), async (c) => {
+    const body = await parse(c, profileBody)
+    const session = c.get("session")
+    if (!session) throw new StudioError("forbidden", "Sign in first.")
+    return c.json({ user: updateProfile(db, session.scope, session.user.id, body, actor(c)) })
+  })
+
+  api.put("/profile/password", signedIn(undefined, duringPasswordChange), async (c) => {
+    const body = await parse(c, passwordBody)
+    const session = c.get("session")
+    if (!session) throw new StudioError("forbidden", "Sign in first.")
+    // A wrong current password counts like a failed login for this account and IP.
+    const attempt = throttle.login(session.user.email, c.get("clientIp"))
+    if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
+    let result: { sessionsEnded: number }
+    try {
+      result = await changeOwnPassword(
+        db,
+        session.scope,
+        session.user.id,
+        body,
+        session.idHash,
+        actor(c),
+      )
+    } catch (error) {
+      attempt.done(!(error instanceof StudioError && error.code === "forbidden"))
+      throw error
+    }
+    attempt.done(true)
+    // Other sessions are gone, so their playground tokens are too; open streams end here.
+    studio.gateway.endPlayground(session.user.id)
+    return c.json(result)
+  })
+
+  api.get("/profile/sessions", signedIn(), (c) => {
+    const session = c.get("session")
+    if (!session) throw new StudioError("forbidden", "Sign in first.")
+    return c.json({
+      sessions: listSessionsOf(db, session.scope, session.user.id, session.idHash),
+    })
+  })
+
+  api.delete("/profile/sessions/:ref", signedIn(), (c) => {
+    const session = c.get("session")
+    if (!session) throw new StudioError("forbidden", "Sign in first.")
+    if (!deleteSessionByRef(db, session.scope, session.user.id, c.req.param("ref"))) {
+      throw new StudioError("not_found", "Not found.")
+    }
+    recordAudit(db, session.scope, actor(c), {
+      action: "session.end",
+      target: { type: "user", id: session.user.id },
+    })
+    return c.json({ ok: true })
+  })
+
+  api.post("/profile/sessions/end-others", signedIn(), (c) => {
+    const session = c.get("session")
+    if (!session) throw new StudioError("forbidden", "Sign in first.")
+    const ended = deleteOtherSessions(db, session.scope, session.user.id, session.idHash)
+    recordAudit(db, session.scope, actor(c), {
+      action: "session.end_others",
+      target: { type: "user", id: session.user.id },
+      details: { sessionsEnded: ended },
+    })
+    return c.json({ sessionsEnded: ended })
+  })
+
+  api.get("/servers", signedIn(), (c) => {
+    const scope = scopeOf(c)
+    const summaries = serverSummaries(db, scope)
+    return c.json({
+      servers: listServers(db, scope).map((server) => ({
+        ...server,
+        summary: summaries.get(server.id) ?? null,
+      })),
+    })
+  })
 
   api.post("/servers", signedIn(), async (c) => {
     const body = await parse(c, newServer)
@@ -257,7 +402,16 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     const scope = scopeOf(c)
     const server = getServer(db, scope, c.req.param("id"))
     if (!server) throw new StudioError("not_found", "Not found.")
-    const versions = listVersions(db, scope, server.id).map(({ yamlText: _yaml, ...v }) => v)
+    const listed = listVersions(db, scope, server.id)
+    const checks = checksOf(
+      db,
+      scope,
+      listed.map((v) => v.id),
+    )
+    const versions = listed.map(({ yamlText: _yaml, ...v }) => ({
+      ...v,
+      check: checks.get(v.id) ?? null,
+    }))
     return c.json({ server, versions })
   })
 
@@ -367,6 +521,27 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     return c.json({ ok: true })
   })
 
+  // What a new server still needs (the "next steps" checklist). Counts of secrets and keys are
+  // for admins, who manage them.
+  api.get("/servers/:id/overview", signedIn(), async (c) => {
+    const scope = scopeOf(c)
+    const server = getServer(db, scope, c.req.param("id"))
+    if (!server) throw new StudioError("not_found", "Not found.")
+    const summary = serverSummaries(db, scope).get(server.id) ?? null
+    const admin = c.get("session")?.user.role === "admin"
+    const keys = admin ? listApiKeys(db, scope, server.id) : []
+    return c.json({
+      summary,
+      ...(admin
+        ? {
+            secrets: (await studio.listSecrets(scope, server.id)).length,
+            activeKeys: keys.filter((k) => k.revokedAt === null).length,
+            keyUsed: keys.some((k) => k.lastUsedAt !== null),
+          }
+        : {}),
+    })
+  })
+
   api.get("/servers/:id/versions/:from/diff/:to", signedIn(), (c) =>
     c.json(
       studio.diffVersions(scopeOf(c), c.req.param("id"), c.req.param("from"), c.req.param("to")),
@@ -411,6 +586,38 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     if (body.disabled) studio.gateway.endPlayground(user.id)
     for (const keyId of revokedKeys) studio.gateway.disconnect({ keyId })
     return c.json({ user, revokedKeys: revokedKeys.length })
+  })
+
+  api.put("/users/:id/role", signedIn("admin"), async (c) => {
+    const body = await parse(c, roleBody)
+    return c.json({ user: setUserRole(db, scopeOf(c), c.req.param("id"), body.role, actor(c)) })
+  })
+
+  api.put("/users/:id/email", signedIn("admin"), async (c) => {
+    const body = await parse(c, emailBody)
+    return c.json({ user: setUserEmail(db, scopeOf(c), c.req.param("id"), body.email, actor(c)) })
+  })
+
+  api.post("/users/:id/password-reset", signedIn("admin"), async (c) => {
+    const body = await parse(c, resetBody)
+    const session = c.get("session")
+    if (!session) throw new StudioError("forbidden", "Sign in first.")
+    // The admin confirms with their own password, throttled like a login.
+    const attempt = throttle.login(session.user.email, c.get("clientIp"))
+    if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
+    const confirmed = await checkPassword(db, session.scope, session.user.id, body.adminPassword)
+    attempt.done(confirmed)
+    if (!confirmed) throw new StudioError("forbidden", "Your password is wrong.")
+    const userId = c.req.param("id")
+    const result = await resetPassword(
+      db,
+      session.scope,
+      userId,
+      { password: body.password },
+      actor(c),
+    )
+    studio.gateway.endPlayground(userId)
+    return c.json(result)
   })
 
   api.get("/audit", signedIn("admin"), (c) => c.json({ events: listAudit(db, scopeOf(c)) }))

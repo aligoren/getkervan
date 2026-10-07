@@ -1,4 +1,4 @@
-import { and, eq, lt, or } from "drizzle-orm"
+import { and, desc, eq, lt, ne, or } from "drizzle-orm"
 import { randomToken, sha256 } from "../../crypto.js"
 import type { Db } from "../open.js"
 import { sessions, users } from "../schema.js"
@@ -16,6 +16,20 @@ export interface SessionUser {
   id: string
   email: string
   role: Role
+  displayName: string | null
+  /** The user must change their password before using anything else (an admin reset it). */
+  mustChangePassword: boolean
+}
+
+/** A session as its owner sees it: never its id or the id's hash. */
+export interface SessionSummary {
+  /** An opaque reference, enough to end the session and useless for anything else. */
+  ref: string
+  current: boolean
+  createdAt: number
+  lastSeenAt: number
+  ip: string | null
+  userAgent: string | null
 }
 
 export interface ActiveSession {
@@ -34,6 +48,7 @@ export function createSession(
   scope: WorkspaceScope,
   userId: string,
   now = Date.now(),
+  origin: { ip?: string | undefined; userAgent?: string | undefined } = {},
 ): { id: string; expiresAt: number } {
   const id = randomToken(32)
   const expiresAt = now + SESSION_ABSOLUTE_MS
@@ -45,6 +60,8 @@ export function createSession(
       createdAt: now,
       lastSeenAt: now,
       expiresAt,
+      ip: origin.ip?.slice(0, 64) ?? null,
+      userAgent: origin.userAgent?.slice(0, 200) ?? null,
     })
     .run()
   return { id, expiresAt }
@@ -67,6 +84,8 @@ export function findSession(db: Db, id: string, now = Date.now()): ActiveSession
       userId: users.id,
       email: users.email,
       role: users.role,
+      displayName: users.displayName,
+      mustChangePassword: users.mustChangePassword,
       userWorkspaceId: users.workspaceId,
       disabledAt: users.disabledAt,
     })
@@ -86,7 +105,13 @@ export function findSession(db: Db, id: string, now = Date.now()): ActiveSession
   return {
     idHash,
     scope: workspaceScope(row.workspaceId),
-    user: { id: row.userId, email: row.email, role: row.role },
+    user: {
+      id: row.userId,
+      email: row.email,
+      role: row.role,
+      displayName: row.displayName,
+      mustChangePassword: row.mustChangePassword,
+    },
     expiresAt: row.expiresAt,
   }
 }
@@ -123,6 +148,73 @@ export function deleteExpiredSessions(db: Db, now = Date.now()): number {
   return db
     .delete(sessions)
     .where(or(lt(sessions.expiresAt, now + 1), lt(sessions.lastSeenAt, now - SESSION_IDLE_MS + 1)))
+    .run().changes
+}
+
+/** The opaque reference a session is shown and ended by (derived from the id's hash). */
+export function sessionRef(idHash: string): string {
+  return sha256(`kervan-session-ref:${idHash}`).slice(0, 24)
+}
+
+/** A user's live sessions, newest activity first. */
+export function listSessionsOf(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  currentIdHash: string | undefined,
+  now = Date.now(),
+): SessionSummary[] {
+  return db
+    .select()
+    .from(sessions)
+    .where(and(eq(sessions.workspaceId, scope.workspaceId), eq(sessions.userId, userId)))
+    .orderBy(desc(sessions.lastSeenAt))
+    .all()
+    .filter((row) => now < row.expiresAt && now - row.lastSeenAt < SESSION_IDLE_MS)
+    .map((row) => ({
+      ref: sessionRef(row.idHash),
+      current: row.idHash === currentIdHash,
+      createdAt: row.createdAt,
+      lastSeenAt: row.lastSeenAt,
+      ip: row.ip,
+      userAgent: row.userAgent,
+    }))
+}
+
+/** Ends one of a user's sessions by its reference. Returns whether one ended. */
+export function deleteSessionByRef(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  ref: string,
+): boolean {
+  const rows = db
+    .select({ idHash: sessions.idHash })
+    .from(sessions)
+    .where(and(eq(sessions.workspaceId, scope.workspaceId), eq(sessions.userId, userId)))
+    .all()
+  const match = rows.find((row) => sessionRef(row.idHash) === ref)
+  if (!match) return false
+  deleteSession(db, match.idHash)
+  return true
+}
+
+/** Ends all of a user's sessions except one. Returns how many ended. */
+export function deleteOtherSessions(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  keepIdHash: string,
+): number {
+  return db
+    .delete(sessions)
+    .where(
+      and(
+        eq(sessions.workspaceId, scope.workspaceId),
+        eq(sessions.userId, userId),
+        ne(sessions.idHash, keepIdHash),
+      ),
+    )
     .run().changes
 }
 

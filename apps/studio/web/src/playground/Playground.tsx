@@ -90,7 +90,8 @@ export function Playground(props: { serverId: string; versionId: string | undefi
     <section className="playground">
       <h2>Playground</h2>
       <p className="muted">
-        Calls the selected version through the gateway with a 15-minute token, like any MCP client.
+        Try the selected version here with a temporary 15-minute token. To connect Claude or another
+        client for good, create an API key in the API keys tab.
       </p>
       <button type="button" onClick={connect} disabled={!props.versionId || busy}>
         {client ? "Reconnect" : "Connect"}
@@ -102,6 +103,9 @@ export function Playground(props: { serverId: string; versionId: string | undefi
         onSelect={(name) => {
           setSelected(name)
           setArgs(argumentSkeleton(tools.find((tool) => tool.name === name)?.inputSchema))
+          // The previous tool's result or error does not belong to this one.
+          setResult(undefined)
+          setError(undefined)
         }}
       />
       {selected ? (
@@ -123,6 +127,21 @@ export function Playground(props: { serverId: string; versionId: string | undefi
       {result !== undefined ? <ToolOutput result={result} /> : null}
       <details>
         <summary>Raw requests and responses ({log.length})</summary>
+        {log.length > 0 ? (
+          <button
+            type="button"
+            onClick={() =>
+              // The log never holds the playground token (see client.ts).
+              void navigator.clipboard?.writeText(
+                log
+                  .map((entry) => `${entry.direction === "request" ? "→" : "←"} ${entry.text}`)
+                  .join("\n\n"),
+              )
+            }
+          >
+            Copy
+          </button>
+        ) : null}
         <RawLog entries={log} />
       </details>
     </section>

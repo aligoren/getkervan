@@ -58,11 +58,22 @@ On first start, Studio:
   results (redacted, cut to 4 KiB).
 - **Roles:** members edit, publish, use the playground and see call metadata. Admins also
   manage users, secrets and keys, delete servers, and read payloads and the audit log.
-- **Users (admins):** add users and deactivate them. A deactivated user is signed out at once,
-  their playground tokens stop working, and they cannot sign in until reactivated. The last
-  active admin cannot be deactivated. API keys belong to servers, not users, so they keep
-  working; before deactivating, Studio lists the keys the user created and can revoke them in
-  the same step. Reactivating does not bring revoked keys back.
+- **Users (admins):** add users, change their role and email, reset their password, and
+  deactivate them. Users are never deleted, so the audit log keeps pointing at them.
+  - A deactivated user is signed out at once, their playground tokens stop working, and they
+    cannot sign in until reactivated. Before deactivating, Studio lists the API keys the user
+    created and revokes them too unless you uncheck the box (keys belong to servers, so they
+    would otherwise keep working). Reactivating does not bring revoked keys back.
+  - A password reset asks for your own password, sets a temporary one (yours, or a generated
+    one shown once), and signs the user out everywhere. They must choose a new password at
+    their next sign-in; until then the API refuses everything else.
+  - The last active admin cannot be deactivated or made a member.
+- **Profile (everyone):** your email and role (only an admin changes those), an optional display
+  name, your password (the current one is required; your other sessions are signed out), and
+  your active sessions, which you can sign out one by one or all at once.
+- **Server status:** the server list shows whether each server is published and whether a newer
+  draft is valid, has problems, or was never checked, plus the time of the last call. A new
+  server shows a "Next steps" checklist until it is set up.
 
 For UI development, run Studio, then `pnpm --filter @kervan/studio dev:web`. Vite serves the UI
 and forwards `/api` and `/s` to Studio on port 4310.

@@ -1,7 +1,8 @@
-import { hashPassword, passwordProblem, verifyPassword } from "./crypto.js"
+import { hashPassword, passwordProblem, randomToken, verifyPassword } from "./crypto.js"
 import type { Db } from "./db/open.js"
 import { listActiveKeysCreatedBy, revokeApiKey } from "./db/repos/api-keys.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
+import { deleteOtherSessions } from "./db/repos/sessions.js"
 import { consumeSetupToken, setupTokenValid } from "./db/repos/tokens.js"
 import {
   anyAdminExists,
@@ -10,10 +11,14 @@ import {
   deleteSessionsOf,
   findUserByEmail,
   getUser,
+  getUserWithHash,
   listUsers,
+  normalizeEmail,
   type Role,
   setDisabledAt,
+  setPasswordHash,
   type User,
+  updateUser,
 } from "./db/repos/users.js"
 import { defaultWorkspace } from "./db/repos/workspaces.js"
 import type { WorkspaceScope } from "./db/scope.js"
@@ -151,6 +156,184 @@ export function setUserDisabled(
     })
     return { user: { ...user, disabledAt }, revokedKeys }
   })
+}
+
+/** Whether `password` is the user's current password (callers throttle the attempts). */
+export async function checkPassword(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  password: string,
+): Promise<boolean> {
+  const user = getUserWithHash(db, scope, userId)
+  if (!user || password.length === 0 || password.length > 1024) return false
+  return verifyPassword(password, user.passwordHash)
+}
+
+/**
+ * Changes the signed-in user's own password. The current password is required (the caller
+ * throttles wrong ones like failed logins). Every other session of the user ends, and with them
+ * their playground tokens; the session that made the change stays.
+ */
+export async function changeOwnPassword(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  input: { currentPassword: string; newPassword: string },
+  keepSessionHash: string,
+  actor: Actor,
+): Promise<{ sessionsEnded: number }> {
+  if (!(await checkPassword(db, scope, userId, input.currentPassword))) {
+    throw new StudioError("forbidden", "The current password is wrong.")
+  }
+  const problem = passwordProblem(input.newPassword)
+  if (problem) throw new StudioError("invalid", problem)
+  if (input.newPassword === input.currentPassword) {
+    throw new StudioError("invalid", "Choose a password different from the current one.")
+  }
+  const passwordHash = await hashPassword(input.newPassword)
+  return db.transaction((tx) => {
+    if (!setPasswordHash(tx, scope, userId, passwordHash)) throw notFound()
+    const sessionsEnded = deleteOtherSessions(tx, scope, userId, keepSessionHash)
+    recordAudit(tx, scope, actor, {
+      action: "user.password_change",
+      target: { type: "user", id: userId },
+      details: { sessionsEnded },
+    })
+    return { sessionsEnded }
+  })
+}
+
+/**
+ * An admin sets a temporary password for another user (given, or generated and returned once).
+ * All of the user's sessions end, and they must choose a new password at their next sign-in.
+ * The caller checks the admin's own password first (and throttles it like a login).
+ */
+export async function resetPassword(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  input: { password?: string | undefined },
+  actor: Actor,
+): Promise<{ temporaryPassword: string | undefined; sessionsEnded: number }> {
+  if (actor.id === userId) {
+    throw new StudioError("invalid", "Change your own password on your profile page.")
+  }
+  if (!getUser(db, scope, userId)) throw notFound()
+  const generated = input.password === undefined || input.password === ""
+  const password = generated ? randomToken(18) : (input.password ?? "")
+  const problem = passwordProblem(password)
+  if (problem) throw new StudioError("invalid", problem)
+  const passwordHash = await hashPassword(password)
+  const sessionsEnded = db.transaction((tx) => {
+    if (!setPasswordHash(tx, scope, userId, passwordHash, Date.now(), true)) throw notFound()
+    const ended = deleteSessionsOf(tx, scope, userId)
+    recordAudit(tx, scope, actor, {
+      action: "user.password_reset",
+      target: { type: "user", id: userId },
+      details: { sessionsEnded: ended, generated },
+    })
+    return ended
+  })
+  // A generated password is in this response only; a given one is never echoed.
+  return { temporaryPassword: generated ? password : undefined, sessionsEnded }
+}
+
+/**
+ * Changes a user's role (admins only). The last active admin cannot become a member, checked in
+ * the same transaction as the change, so two concurrent requests cannot both pass.
+ */
+export function setUserRole(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  role: Role,
+  actor: Actor,
+): User {
+  if (role !== "admin" && role !== "member") {
+    throw new StudioError("invalid", 'The role must be "admin" or "member".')
+  }
+  return db.transaction((tx) => {
+    const user = getUser(tx, scope, userId)
+    if (!user) throw notFound()
+    if (user.role === role) return user
+    const lastAdmin =
+      user.role === "admin" &&
+      user.disabledAt === null &&
+      countActiveAdmins(tx, scope, user.id) === 0
+    if (lastAdmin) {
+      throw new StudioError("conflict", "The last active admin cannot stop being an admin.")
+    }
+    updateUser(tx, scope, user.id, { role })
+    recordAudit(tx, scope, actor, {
+      action: "user.role",
+      target: { type: "user", id: user.id },
+      details: { from: user.role, to: role },
+    })
+    return { ...user, role }
+  })
+}
+
+/**
+ * Changes a user's email (admins only). Emails are unique per workspace, compared
+ * case-insensitively. The admin is told about a clash; the sign-in page still says nothing.
+ */
+export function setUserEmail(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  email: string,
+  actor: Actor,
+): User {
+  if (!EMAIL.test(email.trim())) throw new StudioError("invalid", "Enter a valid email address.")
+  const normalized = normalizeEmail(email)
+  try {
+    return db.transaction((tx) => {
+      const user = getUser(tx, scope, userId)
+      if (!user) throw notFound()
+      if (user.email === normalized) return user
+      updateUser(tx, scope, user.id, { email: normalized })
+      recordAudit(tx, scope, actor, {
+        action: "user.email",
+        target: { type: "user", id: user.id },
+        details: { from: user.email, to: normalized },
+      })
+      return { ...user, email: normalized }
+    })
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new StudioError("conflict", "Another user already has this email.")
+    }
+    throw error
+  }
+}
+
+/** The signed-in user's own profile fields (only the display name can change). */
+export function updateProfile(
+  db: Db,
+  scope: WorkspaceScope,
+  userId: string,
+  input: { displayName: string | null },
+  actor: Actor,
+): User {
+  const displayName = input.displayName?.trim() || null
+  if (displayName !== null && displayName.length > 100) {
+    throw new StudioError("invalid", "The display name can be at most 100 characters.")
+  }
+  return db.transaction((tx) => {
+    const user = getUser(tx, scope, userId)
+    if (!user) throw notFound()
+    updateUser(tx, scope, user.id, { displayName })
+    recordAudit(tx, scope, actor, {
+      action: "user.profile",
+      target: { type: "user", id: user.id },
+    })
+    return { ...user, displayName }
+  })
+}
+
+function notFound(): StudioError {
+  return new StudioError("not_found", "Not found.")
 }
 
 /**

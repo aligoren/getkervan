@@ -51,7 +51,7 @@ describe("the users page", () => {
     expect(puts()[1]?.body).toEqual({ disabled: false })
   })
 
-  it("lists the user's API keys and revokes them only when asked", async () => {
+  it("lists the user's API keys and revokes them by default", async () => {
     keys = [
       { id: "k1", name: "ci", prefix: "kvn_abcdefgh", serverName: "Weather" },
       { id: "k2", name: "laptop", prefix: "kvn_12345678", serverName: "Search" },
@@ -61,17 +61,17 @@ describe("the users page", () => {
     await page.findByText("ci (kvn_abcdefgh…) on Weather")
     expect(page.container.textContent).toContain("laptop (kvn_12345678…) on Search")
     const checkbox = page.getByLabelText("Also revoke these 2 API key(s)") as HTMLInputElement
-    expect(checkbox.checked).toBe(false)
-    fireEvent.click(checkbox)
+    expect(checkbox.checked).toBe(true)
     fireEvent.click(page.getByRole("button", { name: "Deactivate now" }))
     await waitFor(() => expect(puts()).toHaveLength(1))
     expect(puts()[0]?.body).toEqual({ disabled: true, revokeKeys: true })
   })
 
-  it("does not revoke keys when the box is left unchecked", async () => {
+  it("does not revoke keys when the box is unchecked", async () => {
     keys = [{ id: "k1", name: "ci", prefix: "kvn_abcdefgh", serverName: "Weather" }]
     const page = render(<Users />)
     fireEvent.click(await page.findByRole("button", { name: "Deactivate" }))
+    fireEvent.click(await page.findByLabelText("Also revoke these 1 API key(s)"))
     fireEvent.click(await page.findByRole("button", { name: "Deactivate now" }))
     await waitFor(() => expect(puts()).toHaveLength(1))
     expect(puts()[0]?.body).toEqual({ disabled: true })

@@ -2,22 +2,12 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react"
 import { ApiError, api, type Issue, type Server, type User, type VersionInfo } from "../api.js"
 import { ErrorText, IssueList } from "../components/untrusted.js"
 import { Playground } from "../playground/Playground.js"
+import { STARTER_SPEC } from "../starter.js"
+import { NextSteps, rememberCommandCopied } from "./NextSteps.js"
 import { KeysPanel, LogsPanel, SecretsPanel, VersionsPanel } from "./ServerPanels.js"
 
 // Monaco is large; load it only here.
 const SpecEditor = lazy(() => import("../editor/SpecEditor.js"))
-
-const STARTER = `specVersion: 1
-name: my-server
-version: 0.1.0
-tools:
-  - name: example
-    description: Describe what the tool does.
-    http:
-      url: https://api.example.com/items
-    output:
-      select: "items[].{id: id, name: name}"
-`
 
 type Tab = "editor" | "versions" | "secrets" | "keys" | "logs"
 
@@ -27,7 +17,10 @@ export function ServerPage(props: { serverId: string; user: User }) {
   const [server, setServer] = useState<Server>()
   const [versions, setVersions] = useState<VersionInfo[]>([])
   const [selected, setSelected] = useState<string>()
-  const [text, setText] = useState(STARTER)
+  const [text, setText] = useState(STARTER_SPEC)
+  // Bumped whenever the "next steps" may have changed.
+  const [refresh, setRefresh] = useState(0)
+  const bump = () => setRefresh((n) => n + 1)
   const [issues, setIssues] = useState<Issue[]>([])
   const [error, setError] = useState<unknown>()
   const [notice, setNotice] = useState<string>()
@@ -82,6 +75,7 @@ export function ServerPage(props: { serverId: string; user: User }) {
           : `Saved version ${saved.version.number} as a draft with problems.`,
       )
       await load()
+      bump()
     } catch (caught) {
       setError(caught)
     }
@@ -98,6 +92,7 @@ export function ServerPage(props: { serverId: string; user: User }) {
       )
       setNotice(`Version ${done.published.number} is published.`)
       await load()
+      bump()
     } catch (caught) {
       if (caught instanceof ApiError) setIssues(caught.issues)
       setError(caught)
@@ -125,7 +120,9 @@ export function ServerPage(props: { serverId: string; user: User }) {
     <section className="server">
       <header>
         <a href="#/">Servers</a> / <strong>{server.name}</strong>{" "}
-        <span className="muted">MCP endpoint: /s/{server.id}/mcp</span>
+        <span className="muted">
+          MCP endpoint: <code>{`${window.location.origin}/s/${server.id}/mcp`}</code>
+        </span>
       </header>
       <nav className="tabs">
         {tabs.map(([id, label]) => (
@@ -133,12 +130,16 @@ export function ServerPage(props: { serverId: string; user: User }) {
             key={id}
             type="button"
             className={tab === id ? "active" : undefined}
-            onClick={() => setTab(id)}
+            onClick={() => {
+              setTab(id)
+              bump()
+            }}
           >
             {label}
           </button>
         ))}
       </nav>
+      <NextSteps serverId={server.id} isAdmin={isAdmin} refresh={refresh} />
       {tab === "versions" ? (
         <VersionsPanel
           server={server}
@@ -151,7 +152,16 @@ export function ServerPage(props: { serverId: string; user: User }) {
         />
       ) : null}
       {tab === "secrets" ? <SecretsPanel serverId={server.id} /> : null}
-      {tab === "keys" ? <KeysPanel serverId={server.id} serverSlug={server.slug} /> : null}
+      {tab === "keys" ? (
+        <KeysPanel
+          serverId={server.id}
+          serverSlug={server.slug}
+          onCommandCopied={() => {
+            rememberCommandCopied(server.id)
+            bump()
+          }}
+        />
+      ) : null}
       {tab === "logs" ? <LogsPanel server={server} isAdmin={isAdmin} onChanged={reload} /> : null}
       <div className="columns" hidden={tab !== "editor"}>
         <div className="main">

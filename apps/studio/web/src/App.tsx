@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
-import { ApiError, api, onSessionEnded, setCsrfToken, type User } from "./api.js"
+import { api, onSessionEnded, setCsrfToken, type User } from "./api.js"
 import { ErrorText } from "./components/untrusted.js"
 import { Audit, Users } from "./pages/Admin.js"
 import { Login, Setup } from "./pages/Auth.js"
+import { ChangePassword, Profile } from "./pages/Profile.js"
 import { ServerPage } from "./pages/ServerPage.js"
 import { Servers } from "./pages/Servers.js"
 
@@ -38,16 +39,14 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    api<{ user: User; csrfToken: string }>("GET", "/me").then(
-      (me) => {
-        setCsrfToken(me.csrfToken)
-        setPhase({ kind: "ready", user: me.user })
+    // Not signed in is an ordinary answer here (200), so the console stays quiet.
+    api<{ user: User | null; csrfToken?: string; setupNeeded?: boolean }>("GET", "/session").then(
+      (session) => {
+        if (!session.user) return setPhase({ kind: session.setupNeeded ? "setup" : "login" })
+        setCsrfToken(session.csrfToken)
+        setPhase({ kind: "ready", user: session.user })
       },
-      async (caught: unknown) => {
-        if (!(caught instanceof ApiError) || caught.status !== 401) return setError(caught)
-        const setup = await api<{ needed: boolean }>("GET", "/setup")
-        setPhase({ kind: setup.needed ? "setup" : "login" })
-      },
+      (caught: unknown) => setError(caught),
     )
   }, [])
 
@@ -76,15 +75,27 @@ export function App() {
       </>
     )
   }
+  // An admin reset the password: nothing else until a new one is chosen (the API enforces it too).
+  if (phase.user.mustChangePassword) {
+    return (
+      <ChangePassword
+        user={phase.user}
+        onDone={() => ready({ ...phase.user, mustChangePassword: false })}
+        onSignOut={logout}
+      />
+    )
+  }
 
   const serverId = /^#\/servers\/([^/]+)$/.exec(hash)?.[1]
   const isAdmin = phase.user.role === "admin"
   const page = serverId ? (
     <ServerPage serverId={decodeURIComponent(serverId)} user={phase.user} />
   ) : hash === "#/users" && isAdmin ? (
-    <Users />
+    <Users currentUserId={phase.user.id} />
   ) : hash === "#/audit" && isAdmin ? (
     <Audit />
+  ) : hash === "#/profile" ? (
+    <Profile onChanged={(user) => ready({ ...phase.user, ...user })} />
   ) : (
     <Servers />
   )
@@ -100,9 +111,9 @@ export function App() {
             <a href="#/audit">Audit log</a>
           </>
         ) : null}
-        <span className="muted">
-          {phase.user.email} ({phase.user.role})
-        </span>
+        <a href="#/profile" className="muted">
+          {phase.user.displayName || phase.user.email} ({phase.user.role})
+        </a>
         <button type="button" onClick={logout}>
           Sign out
         </button>

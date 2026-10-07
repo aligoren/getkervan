@@ -32,6 +32,12 @@ configureMonacoYaml(monaco, {
   ],
 })
 
+function toTop(instance: monaco.editor.IStandaloneCodeEditor): void {
+  instance.setPosition({ lineNumber: 1, column: 1 })
+  instance.setScrollTop(0)
+  instance.setScrollLeft(0)
+}
+
 /** Monaco with kervan.yaml completion and validation, plus the server's own issues as markers. */
 export default function SpecEditor(props: {
   value: string
@@ -56,6 +62,7 @@ export default function SpecEditor(props: {
       scrollBeyondLastLine: false,
     })
     editor.current = instance
+    toTop(instance)
     const subscription = model.onDidChangeContent(() => onChange.current(model.getValue()))
     return () => {
       subscription.dispose()
@@ -65,8 +72,12 @@ export default function SpecEditor(props: {
   }, [])
 
   useEffect(() => {
-    const model = editor.current?.getModel()
-    if (model && model.getValue() !== props.value) model.setValue(props.value)
+    const instance = editor.current
+    const model = instance?.getModel()
+    if (!instance || !model || model.getValue() === props.value) return
+    // A version opened (or the starter) starts at its first line, not where the last one was.
+    model.setValue(props.value)
+    toTop(instance)
   }, [props.value])
 
   useEffect(() => {

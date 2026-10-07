@@ -36,10 +36,10 @@ describe("when the session ends while a page is open", () => {
   it("returns to sign-in and says why", async () => {
     let signedIn = true
     handler = (method, url) => {
-      if (url === "/api/me") {
+      if (url === "/api/session") {
         return signedIn
           ? json({ user: { id: "u", email: "a@example.test", role: "member" }, csrfToken: "c" })
-          : json({ error: "Sign in first." }, 401)
+          : json({ user: null, setupNeeded: false })
       }
       if (url === "/api/servers" && method === "GET") {
         return signedIn ? json({ servers: [] }) : json({ error: "Sign in first." }, 401)
@@ -104,11 +104,13 @@ describe("the API keys panel", () => {
     const page = render(<KeysPanel serverId="s1" serverSlug="weather" />)
     const endpoint = `${window.location.origin}/s/s1/mcp`
     expect(page.container.textContent).toContain(endpoint)
-    fireEvent.change(page.getByPlaceholderText("Key name (e.g. claude-code)"), {
+    fireEvent.change(page.getByLabelText("Key name"), {
       target: { value: "ci" },
     })
     fireEvent.click(page.getByRole("button", { name: "Create key" }))
-    const command = (await page.findByLabelText("Connect command")) as HTMLInputElement
+    const command = (await page.findByLabelText(
+      "Connect command for Claude Code",
+    )) as HTMLTextAreaElement
     expect(command.value).toBe(
       `claude mcp add --transport http weather ${endpoint} --header "Authorization: Bearer kvn_new-key-value"`,
     )
