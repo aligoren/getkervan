@@ -282,7 +282,11 @@ describe("roles", () => {
 
     for (const [method, path, body] of [
       ["GET", "/api/users", undefined],
-      ["POST", "/api/users", { email: "x@example.test", password: PASSWORD, role: "admin" }],
+      [
+        "POST",
+        "/api/users",
+        { email: "x@example.test", password: PASSWORD, role: "admin", adminPassword: PASSWORD },
+      ],
       ["DELETE", `/api/servers/${id}`, undefined],
       ["GET", "/api/audit", undefined],
     ] as const) {
@@ -295,7 +299,12 @@ describe("roles", () => {
     expect((await s.request("DELETE", `/api/servers/${id}`, admin)).status).toBe(200)
     const added = await s.request("POST", "/api/users", {
       ...admin,
-      body: { email: "new@example.test", password: PASSWORD, role: "member" },
+      body: {
+        email: "new@example.test",
+        password: PASSWORD,
+        role: "member",
+        adminPassword: PASSWORD,
+      },
     })
     expect(added.status).toBe(201)
   })

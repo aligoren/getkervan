@@ -4,6 +4,7 @@ import { serveHttp, serveStdio } from "@kervan/transport/node"
 import { findProjectRoot, watchProject } from "./dev/watch.js"
 import { portInUseMessage } from "./listen.js"
 import { cliNetworkPolicy, INSECURE_SECRETS_WARNING, loadEnvFiles, SpecHost } from "./spec-host.js"
+import { terminalSafe } from "./terminal.js"
 
 export interface RunOptions {
   spec: string
@@ -60,7 +61,8 @@ export function runPreflight(options: RunOptions): string[] {
 /** Serves a kervan.yaml spec until stopped. Resolves with the exit code. */
 export async function runSpec(options: RunOptions): Promise<number> {
   // On stdio, stdout is the MCP connection: every message goes to stderr.
-  const print = (line: string) => options.stderr.write(`${line}\n`)
+  // Spec text (field names, the server's name) reaches these lines: see terminal.ts.
+  const print = (line: string) => options.stderr.write(`${terminalSafe(line)}\n`)
   const errors = runPreflight(options)
   if (errors.length > 0) {
     for (const error of errors) print(`Error: ${error}`)

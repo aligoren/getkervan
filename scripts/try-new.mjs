@@ -56,6 +56,11 @@ export function main(argv, cwd = process.env.INIT_CWD ?? process.cwd()) {
   if (!dir) return usage("Give the folder for the new project.")
   // pnpm runs scripts from the repository root; INIT_CWD is where the command was typed.
   const target = path.resolve(cwd, dir)
+  // On Windows npm and pnpm run through cmd.exe, where every argument is quoted below; inside
+  // quotes, cmd.exe still expands %NAME%, and a quote would end the argument.
+  if (process.platform === "win32" && /["%]/.test(target)) {
+    return usage(`${target}: choose a folder whose path has no " or % in it.`)
+  }
   if (existsSync(target) && readdirSync(target).length > 0) {
     return usage(`${target} is not empty.`)
   }
@@ -68,11 +73,11 @@ export function main(argv, cwd = process.env.INIT_CWD ?? process.cwd()) {
     if (dryRun) continue
     if (step.title === "Pack the local packages")
       mkdirSync(path.join(target, TARBALLS), { recursive: true })
-    // npm and pnpm are .cmd scripts on Windows: run one quoted command line through the shell.
+    // npm and pnpm are .cmd scripts on Windows: run one command line through the shell, every
+    // argument in quotes, so "&", "|", "<", ">" and "^" in a path stay part of it.
     const shell = process.platform === "win32" && step.command !== process.execPath
-    const quote = (arg) => (/[\s"]/.test(arg) ? `"${arg}"` : arg)
     const result = shell
-      ? spawnSync([step.command, ...step.args].map(quote).join(" "), {
+      ? spawnSync([step.command, ...step.args].map((arg) => `"${arg}"`).join(" "), {
           cwd: step.cwd,
           stdio: "inherit",
           shell: true,

@@ -49,6 +49,7 @@ applySpec(app.registry, await loadSpec(await readFile("kervan.yaml", "utf8")))
 | `defaults.http` | `timeoutMs`, `maxResponseBytes`, `maxOutputChars`, `allowInsecureHttp`, `followRedirects` for every tool |
 | `defaults.rateLimit`, `tools[].rateLimit` | `perMinute` (default 60) and `concurrency` (default 10) per tool |
 | `tools[].name`, `description`, `title`, `annotations` | As in the code API. `openWorldHint` defaults to `true`. |
+| Text people and the model read | `name`, `version`, `description`, tool titles and descriptions, and `title`/`description` in schemas may not hold control, bidi, zero-width or other invisible characters (line feed and tab are fine in descriptions, and ZWNJ/ZWJ anywhere). |
 | `tools[].input` | JSON Schema of the arguments (`type: object`) |
 | `tools[].http` | `method` (default `GET`), `url`, `query`, `headers`, `body` (JSON), and per-tool limits |
 | `tools[].output` | `select` (JMESPath, required) with optional `schema`, or `raw: true` |
@@ -81,7 +82,10 @@ redacted value by value; if that finds a secret spelled with JSON escapes (`\/`,
 redacted JSON is returned re-encoded instead of the upstream's text.
 
 JMESPath is evaluated by `@jmespath-community/jmespath` (MPL-2.0), an interpreter with no code
-execution; Kervan registers no custom functions.
+execution; Kervan registers no custom functions. A short expression can still be costly (its
+functions build strings and arrays, `map` nests), so expressions run in a separate process with
+its own memory limit, stopped when the tool's timeout runs out: a runaway expression fails its
+call, and your process keeps serving. Numbers that hold a secret are redacted too.
 
 ## Built-in limits
 

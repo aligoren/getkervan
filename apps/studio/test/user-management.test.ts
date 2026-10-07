@@ -82,7 +82,9 @@ describe("rule: the last active admin stays an active admin", () => {
       put(admin, `/users/${owner.id}`, { disabled: true }),
       put(admin, `/users/${second.id}`, { disabled: true }),
     ])
-    expect(results.map((r) => r.status).sort()).toEqual([200, 409])
+    // The admin deactivated themselves first, so their second request is no longer an admin's
+    // (403); in either order, one active admin is left.
+    expect(results.map((r) => r.status).sort()).toEqual([200, 403])
     expect(countActiveAdmins(s.database.db, s.scope)).toBe(1)
 
     // Demoting one while deactivating the other, at once.

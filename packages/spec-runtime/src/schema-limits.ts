@@ -1,3 +1,5 @@
+import { hiddenCharacter, hiddenCharacterMessage } from "./visible-text.js"
+
 /** Limits on JSON Schemas written in a spec (input and output schemas). */
 export const SCHEMA_LIMITS = {
   maxDepth: 32,
@@ -70,6 +72,11 @@ export function checkSchemaLimits(schema: unknown): string[] {
             )
           }
         }
+      }
+      // Titles and descriptions reach people and the model, like the tool's own description.
+      if ((key === "title" || key === "description") && typeof item === "string") {
+        const found = hiddenCharacter(item, key === "description")
+        if (found) problems.push(`A ${key} ${hiddenCharacterMessage(found)} (at ${at}/${key})`)
       }
       if (COMBINATORS.has(key)) combinators++
       walk(item, depth + 1, `${at}/${key}`)

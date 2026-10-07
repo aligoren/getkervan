@@ -1,12 +1,57 @@
 // Everything on this page that comes from a spec author, an upstream API or a tool is untrusted.
-// It is only ever rendered as React text children: never as HTML, Markdown, a link or an image.
+// It is only ever rendered as React text children: never as HTML, Markdown, a link or an image,
+// and invisible or control characters in it are shown as marked escapes (`Visible`).
 import { ArrowDownLeft, ArrowUpRight, CircleAlert, ScrollText, TriangleAlert } from "lucide-react"
+import type { ReactNode } from "react"
 import type { Issue } from "../api.js"
 import { shortTime } from "../time.js"
 import { Badge } from "../ui/Badge.js"
 import { cn } from "../ui/cn.js"
 import { Alert, EmptyState } from "../ui/Layout.js"
 import { EmptyRow, Table, TBody, TD, TH, THead, TR } from "../ui/Table.js"
+
+/** A backslash and "u", as an escape starts. */
+const BACKSLASH_U = String.fromCharCode(92, 117)
+/** Letters and symbols that draw as nothing: Hangul fillers, the braille blank, U+180E. */
+const BLANK_LOOKING = [0x115f, 0x1160, 0x3164, 0xffa0, 0x2800, 0x180e]
+/** Controls, format characters (bidi, zero-width, tag characters, ...), separators, blanks. */
+const HIDDEN = new RegExp(
+  `[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}${String.fromCodePoint(...BLANK_LOOKING)}]`,
+  "u",
+)
+/** Shown as they are: line feed and tab (text has lines), ZWNJ and ZWJ (scripts, emoji). */
+const KEPT = new Set([0x0a, 0x09, 0x200c, 0x200d])
+
+/**
+ * Untrusted text with every invisible or control character shown as a marked escape (a
+ * backslash, "u" and its code point): a right-to-left override cannot reorder what a reviewer
+ * reads, and tag characters cannot carry text only a model sees.
+ */
+export function Visible(props: { text: string }) {
+  const parts: ReactNode[] = []
+  let plain = ""
+  for (const character of props.text) {
+    const codePoint = character.codePointAt(0) ?? 0
+    if (!HIDDEN.test(character) || KEPT.has(codePoint)) {
+      plain += character
+      continue
+    }
+    if (plain) parts.push(plain)
+    plain = ""
+    const hex = codePoint.toString(16).toUpperCase().padStart(4, "0")
+    parts.push(
+      <span
+        key={parts.length}
+        className="rounded-sm bg-warning-subtle px-0.5 font-mono text-warning"
+        title={`Hidden character U+${hex}`}
+      >
+        {codePoint > 0xffff ? `${BACKSLASH_U}{${hex}}` : `${BACKSLASH_U}${hex}`}
+      </span>,
+    )
+  }
+  if (plain) parts.push(plain)
+  return <>{parts}</>
+}
 
 export interface ToolSummary {
   name: string
@@ -37,13 +82,15 @@ export function ToolList(props: {
                   : "border-border bg-control hover:bg-control-hover",
               )}
             >
-              <span className="block text-sm font-medium text-fg">{tool.title ?? tool.name}</span>
+              <span className="block text-sm font-medium text-fg">
+                <Visible text={tool.title ?? tool.name} />
+              </span>
               {tool.title ? (
                 <span className="block font-mono text-xs text-fg-subtle">{tool.name}</span>
               ) : null}
               {tool.description ? (
                 <span className="mt-0.5 block text-xs whitespace-pre-wrap text-fg-muted">
-                  {tool.description}
+                  <Visible text={tool.description} />
                 </span>
               ) : null}
             </button>
@@ -81,7 +128,7 @@ export function ToolOutput(props: { result: unknown }) {
         block.type === "text" ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: blocks have no identity of their own
           <pre key={index} className={cn(pre, result.isError && "border-danger/40")}>
-            {block.text ?? ""}
+            <Visible text={block.text ?? ""} />
           </pre>
         ) : (
           // biome-ignore lint/suspicious/noArrayIndexKey: blocks have no identity of their own
@@ -93,7 +140,9 @@ export function ToolOutput(props: { result: unknown }) {
       {result.structuredContent !== undefined ? (
         <>
           <p className="text-xs font-medium text-fg-muted">Structured content</p>
-          <pre className={pre}>{JSON.stringify(result.structuredContent, null, 2)}</pre>
+          <pre className={pre}>
+            <Visible text={JSON.stringify(result.structuredContent, null, 2)} />
+          </pre>
         </>
       ) : null}
     </div>
@@ -119,7 +168,7 @@ export function IssueList(props: { issues: readonly Issue[] }) {
               </span>
             )}
             <span className={issue.severity === "error" ? "text-danger" : "text-warning"}>
-              {issue.message}
+              <Visible text={issue.message} />
             </span>
           </span>
         </li>
@@ -148,7 +197,9 @@ export function RawLog(props: { entries: readonly LogEntry[] }) {
             )}
             {entry.direction === "request" ? "request" : "response"}
           </span>
-          <pre className={cn(pre, "max-h-64 text-xs")}>{entry.text}</pre>
+          <pre className={cn(pre, "max-h-64 text-xs")}>
+            <Visible text={entry.text} />
+          </pre>
         </li>
       ))}
     </ol>
@@ -161,7 +212,7 @@ export function ErrorText(props: { error: unknown; className?: string }) {
   const message = props.error instanceof Error ? props.error.message : String(props.error)
   return (
     <Alert tone="danger" className={props.className}>
-      {message}
+      <Visible text={message} />
     </Alert>
   )
 }
@@ -189,7 +240,9 @@ export function DiffView(props: { lines: readonly DiffLine[] | null }) {
             line.kind === "same" && "text-fg-muted",
           )}
         >
-          {`${line.kind === "added" ? "+" : line.kind === "removed" ? "-" : " "} ${line.text}`}
+          <Visible
+            text={`${line.kind === "added" ? "+" : line.kind === "removed" ? "-" : " "} ${line.text}`}
+          />
         </span>
       ))}
     </pre>
@@ -260,17 +313,17 @@ export function CallLogTable(props: { calls: readonly CallLogEntry[] }) {
                   {call.args !== undefined || call.result !== undefined ? (
                     <details className="group">
                       <summary className="cursor-pointer truncate font-mono text-xs text-fg-muted select-none hover:text-fg">
-                        {call.args ?? "(no arguments logged)"}
+                        <Visible text={call.args ?? "(no arguments logged)"} />
                       </summary>
                       {call.args !== undefined ? (
-                        <pre
-                          className={cn(pre, "mt-2 max-h-40 text-xs")}
-                        >{`args: ${call.args}`}</pre>
+                        <pre className={cn(pre, "mt-2 max-h-40 text-xs")}>
+                          <Visible text={`args: ${call.args}`} />
+                        </pre>
                       ) : null}
                       {call.result !== undefined ? (
-                        <pre
-                          className={cn(pre, "mt-1 max-h-40 text-xs")}
-                        >{`result: ${call.result}`}</pre>
+                        <pre className={cn(pre, "mt-1 max-h-40 text-xs")}>
+                          <Visible text={`result: ${call.result}`} />
+                        </pre>
                       ) : null}
                     </details>
                   ) : (

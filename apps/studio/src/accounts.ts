@@ -2,7 +2,7 @@ import { hashPassword, passwordProblem, randomToken, verifyPassword } from "./cr
 import { type Db, writeTransaction } from "./db/open.js"
 import { listActiveKeysCreatedBy, revokeApiKey } from "./db/repos/api-keys.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
-import { deleteOtherSessions } from "./db/repos/sessions.js"
+import { deleteOtherSessions, sessionAlive } from "./db/repos/sessions.js"
 import { consumeSetupToken, setupTokenValid } from "./db/repos/tokens.js"
 import {
   anyAdminExists,
@@ -113,6 +113,19 @@ function invalidSetupToken(): StudioError {
   )
 }
 
+/**
+ * Re-checked inside every admin write: the admin making it is still an active admin. The API
+ * checked the role when the request came in, but a request waiting on a password hash must not
+ * complete after its admin was demoted or deactivated meanwhile. (`cli` actors are the operator.)
+ */
+function requireActiveAdmin(tx: Db, scope: WorkspaceScope, actor: Actor): void {
+  if (actor.type !== "user") return
+  const admin = actor.id === undefined ? undefined : getUser(tx, scope, actor.id)
+  if (admin?.role !== "admin" || admin.disabledAt !== null) {
+    throw new StudioError("forbidden", "Only admins can do this.")
+  }
+}
+
 /** Adds a user to the workspace (admins only; the API checks the role). */
 export async function addUser(
   db: Db,
@@ -127,6 +140,7 @@ export async function addUser(
   const passwordHash = await hashPassword(input.password)
   try {
     return writeTransaction(db, (tx) => {
+      requireActiveAdmin(tx, scope, actor)
       checkEmailNotAName(tx, scope, input.email)
       const user = createUser(tx, scope, { email: input.email, passwordHash, role: input.role })
       recordAudit(tx, scope, actor, {
@@ -171,6 +185,7 @@ export function setUserDisabled(
     throw new StudioError("invalid", "Keys are revoked only when deactivating a user.")
   }
   return writeTransaction(db, (tx) => {
+    requireActiveAdmin(tx, scope, actor)
     const user = getUser(tx, scope, userId)
     if (!user) throw new StudioError("not_found", "Not found.")
     if (disabled === (user.disabledAt !== null)) return { user, revokedKeys: [] }
@@ -228,9 +243,13 @@ export async function changeOwnPassword(
   keepSessionHash: string,
   actor: Actor,
 ): Promise<{ sessionsEnded: number }> {
-  if (!(await checkPassword(db, scope, userId, input.currentPassword))) {
-    throw new StudioError("forbidden", "The current password is wrong.")
-  }
+  const current = getUserWithHash(db, scope, userId)
+  const valid =
+    current !== undefined &&
+    input.currentPassword.length > 0 &&
+    input.currentPassword.length <= 1024 &&
+    (await verifyPassword(input.currentPassword, current.passwordHash))
+  if (!valid) throw new StudioError("forbidden", "The current password is wrong.")
   const problem = passwordProblem(input.newPassword)
   if (problem) throw new StudioError("invalid", problem)
   if (input.newPassword === input.currentPassword) {
@@ -238,6 +257,15 @@ export async function changeOwnPassword(
   }
   const passwordHash = await hashPassword(input.newPassword)
   return writeTransaction(db, (tx) => {
+    // The hashes took a while: if the password changed meanwhile (an admin's reset, another
+    // session's change) or this session ended, this request must not undo that.
+    const unchanged = getUserWithHash(tx, scope, userId)?.passwordHash === current.passwordHash
+    if (!unchanged || !sessionAlive(tx, keepSessionHash, userId)) {
+      throw new StudioError(
+        "conflict",
+        "Your password was changed meanwhile, or this session ended. Sign in again.",
+      )
+    }
     if (!setPasswordHash(tx, scope, userId, passwordHash)) throw notFound()
     const sessionsEnded = deleteOtherSessions(tx, scope, userId, keepSessionHash)
     recordAudit(tx, scope, actor, {
@@ -271,6 +299,7 @@ export async function resetPassword(
   if (problem) throw new StudioError("invalid", problem)
   const passwordHash = await hashPassword(password)
   const sessionsEnded = writeTransaction(db, (tx) => {
+    requireActiveAdmin(tx, scope, actor)
     if (!setPasswordHash(tx, scope, userId, passwordHash, Date.now(), true)) throw notFound()
     const ended = deleteSessionsOf(tx, scope, userId)
     recordAudit(tx, scope, actor, {
@@ -299,6 +328,7 @@ export function setUserRole(
     throw new StudioError("invalid", 'The role must be "admin" or "member".')
   }
   return writeTransaction(db, (tx) => {
+    requireActiveAdmin(tx, scope, actor)
     const user = getUser(tx, scope, userId)
     if (!user) throw notFound()
     if (user.role === role) return user
@@ -334,6 +364,7 @@ export function setUserEmail(
   const normalized = normalizeEmail(email)
   try {
     return writeTransaction(db, (tx) => {
+      requireActiveAdmin(tx, scope, actor)
       const user = getUser(tx, scope, userId)
       if (!user) throw notFound()
       if (user.email === normalized) return user
@@ -373,18 +404,14 @@ export function updateProfile(
   if (displayName !== null && RESERVED_NAMES.some((name) => identitySkeleton(name) === key)) {
     throw new StudioError("invalid", `"${displayName}" is reserved: choose another display name.`)
   }
+  // A name that reads as an email would let one user pass for another. Every such name is
+  // refused, not only another user's email, so the answer does not reveal which accounts exist.
+  if (key.includes("@")) {
+    throw new StudioError("invalid", "A display name cannot be an email address.")
+  }
   return writeTransaction(db, (tx) => {
     const user = getUser(tx, scope, userId)
     if (!user) throw notFound()
-    // A name that reads as someone else's email would let one user pass for another.
-    if (
-      displayName !== null &&
-      listUsers(tx, scope).some(
-        (other) => other.id !== user.id && identitySkeleton(other.email) === key,
-      )
-    ) {
-      throw new StudioError("invalid", "A display name cannot be another user's email.")
-    }
     updateUser(tx, scope, user.id, { displayName })
     recordAudit(tx, scope, actor, {
       action: "user.profile",
@@ -434,11 +461,41 @@ export async function verifyLogin(
   email: string,
   password: string,
 ): Promise<User | undefined> {
+  const match = await matchLogin(db, scope, email, password)
+  return match && stillLoggedIn(db, scope, match)
+}
+
+/** A user whose password a sign-in checked, and the hash it was checked against. */
+export interface LoginMatch {
+  userId: string
+  passwordHash: string
+}
+
+/** Like `verifyLogin`, without the final check: pass the result to `stillLoggedIn`. */
+export async function matchLogin(
+  db: Db,
+  scope: WorkspaceScope,
+  email: string,
+  password: string,
+): Promise<LoginMatch | undefined> {
   if (password.length === 0 || password.length > 1024 || email.length > 320) return undefined
   const user = findUserByEmail(db, scope, email)
   const ok = await verifyPassword(password, user?.passwordHash ?? (await prepareLoginTiming()))
   // A deactivated user gets the same answer as a wrong password.
   if (!user || !ok || user.disabledAt !== null) return undefined
+  return { userId: user.id, passwordHash: user.passwordHash }
+}
+
+/**
+ * The user a sign-in matched, read again: `undefined` if their password changed or they were
+ * deactivated while the password was being checked (a sign-in in flight must not outlive a
+ * password change or a reset). Call it in the same synchronous step that starts the session.
+ */
+export function stillLoggedIn(db: Db, scope: WorkspaceScope, match: LoginMatch): User | undefined {
+  const user = getUserWithHash(db, scope, match.userId)
+  if (!user || user.disabledAt !== null || user.passwordHash !== match.passwordHash) {
+    return undefined
+  }
   const { passwordHash: _hash, ...rest } = user
   return rest
 }

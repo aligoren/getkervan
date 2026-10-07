@@ -2,6 +2,7 @@ import { createInterface } from "node:readline"
 import type { App } from "@kervan/core"
 import { createTestClient } from "@kervan/transport/testing"
 import type { CallToolResult } from "@modelcontextprotocol/client"
+import { terminalSafe } from "../terminal.js"
 import type { Redactor } from "./redact.js"
 
 export interface ReplOptions {
@@ -26,7 +27,8 @@ const HELP = `Commands:
  * clients, so validation, middleware and error masking behave exactly as for a real client.
  */
 export async function startRepl(options: ReplOptions): Promise<{ close(): Promise<void> }> {
-  const print = (line: string) => options.output.write(`${options.redact(line)}\n`)
+  // Tool results are upstream data: no control sequence reaches the terminal (terminal.ts).
+  const print = (line: string) => options.output.write(`${terminalSafe(options.redact(line))}\n`)
   const client = await createTestClient(options.app, {
     clientInfo: { name: "kervan-dev-repl", version: "0.0.0" },
   })

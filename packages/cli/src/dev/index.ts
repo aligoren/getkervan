@@ -10,6 +10,7 @@ import {
   windowsLibuvWarning,
 } from "../node-version.js"
 import { cliNetworkPolicy, INSECURE_SECRETS_WARNING, loadEnvFiles, SpecHost } from "../spec-host.js"
+import { terminalSafe } from "../terminal.js"
 import { DevHost } from "./host.js"
 import { collectSecrets, createRedactor, type Redactor } from "./redact.js"
 import { startRepl } from "./repl.js"
@@ -67,8 +68,9 @@ export async function runDev(options: DevOptions): Promise<number> {
   const entry = path.resolve(options.cwd, options.entry)
   // In stdio mode stdout is the MCP connection, so every message goes to stderr.
   const log = options.mode === "stdio" ? options.stderr : options.stdout
-  const print = (line: string) => log.write(`${line}\n`)
-  const warn = (line: string) => options.stderr.write(`${line}\n`)
+  // Tool descriptions, results and the server's own output reach these lines: see terminal.ts.
+  const print = (line: string) => log.write(`${terminalSafe(line)}\n`)
+  const warn = (line: string) => options.stderr.write(`${terminalSafe(line)}\n`)
 
   const { errors, warnings } = devPreflight({ entry, env: options.env, runtime: options.runtime })
   for (const warning of warnings) warn(`Warning: ${warning}`)

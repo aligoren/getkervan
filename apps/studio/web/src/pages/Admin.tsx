@@ -292,7 +292,11 @@ export function Users(props: { currentUserId?: string; currentUserEmail?: string
       )}
 
       {pending?.kind === "add" ? (
-        <AddUserDialog onClose={close} onAdded={(email) => done(`Added ${email}.`)} />
+        <AddUserDialog
+          adminEmail={adminEmail}
+          onClose={close}
+          onAdded={(email) => done(`Added ${email}.`)}
+        />
       ) : null}
       {pending?.kind === "deactivate" ? (
         <DeactivateDialog
@@ -541,10 +545,15 @@ function ResetDialog(props: {
   )
 }
 
-function AddUserDialog(props: { onClose: () => void; onAdded: (email: string) => Promise<void> }) {
+function AddUserDialog(props: {
+  adminEmail: string
+  onClose: () => void
+  onAdded: (email: string) => Promise<void>
+}) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [role, setRole] = useState<Role>("member")
+  const [adminPassword, setAdminPassword] = useState("")
   return (
     <FormDialog
       title="Add user"
@@ -552,7 +561,7 @@ function AddUserDialog(props: { onClose: () => void; onAdded: (email: string) =>
       submitLabel="Add user"
       onClose={props.onClose}
       onSubmit={async () => {
-        await api("POST", "/users", { email, password, role })
+        await api("POST", "/users", { email, password, role, adminPassword })
         await props.onAdded(email)
       }}
     >
@@ -584,6 +593,16 @@ function AddUserDialog(props: { onClose: () => void; onAdded: (email: string) =>
           onValueChange={(value) => setRole(value === "admin" ? "admin" : "member")}
           options={ROLE_OPTIONS}
           className="w-40"
+        />
+      </Field>
+      <UsernameField username={props.adminEmail} />
+      <Field label="Your password, to confirm">
+        <Input
+          type="password"
+          value={adminPassword}
+          onChange={(e) => setAdminPassword(e.target.value)}
+          autoComplete="current-password"
+          required
         />
       </Field>
     </FormDialog>

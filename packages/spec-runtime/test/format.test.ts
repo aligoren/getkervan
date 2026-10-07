@@ -54,7 +54,7 @@ describe("loading", () => {
   })
 
   it.each([
-    ["an unknown field", spec(tool("    colour: red")), /Unknown field\(s\): colour/],
+    ["an unknown field", spec(tool("    colour: red")), /Unknown field\(s\): "colour"/],
     ["a wrong specVersion", spec().replace("specVersion: 1", "specVersion: 2"), /specVersion/],
     [
       "neither select nor raw",

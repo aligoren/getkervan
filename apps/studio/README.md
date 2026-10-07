@@ -80,7 +80,8 @@ On first start, Studio:
 - **Roles:** members edit, publish, use the playground and see call metadata. Admins also
   manage users, secrets and keys, delete servers, and read payloads and the audit log.
 - **Users (admins):** add users, change their role and email, reset their password, and
-  deactivate them. Users are never deleted, so the audit log keeps pointing at them.
+  deactivate them. Adding a user, a role change and a password reset ask for your own password.
+  Users are never deleted, so the audit log keeps pointing at them.
   - A deactivated user is signed out at once, their playground tokens stop working, and they
     cannot sign in until reactivated. Before deactivating, Studio lists the API keys the user
     created and revokes them too unless you uncheck the box (keys belong to servers, so they

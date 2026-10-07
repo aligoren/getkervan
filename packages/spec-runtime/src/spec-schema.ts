@@ -1,4 +1,5 @@
 import * as z from "zod"
+import { hiddenCharacter, hiddenCharacterMessage } from "./visible-text.js"
 
 /** Limits that apply to every spec, whatever it asks for. */
 export const SPEC_LIMITS = {
@@ -27,6 +28,13 @@ const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/
 const SECRET_NAME = /^[A-Z][A-Z0-9_]{0,127}$/
 /** A DNS name or a bracketed IPv6 literal; no scheme, port, path or wildcard. */
 const HOST_NAME = /^(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/
+
+/** Text people and the model read: no invisible or control characters (see visible-text.ts). */
+const visible = (multiline: boolean) =>
+  z.string().superRefine((text, ctx) => {
+    const found = hiddenCharacter(text, multiline)
+    if (found) ctx.addIssue({ code: "custom", message: hiddenCharacterMessage(found) })
+  })
 
 const secretName = z.string().regex(SECRET_NAME)
 const boundSecret = z
@@ -141,7 +149,7 @@ const rawOutput = z.strictObject({
 })
 
 const annotations = z.strictObject({
-  title: z.string().optional(),
+  title: visible(false).optional(),
   readOnlyHint: z.boolean().optional(),
   destructiveHint: z.boolean().optional(),
   idempotentHint: z.boolean().optional(),
@@ -150,9 +158,8 @@ const annotations = z.strictObject({
 
 export const specToolSchema = z.strictObject({
   name: z.string().regex(TOOL_NAME).meta({ description: "Tool name: 1-128 of A-Z a-z 0-9 _ - ." }),
-  title: z.string().optional(),
-  description: z
-    .string()
+  title: visible(false).optional(),
+  description: visible(true)
     .min(1)
     .meta({ description: "What the tool does; the model's main guidance." }),
   input: jsonSchemaObject
@@ -170,9 +177,9 @@ export const specSchema = z
   .strictObject({
     $schema: z.string().optional(),
     specVersion: z.literal(1),
-    name: z.string().min(1).max(128),
-    version: z.string().min(1).max(64),
-    description: z.string().optional(),
+    name: visible(false).min(1).max(128),
+    version: visible(false).min(1).max(64),
+    description: visible(true).optional(),
     secrets: z
       .array(z.union([secretName, boundSecret]))
       .max(SPEC_LIMITS.maxSecrets)

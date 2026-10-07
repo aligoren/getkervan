@@ -39,18 +39,21 @@ function git(dir: string, args: string[]): boolean | undefined {
 export function dataDirectoryGitWarning(dir: string, file: string): string | undefined {
   if (git(dir, ["rev-parse", "--is-inside-work-tree"]) !== true) return undefined
   const name = path.basename(file)
-  if (git(dir, ["ls-files", "--error-unmatch", name]) === true) {
+  // SQLite keeps recent pages in `-wal` next to the database (and an index in `-shm`): an ignore
+  // rule like `*.db` covers the database but not those.
+  const names = [name, `${name}-wal`, `${name}-shm`]
+  if (names.some((each) => git(dir, ["ls-files", "--error-unmatch", each]) === true)) {
     return (
-      `Warning: ${file} is tracked by git. It holds encrypted secrets, sessions and the audit ` +
+      `Warning: ${file} (or its -wal/-shm file) is tracked by git. It holds encrypted secrets, sessions and the audit ` +
       `log: remove it from the repository (git rm --cached) and set KERVAN_STUDIO_DATA_DIR to a ` +
       "folder outside it."
     )
   }
-  if (git(dir, ["check-ignore", "-q", name]) === false) {
+  if (names.some((each) => git(dir, ["check-ignore", "-q", each]) === false)) {
     return (
-      `Warning: ${file} is inside a git repository and not ignored, so it could be committed. ` +
-      `Add ${path.basename(dir)}/ to .gitignore, or set KERVAN_STUDIO_DATA_DIR to a folder ` +
-      "outside the repository."
+      `Warning: ${file} (or its -wal/-shm file) is inside a git repository and not ignored, so ` +
+      `it could be committed. Add ${path.basename(dir)}/ to .gitignore, or set ` +
+      "KERVAN_STUDIO_DATA_DIR to a folder outside the repository."
     )
   }
   return undefined

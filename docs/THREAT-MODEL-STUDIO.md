@@ -51,6 +51,13 @@ At the end of 4a, an independent reviewer with no prior project context tested t
 All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/review` and
 `packages/spec-runtime/test/review`.
 
+Before the first release, three more independent reviewers (authentication and authorization;
+gateway and spec runtime; user-supplied text, terminals and supply chain) each worked from a
+fresh context and proved findings with failing tests. Their fixes are marked "release review"
+below; their tests are kept in the `test/review` folders of `apps/studio`, `apps/studio/web`,
+`packages/spec-runtime` and `packages/cli`. `docs/TEXT-SURFACES.md` maps every user-supplied
+string to the places it is shown.
+
 ### T1: Secret exfiltration through a spec (4a)
 
 *A member writes `{{secrets.API_KEY}}` into a tool that calls a host they control.*
@@ -87,6 +94,10 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   - cut it to a prefix.
 
   In each case the result would no longer match the redaction patterns.
+- **Numbers too** (release review): a number that holds a secret becomes the redaction marker,
+  so `select` arithmetic and comparisons have nothing to work on, and structured output and call
+  logs never hold it. JSON is checked as the upstream wrote it, so a long numeric secret that
+  parsing would round is caught as well.
 - Tool results and `ToolError` messages are then redacted again, in raw, URL-encoded,
   form-encoded and JSON-escaped forms. Studio's logger redacts every known value from messages
   and serialized data.
@@ -114,7 +125,9 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   encoded forms refused, this machine's interface addresses refused):
   - cloud metadata addresses, including Azure's WireServer (168.63.129.16), which is a public
     address. The framework refuses these by default, before any other rule, so `kervan run`
-    (even with `--allow-private-network`) refuses them too;
+    (even with `--allow-private-network`) refuses them too. Also in the IPv6 forms that carry an
+    IPv4 address (release review): NAT64 (`64:ff9b::/96`, and every RFC 6052 position in the
+    local-use `64:ff9b:1::/48`), 6to4, IPv4-compatible and SIIT;
   - `KERVAN_STUDIO_DENY_NETWORK` (internal infrastructure). Studio refuses to start if an
     entry is not an address or CIDR range;
   - the addresses of `KERVAN_STUDIO_PUBLIC_URL`, resolved at startup, so tools cannot call back
@@ -196,8 +209,20 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   the same database file, waits and then reads the new state instead of a stale snapshot (tested
   with two connections). This relies on better-sqlite3 being synchronous; moving to an
   asynchronous driver means re-evaluating every check-then-write.
-- **A role change** needs the admin's own password, checked by the server and throttled like a
-  sign-in (as for a password reset): a stolen admin session alone cannot make a new admin.
+- **A role change, and adding a user,** need the admin's own password, checked by the server
+  and throttled like a sign-in (as for a password reset): a stolen admin session alone cannot
+  make a new admin, or an account with a password the thief knows (adding a user: release
+  review).
+- **Checks that wait on a password hash are made again when writing** (release review). Requests
+  check a password or a role, then wait on scrypt; the write that follows must not act on what
+  changed meanwhile (tested with a pause inside scrypt):
+  - a sign-in starts its session only if the password it checked is still the user's and the
+    user is still active, in the same transaction: a sign-in in flight does not outlive a
+    password change, a reset or a deactivation;
+  - changing one's own password writes only if the stored hash is still the one checked and the
+    session still lives (compare-and-set): it cannot undo an admin's reset;
+  - every admin write (adding a user, role, email, password reset, deactivation) checks in its
+    transaction that the admin making it is still an active admin.
 - **Members** reach only their own profile, which has no user id in its path, and its body is
   strict: a `role`, `email` or `id` field is refused (400), not ignored. Every endpoint about
   another user is admin-only (IDOR tests), and sessions are ended by an opaque reference that
@@ -209,7 +234,11 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 
 - Failed logins are counted per account and per client IP (IPv6: per /64):
   - 5 failures for an account, or 20 from an IP, within 15 minutes lock it for 15 minutes (429
-    with `Retry-After`), even for the right password;
+    with `Retry-After`), even for the right password. The window slides (release review): no
+    more than the limit gets through in any 15 minutes, also across what a fixed window's
+    boundary would be;
+  - a refused attempt adds no counter, so a locked IP trying new account names does not grow
+    the throttle's memory;
   - an attempt reserves its place before the password check, so a burst of concurrent guesses
     gets no more checks than the limit allows (tested with 30 at once);
   - unknown accounts lock the same way, so the lock reveals nothing;
@@ -311,6 +340,7 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Ended sessions and call logs past their retention are deleted at startup and hourly.
 - Spec tools keep the runtime limits: timeouts, response sizes, per-tool rate limits and the DNS
   lookup cap.
+- A spec's `select` expression runs in a separate process: see T19.
 
 ### T17: Misleading text (names, emails, failed sign-ins)
 
@@ -323,10 +353,13 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   - Escaped visibly (a backslash, "u" and the code point; backslashes doubled) where Studio must
     keep what was sent: the email of a failed sign-in in the audit log. The 320-character limit
     applies after escaping, ending in "…".
-- A display name may not read as a privileged label ("admin", "system", "Kervan Studio", ...) or
-  as another user's email, compared after folding case, width, accents, spaces, invisible
-  characters and common Cyrillic, Greek and Turkish lookalikes. An email may not read as another
-  user's display name either. The lookalike table is not exhaustive.
+- A display name may not read as a privileged label ("admin", "system", "Kervan Studio", ...),
+  compared after folding case, width, accents, spaces, invisible characters and common Cyrillic,
+  Greek and Turkish lookalikes. It may not be an email at all (anything with "@" after folding):
+  refusing only other users' emails told members which accounts exist (release review). An
+  email may not read as another user's display name either (names saved before this rule). The
+  lookalike table is not exhaustive.
+- Spec text (names, titles, descriptions) follows the same idea: see T20.
 - A failed sign-in looks the same whether or not the account exists: the same answer and lock-out,
   the same audit row (no user id either way), and the same work: an unknown email is checked
   against a dummy hash computed when the API starts, so even the first attempt is not faster or
@@ -391,6 +424,59 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Nothing is deleted: versions, secrets, keys and call logs stay, and enabling serves the
   published version again with the same keys. Publishing while disabled does not serve anything.
 
+### T19: Expensive `select` expressions (release review)
+
+- A `select` is at most 1,000 characters, but the JMESPath dialect can build data out of nothing
+  (`pad_left('a', 500000000)` is one huge string; `split`, `replace` and `join` multiply) and
+  `map` nests over the whole document (`$`). A few dozen characters could allocate gigabytes or
+  run for minutes, synchronously: every server, the management API and the UI would stall, and
+  a large enough allocation ends the process. In Studio a member could do this from the
+  playground, and any key holder could repeat it once published.
+- Expressions run in a separate process (two at most, started when first needed, never keeping
+  Studio alive when idle) with its own heap limit (256 MB):
+  - it is stopped when the tool's `timeoutMs` runs out (waiting included), and the call fails;
+  - running out of memory ends only that process; the call fails, and the next call gets a new
+    one;
+  - only the selected JSON comes back, cut to the tool's output limit.
+- Tests: a 34-character expression that used to end the process, a 1,000^3 nested `map`, and
+  gradual growth past the heap limit, each in a child process; the process is not kept alive.
+- Limit: one slow expression holds one of the two processes until its timeout, so calls of other
+  tools may wait (their wait counts against their own timeout). Rate limits bound how often a
+  key can do this.
+
+### T20: Text in specs, and terminals (release review)
+
+- Spec text that people and the model read may not hide anything: the server's name, version and
+  description, tool titles and descriptions, annotation titles, and every `title` and
+  `description` inside input and output schemas. A spec with control characters (other than line
+  feed and tab in descriptions), bidi controls, zero-width, tag or other format characters (other
+  than ZWNJ and ZWJ, which scripts and emoji need), separators or blank-looking letters does not
+  load; the issue names the field and the code point. This is the framework's rule, so `kervan
+  run`, Studio's validation and publishing, and the playground all refuse it.
+- Studio's UI shows such characters, wherever untrusted text appears (tool lists, results, spec
+  issues, the version diff, call log payloads, raw playground traffic, error messages), as marked
+  escapes (a backslash, "u" and the code point), never as themselves. Monaco marks them in the
+  editor.
+- Spec issues quote unknown field names with every such character (line breaks too) spelled out.
+- The CLI writes every line to the terminal through one filter: control characters other than
+  line feed and tab (ESC, CR, BEL, C1), bidi and format characters are printed as visible
+  escapes. A spec, a tool's description or result, or a dev server's own output cannot retitle
+  the terminal, rewrite or hide lines, set the clipboard or show a lying link.
+
+### T21: DNS rebinding and browser origins (release review)
+
+- `Host` (DNS rebinding: an attacker's name that resolves to Studio's address) is checked on
+  every path by Studio's HTTP layer, and again inside the gateway by the SDK: only the public
+  URL's host name (for a loopback URL: `127.0.0.1`, `localhost`, `[::1]`) is accepted.
+- `Origin`, when present, must be the public URL's exact origin (scheme, host and port) at the
+  gateway (403 otherwise); the SDK's host-name check stays behind it as a second layer. MCP
+  clients outside a browser send no `Origin` and only need a valid key.
+- Tests send real requests with the `Host` and `Origin` an attack would use, for a public and a
+  local Studio, and every layer is mutation-tested on its own.
+- The framework's `serveHttp` (and `serve()`, which reads `HOST`) refuses to listen beyond
+  loopback without `allowedHosts`, like `kervan run` without `--allowed-host`: a container's
+  `HOST=0.0.0.0` no longer opens a generated project to the network without a `Host` check.
+
 ### T14: Master key and data at rest (4c; file permissions 4a)
 
 - Secrets are encrypted with AES-256-GCM, a fresh 96-bit IV per write, under a key from
@@ -421,7 +507,8 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - The data directory stays out of git: a directory Studio creates gets a `.gitignore` that
   ignores everything in it (an existing `.gitignore`, or a directory Studio did not create, is
   left alone), the repository ignores `.kervan-studio/`, and Studio warns at start when the
-  database is inside a git working tree and tracked or not ignored.
+  database, or its `-wal` or `-shm` file, is inside a git working tree and tracked or not
+  ignored (a rule like `*.db` covers the database but not those; release review).
 
 ## Reverse proxies
 
@@ -467,6 +554,22 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - **An open playground stream survives sign-out** until its token expires (at most 15
   minutes); new requests with the token are refused at once. Deactivating the user ends their
   open streams too.
+- **Accepted after the release review** (each considered, none proven exploitable):
+  - an account lock lives in memory: after `reset-admin` (another process), a locked admin waits
+    out the lock or restarts Studio;
+  - with a reverse proxy on the same machine and `KERVAN_STUDIO_TRUST_PROXY=0`, every client is
+    127.0.0.1 to Studio, so failed setup guesses from anyone count together (set the proxy count);
+  - changing one's own password keeps the current session (the others end): if that very cookie
+    was stolen, sign out and in again;
+  - the exported `kervan.yaml` keeps a member's comments, including a `yaml-language-server`
+    schema line an editor might follow;
+  - the `claude mcp add` command Studio shows puts the key in shell history;
+  - a tool whose name server never answers holds one of the process-wide DNS lookup slots until
+    its timeout; members choose their own (bounded) timeouts and response sizes;
+  - `raw: true` JSON with duplicate keys: a value `JSON.parse` drops is not checked value by
+    value (text redaction still runs);
+  - a path value like `../admin` is sent percent-encoded (`..%2Fadmin`); an upstream that decodes
+    `%2F` before routing could treat it as a path.
 - **Encodings the vault does not know.** If a bound upstream reflects a secret in another
   encoding (for example base64 or HTML entities), it is not redacted. Bind secrets to APIs you
   trust not to echo them.

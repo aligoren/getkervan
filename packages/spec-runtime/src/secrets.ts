@@ -91,9 +91,32 @@ export class SecretVault {
     return result
   }
 
-  /** Redacts every string inside a JSON value. */
+  /**
+   * Parses JSON text and redacts it like `redactValue`. A number is checked as the upstream wrote
+   * it: a long numeric secret loses digits when parsed, and would no longer match as a value.
+   */
+  parseJson(text: string): unknown {
+    const data: unknown = JSON.parse(text, (...args: unknown[]) => {
+      const [, value, context] = args as [string, unknown, { source?: string } | undefined]
+      const source = context?.source
+      if (typeof value === "number" && source !== undefined && this.redact(source) !== source) {
+        return REDACTED
+      }
+      return value
+    })
+    return this.redactValue(data)
+  }
+
+  /**
+   * Redacts every string inside a JSON value, and turns a number that holds a secret into the
+   * redaction marker (an upstream may echo a numeric key as a number).
+   */
   redactValue<T>(value: T): T {
     if (typeof value === "string") return this.redact(value) as T
+    if (typeof value === "number") {
+      const text = String(value)
+      return (this.redact(text) === text ? value : REDACTED) as T
+    }
     if (Array.isArray(value)) return value.map((item) => this.redactValue(item)) as T
     if (value !== null && typeof value === "object") {
       return Object.fromEntries(

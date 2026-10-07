@@ -46,9 +46,23 @@ export interface HttpServerHandle {
   close(): Promise<void>
 }
 
-/** Serves the app over Streamable HTTP on Node. Resolves once the server is listening. */
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1"])
+
+/**
+ * Serves the app over Streamable HTTP on Node. Resolves once the server is listening. Binding to
+ * anything but loopback needs `allowedHosts` (the host names clients use): without the list there
+ * would be no `Host` check, and any web page could reach the server through DNS rebinding.
+ */
 export function serveHttp(app: App, options: HttpOptions = {}): Promise<HttpServerHandle> {
   const host = options.host ?? "127.0.0.1"
+  if (!LOOPBACK.has(host) && (options.allowedHosts?.length ?? 0) === 0) {
+    return Promise.reject(
+      new Error(
+        `Serving on ${host} needs allowedHosts: the host names clients use (Host header ` +
+          "validation against DNS rebinding). Bind to 127.0.0.1, or list the host names.",
+      ),
+    )
+  }
   const path = options.path ?? "/mcp"
   const handler = toFetchHandler(app, { ...options, host, path })
 
@@ -108,11 +122,19 @@ export async function serve(app: App, options: ServeOptions = {}): Promise<void>
   if (transport === "http") {
     const port = Number(flag(args, "port") ?? process.env.PORT ?? options.http?.port ?? 3000)
     const host = flag(args, "host") ?? process.env.HOST ?? options.http?.host
-    const handle = await serveHttp(app, {
-      ...options.http,
-      port,
-      ...(host === undefined ? {} : { host }),
-    })
+    let handle: HttpServerHandle
+    try {
+      handle = await serveHttp(app, {
+        ...options.http,
+        port,
+        ...(host === undefined ? {} : { host }),
+      })
+    } catch (error) {
+      // One line, not a stack trace: a port in use, or a host that needs allowedHosts.
+      app.logger.error(`Cannot serve ${app.name}: ${(error as Error).message}`)
+      process.exitCode = 1
+      return
+    }
     app.logger.info(`${app.name} listening on ${handle.url.href}`)
     close = handle.close
   } else {

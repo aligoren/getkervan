@@ -5,13 +5,14 @@
 // Invisible and lookalike characters are built from code points: none is written literally here.
 import { afterEach, describe, expect, it } from "vitest"
 import { listAudit } from "../src/db/repos/audit.js"
+import { updateUser } from "../src/db/repos/users.js"
 import {
   hasUnsafeCharacters,
   identitySkeleton,
   sanitizeDisplayText,
   unsafeTextProblem,
 } from "../src/display-text.js"
-import { type ApiStudio, apiStudio } from "./api-helpers.js"
+import { type ApiStudio, apiStudio, PASSWORD } from "./api-helpers.js"
 
 const ch = (...codePoints: number[]) => String.fromCodePoint(...codePoints)
 const RLO = ch(0x202e)
@@ -163,6 +164,7 @@ describe("names and emails that others see", () => {
         email: `new${ZWSP}@example.test`,
         password: "a long enough password",
         role: "member",
+        adminPassword: PASSWORD,
       }),
       await call("PUT", `/users/${memberUser.id}/email`, admin, {
         email: `x${ch(0x2066)}@example.test`,
@@ -197,7 +199,7 @@ describe("names and emails that others see", () => {
     expect(secret.status).toBe(400)
   })
 
-  it("a display name cannot be a reserved label or another user's email, in any lookalike form", async () => {
+  it("a display name cannot be a reserved label or an email, in any lookalike form", async () => {
     const { admin, member, memberUser, call } = await setup()
     for (const name of [
       "admin",
@@ -213,20 +215,22 @@ describe("names and emails that others see", () => {
       expect(response.status, JSON.stringify(name)).toBe(400)
       expect(String(response.json.error), JSON.stringify(name)).toContain("is reserved")
     }
+    // Any email is refused, another user's or not (the answer reveals no accounts), and so is
+    // your own: a name is not where an email belongs.
     for (const name of [
       "ADMIN@example.test",
       `adm${ch(0x0131)}n@example.test`,
       `${ch(0x0430)}dmin@${ch(0x0435, 0x0445)}ample.test`,
       " admin@example.test ",
+      "nobody@example.test",
+      "member@example.test",
+      `boss${ch(0xff20)}example.test`,
     ]) {
       const response = await call("PUT", "/profile", member, { displayName: name })
       expect(response.status, JSON.stringify(name)).toBe(400)
-      expect(String(response.json.error)).toBe("A display name cannot be another user's email.")
+      expect(String(response.json.error)).toBe("A display name cannot be an email address.")
     }
-    // Your own email, and an ordinary name, are fine.
-    expect(
-      (await call("PUT", "/profile", member, { displayName: "member@example.test" })).status,
-    ).toBe(200)
+    // An ordinary name is fine.
     expect((await call("PUT", "/profile", member, { displayName: "Deniz Yılmaz" })).status).toBe(
       200,
     )
@@ -239,14 +243,14 @@ describe("names and emails that others see", () => {
   })
 
   it("an email cannot be given that reads as someone's display name (the other direction)", async () => {
-    const { admin, member, memberUser, call } = await setup()
-    expect(
-      (await call("PUT", "/profile", member, { displayName: "boss@example.test" })).status,
-    ).toBe(200)
+    const { s, admin, memberUser, call } = await setup()
+    // Display names can no longer be emails; one saved before that rule still counts.
+    updateUser(s.database.db, s.scope, memberUser.id, { displayName: "boss@example.test" })
     const created = await call("POST", "/users", admin, {
       email: "BOSS@example.test",
       password: "a long enough password",
       role: "member",
+      adminPassword: PASSWORD,
     })
     expect(created.status).toBe(409)
     expect(String(created.json.error)).toBe("That email reads like another user's display name.")

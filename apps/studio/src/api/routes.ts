@@ -7,6 +7,7 @@ import {
   changeOwnPassword,
   checkPassword,
   listUsers,
+  matchLogin,
   prepareLoginTiming,
   resetPassword,
   setTheme,
@@ -14,12 +15,13 @@ import {
   setUserEmail,
   setUserRole,
   setupAdmin,
+  stillLoggedIn,
   updateProfile,
   userApiKeys,
-  verifyLogin,
 } from "../accounts.js"
 import { isSecure, type StudioConfig } from "../config.js"
 import { constantTimeEqual, sha256 } from "../crypto.js"
+import { writeTransaction } from "../db/open.js"
 import { listApiKeys } from "../db/repos/api-keys.js"
 import { listAudit, recordAudit } from "../db/repos/audit.js"
 import { getServer, listServers } from "../db/repos/servers.js"
@@ -77,7 +79,10 @@ const credentials = z.object({ email: z.string().max(320), password: z.string().
 const setupBody = credentials.extend({ token: z.string().max(200) })
 const newServer = z.object({ slug: z.string().max(64), name: z.string().max(200) })
 const newVersion = z.object({ yaml: z.string() })
-const newUser = credentials.extend({ role: z.enum(["admin", "member"]) })
+const newUser = credentials.extend({
+  role: z.enum(["admin", "member"]),
+  adminPassword: z.string().max(1024),
+})
 const secretBody = z.object({
   // Omitted when only the hosts change; never sent back.
   value: z
@@ -262,15 +267,21 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     const attempt = throttle.login(body.email, ip)
     if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
     const scope = defaultWorkspace(db)
-    let user: Awaited<ReturnType<typeof verifyLogin>>
+    let match: Awaited<ReturnType<typeof matchLogin>>
     try {
-      user = await verifyLogin(db, scope, body.email, body.password)
+      match = await matchLogin(db, scope, body.email, body.password)
     } catch (error) {
       attempt.done(false)
       throw error
     }
-    attempt.done(user !== undefined)
-    if (!user) {
+    // Read again after the slow check, and the session started in the same transaction: a
+    // password changed or reset, or a user deactivated, meanwhile gets no session.
+    const signedInAs = writeTransaction(db, (tx) => {
+      const user = match && stillLoggedIn(tx, scope, match)
+      return user && { user, started: startSession(c, user) }
+    })
+    attempt.done(signedInAs !== undefined)
+    if (!signedInAs) {
       recordAudit(
         db,
         scope,
@@ -284,7 +295,7 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
       // The same answer whether or not the account exists.
       return c.json({ error: "Wrong email or password." }, 401)
     }
-    const started = startSession(c, user)
+    const { user, started } = signedInAs
     recordLogin(db, scope, user.id)
     recordAudit(db, scope, { type: "user", id: user.id, ip }, { action: "login.success" })
     return c.json(started)
@@ -601,9 +612,29 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
 
   api.get("/users", signedIn("admin"), (c) => c.json({ users: listUsers(db, scopeOf(c)) }))
 
+  /**
+   * Sensitive admin actions (adding a user, a password reset, a role change) need the admin's own
+   * password, checked here on the server and throttled like a login: a stolen session alone is
+   * not enough.
+   * Returns a response to send instead (429, 403) or `undefined` when confirmed.
+   */
+  const confirmAdmin = async (c: Context<ApiEnv>, password: string) => {
+    const session = c.get("session")
+    if (!session) throw new StudioError("forbidden", "Sign in first.")
+    const attempt = throttle.login(session.user.email, c.get("clientIp"))
+    if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
+    const confirmed = await checkPassword(db, session.scope, session.user.id, password)
+    attempt.done(confirmed)
+    if (!confirmed) throw new StudioError("forbidden", "Your password is wrong.")
+    return undefined
+  }
+
   api.post("/users", signedIn("admin"), async (c) => {
-    const body = await parse(c, newUser)
-    return c.json({ user: await addUser(db, scopeOf(c), body, actor(c)) }, 201)
+    const { adminPassword, ...input } = await parse(c, newUser)
+    // A new account (above all an admin one) is a lasting way in: the session alone is not enough.
+    const refused = await confirmAdmin(c, adminPassword)
+    if (refused) return refused
+    return c.json({ user: await addUser(db, scopeOf(c), input, actor(c)) }, 201)
   })
 
   api.get("/users/:id/keys", signedIn("admin"), (c) =>
@@ -625,22 +656,6 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     for (const keyId of revokedKeys) studio.gateway.disconnect({ keyId })
     return c.json({ user, revokedKeys: revokedKeys.length })
   })
-
-  /**
-   * Sensitive admin actions (a password reset, a role change) need the admin's own password,
-   * checked here on the server and throttled like a login: a stolen session alone is not enough.
-   * Returns a response to send instead (429, 403) or `undefined` when confirmed.
-   */
-  const confirmAdmin = async (c: Context<ApiEnv>, password: string) => {
-    const session = c.get("session")
-    if (!session) throw new StudioError("forbidden", "Sign in first.")
-    const attempt = throttle.login(session.user.email, c.get("clientIp"))
-    if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
-    const confirmed = await checkPassword(db, session.scope, session.user.id, password)
-    attempt.done(confirmed)
-    if (!confirmed) throw new StudioError("forbidden", "Your password is wrong.")
-    return undefined
-  }
 
   api.put("/users/:id/role", signedIn("admin"), async (c) => {
     const body = await parse(c, roleBody)

@@ -131,6 +131,7 @@ test("users: add a member, then change a role only with confirmation and the adm
   await dialog.getByLabel("Email").fill(member.email)
   await dialog.getByLabel("Initial password").fill(member.password)
   await expect(dialog.getByRole("combobox", { name: "Role" })).toHaveText("member")
+  await dialog.getByLabel("Your password, to confirm").fill(admin.password)
   await dialog.getByRole("button", { name: "Add user" }).click()
   const row = page.getByRole("row").filter({ hasText: member.email })
   await expect(row).toContainText("member")

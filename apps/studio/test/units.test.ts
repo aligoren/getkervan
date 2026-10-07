@@ -170,10 +170,12 @@ describe("login throttle", () => {
     clock.now = WINDOW / 2
     finish(throttle.login("b@example.test", "192.0.2.2"), true)
     expect(throttle.size).toBe(4)
-    clock.now = WINDOW
+    // The window slides: a failure counts for a whole window, up to and including its end.
+    clock.now = WINDOW + 1
     finish(throttle.login("c@example.test", "192.0.2.3"), true)
-    // a's counters were idle for a whole window and are gone; b's are younger and stay.
-    expect(throttle.size).toBe(4)
+    // The sweep ran: a's failure is older than the window and b's counters hold no failures, so
+    // only c's (new) are left.
+    expect(throttle.size).toBe(2)
     finish(throttle.login("a@example.test", "192.0.2.1"), false)
     expect("done" in throttle.login("a@example.test", "192.0.2.1")).toBe(true)
   })

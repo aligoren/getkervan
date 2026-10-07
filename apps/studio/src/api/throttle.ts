@@ -12,10 +12,10 @@ export interface ThrottleOptions {
 }
 
 interface Counter {
-  failures: number
+  /** When the recent failures happened, oldest first (at most the limit's worth). */
+  failures: number[]
   /** Attempts that started and have not finished: they count against the limit too. */
   inFlight: number
-  windowStart: number
   lockedUntil: number
 }
 
@@ -67,13 +67,18 @@ export class LoginThrottle {
   #begin(keys: [string, number][], clearAccountOnSuccess: boolean): Attempt {
     const now = this.#clock()
     this.#sweep(now)
-    const counters = keys.map(([key, limit]) => [this.#counter(key, now), limit] as const)
+    // Looked up without creating: refused attempts add no counters (a locked IP trying new
+    // account names would otherwise grow the map).
     let wait = 0
-    for (const [counter, limit] of counters) {
+    for (const [key, limit] of keys) {
+      const counter = this.#counters.get(key)
+      if (!counter) continue
+      this.#forgetOld(counter, now)
       if (counter.lockedUntil > now) wait = Math.max(wait, counter.lockedUntil - now)
-      else if (counter.failures + counter.inFlight >= limit) wait = Math.max(wait, 1000)
+      else if (counter.failures.length + counter.inFlight >= limit) wait = Math.max(wait, 1000)
     }
     if (wait > 0) return { retryAfter: Math.ceil(wait / 1000) }
+    const counters = keys.map(([key, limit]) => [this.#counter(key), limit] as const)
     for (const [counter] of counters) counter.inFlight++
     let finished = false
     return {
@@ -85,26 +90,35 @@ export class LoginThrottle {
           counter.inFlight--
           if (succeeded) {
             // A successful login clears the account's failures (the IP's stay).
-            if (clearAccountOnSuccess && index === 0) counter.failures = 0
+            if (clearAccountOnSuccess && index === 0) counter.failures = []
             return
           }
-          counter.failures++
-          if (counter.failures >= limit) counter.lockedUntil = at + this.#windowMs
+          this.#forgetOld(counter, at)
+          counter.failures.push(at)
+          if (counter.failures.length > limit) counter.failures.shift()
+          if (counter.failures.length >= limit) counter.lockedUntil = at + this.#windowMs
         })
       },
     }
   }
 
-  #counter(key: string, now: number): Counter {
+  #counter(key: string): Counter {
     let counter = this.#counters.get(key)
     if (!counter) {
-      counter = { failures: 0, inFlight: 0, windowStart: now, lockedUntil: 0 }
+      counter = { failures: [], inFlight: 0, lockedUntil: 0 }
       this.#counters.set(key, counter)
-    } else if (now - counter.windowStart >= this.#windowMs) {
-      counter.windowStart = now
-      counter.failures = 0
     }
     return counter
+  }
+
+  /**
+   * Drops failures older than the window. The window slides: no more than the limit's worth of
+   * failures get through in any `windowMs`, also across what a fixed window's boundary would be.
+   */
+  #forgetOld(counter: Counter, now: number): void {
+    while (counter.failures.length > 0 && now - (counter.failures[0] ?? now) > this.#windowMs) {
+      counter.failures.shift()
+    }
   }
 
   /** Forgets idle counters, at most once per window (not on every request). */
@@ -112,8 +126,9 @@ export class LoginThrottle {
     if (now < this.#nextSweep) return
     this.#nextSweep = now + this.#windowMs
     for (const [key, counter] of this.#counters) {
+      this.#forgetOld(counter, now)
       const idle = counter.inFlight === 0 && counter.lockedUntil <= now
-      if (idle && now - counter.windowStart >= this.#windowMs) this.#counters.delete(key)
+      if (idle && counter.failures.length === 0) this.#counters.delete(key)
     }
   }
 }

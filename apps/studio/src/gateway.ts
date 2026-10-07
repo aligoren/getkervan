@@ -124,8 +124,12 @@ export class Gateway {
     this.app.use((call, next) => this.#logCall(call, next))
     this.handler = toFetchHandler(this.app, {
       path: GATEWAY_PATH,
+      // DNS rebinding: the SDK checks the `Host` header's name against this list.
       allowedHosts: [...options.allowedHosts],
-      allowedOrigins: [...options.allowedHosts],
+      // The SDK's own Origin check takes host names (scheme and port are not compared); left
+      // out, it would accept only localhost origins. `fetch` compares exact origins first, so
+      // this is a second layer with the same host names.
+      allowedOrigins: options.allowedOrigins.map((origin) => new URL(origin).hostname),
       maxRequestBodySize: GATEWAY_MAX_BODY_BYTES,
       // A batch would run many calls for one request against the per-key limit.
       rejectBatches: true,

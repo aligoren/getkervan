@@ -142,12 +142,14 @@ function Studio() {
     }
   }
 
-  const serverId = /^#\/servers\/([^/]+)$/.exec(hash)?.[1]
+  // Server ids are UUIDs: nothing to decode, and any other text (a malformed escape, "..") is no
+  // server link, so it shows the list instead of breaking the page.
+  const serverId = /^#\/servers\/([A-Za-z0-9-]{1,64})$/.exec(hash)?.[1]
   const isAdmin = user.role === "admin"
   let section: Section = "servers"
   let page = <Servers />
   if (serverId) {
-    page = <ServerPage serverId={decodeURIComponent(serverId)} user={user} />
+    page = <ServerPage serverId={serverId} user={user} />
   } else if (hash === "#/users" && isAdmin) {
     section = "users"
     page = <Users currentUserId={user.id} currentUserEmail={user.email} />

@@ -87,6 +87,7 @@ describe("the audit log", () => {
         email: "member@example.test",
         password: MEMBER_PASSWORD,
         role: "member",
+        adminPassword: PASSWORD,
       }),
     )
     const memberId = String((created.json.user as { id: string }).id)

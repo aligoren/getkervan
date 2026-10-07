@@ -23,7 +23,7 @@ const server = await serveHttp(app, { port: 3000 }) // server.url, server.close(
 | Option | Default | |
 | --- | --- | --- |
 | `port` | `3000` | `0` picks a free port. `serve` also reads `--port=` and `PORT`. |
-| `host` | `"127.0.0.1"` | Interface to bind. `serve` also reads `--host=` and `HOST`. |
+| `host` | `"127.0.0.1"` | Interface to bind. `serve` also reads `--host=` and `HOST`. Anything but loopback needs `allowedHosts`: without it `serveHttp` refuses to start, and `serve` says why in one line and exits 1. |
 | `rateLimit` | `{ windowMs: 60000, max: 300 }` | Per client, in memory, `429` with `Retry-After`. `false` disables it. |
 | `rateLimit.keyGenerator` | socket address | `X-Forwarded-For` is **not** trusted. Behind a proxy, derive the key yourself. |
 

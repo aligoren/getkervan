@@ -225,7 +225,7 @@ describe("kervan run", () => {
       input: "",
     })
     expect(result.status).toBe(1)
-    expect(result.stderr).toMatch(/kervan\.yaml:\d+:\d+: Unknown field\(s\): bogus/)
+    expect(result.stderr).toMatch(/kervan\.yaml:\d+:\d+: Unknown field\(s\): "bogus"/)
   })
 
   it("reloads with --watch: only changed tools, last good version on errors", {

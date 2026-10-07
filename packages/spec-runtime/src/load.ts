@@ -10,6 +10,7 @@ import {
   SecretVault,
 } from "./secrets.js"
 import { SPEC_LIMITS, type Spec, type SpecTool, specSchema } from "./spec-schema.js"
+import { escapeHidden } from "./visible-text.js"
 
 export interface CompiledTool {
   name: string
@@ -257,7 +258,10 @@ function position(doc: ReturnType<typeof parseDocument>, counter: LineCounter, p
 }
 
 function zodMessage(issue: z.core.$ZodIssue, data: unknown): string {
-  if (issue.code === "unrecognized_keys") return `Unknown field(s): ${issue.keys.join(", ")}.`
+  if (issue.code === "unrecognized_keys") {
+    // Keys are the spec author's text: quoted, with anything invisible spelled out.
+    return `Unknown field(s): ${issue.keys.map((key) => `"${escapeHidden(key)}"`).join(", ")}.`
+  }
   // `api.example.com: 8443` (a space after the colon) is a one-entry mapping in YAML, not a
   // host:port string. Zod reports it on the host or, through the union, on the whole entry.
   if (issue.path[0] === "secrets") {
@@ -269,7 +273,8 @@ function zodMessage(issue: z.core.$ZodIssue, data: unknown): string {
     )
     if (mapping) {
       const [host, port] = Object.entries(mapping)[0] ?? []
-      const example = host === undefined ? "api.example.com:8443" : `${host}:${String(port ?? "")}`
+      const example =
+        host === undefined ? "api.example.com:8443" : escapeHidden(`${host}:${String(port ?? "")}`)
       return `YAML read a host:port as a key and value (because of the space after the colon); write "${example}".`
     }
   }

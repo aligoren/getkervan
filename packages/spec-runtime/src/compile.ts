@@ -161,27 +161,32 @@ async function executePlan(
   if (!isJsonContentType(response.contentType)) {
     throw new ToolError(`Upstream returned content type ${type}; expected JSON.`)
   }
+  // The spec's select expression must never see a secret: it could reshape one (upper-case it,
+  // reverse it, do arithmetic on a numeric one) or test it piece by piece, and the result would no
+  // longer match what redaction looks for. So upstream data is redacted as it is parsed, and the
+  // output again later.
   let data: unknown
   try {
-    data = JSON.parse(response.body.toString("utf8"))
+    data = runtime.vault.parseJson(response.body.toString("utf8"))
   } catch {
     throw new ToolError("Upstream returned invalid JSON.")
   }
-  // The spec's select expression must never see a secret: it could reshape one (upper-case it,
-  // reverse it, split it) or test it character by character, and the result would no longer match
-  // what redaction looks for. So upstream data is redacted first, and the output again later.
-  const selected = select(runtime.vault.redactValue(data), plan.output.select) ?? null
-  const text = JSON.stringify(selected)
+  // Evaluated in a separate process, stopped after the tool's timeout (see select.ts).
+  const { length, text } = await select(data, plan.output.select, {
+    timeoutMs: plan.limits.timeoutMs,
+    maxChars: plan.limits.maxOutputChars,
+    signal: ctx.signal,
+  })
   if (plan.output.schema) {
-    if (text.length > plan.limits.maxOutputChars) {
+    if (length > plan.limits.maxOutputChars) {
       throw new ToolError(
-        `The selected output has ${text.length} characters, more than the limit of ` +
+        `The selected output has ${length} characters, more than the limit of ` +
           `${plan.limits.maxOutputChars}. Narrow output.select.`,
       )
     }
-    return selected
+    return JSON.parse(text) as unknown
   }
-  return truncate(text, plan.limits.maxOutputChars)
+  return truncate(text, plan.limits.maxOutputChars, length)
 }
 
 /**
@@ -404,9 +409,10 @@ function redactRaw(vault: SecretVault, body: string, json: boolean): string {
   return redacted === encoded ? text : vault.redact(redacted)
 }
 
-function truncate(text: string, max: number): string {
-  if (text.length <= max) return text
-  return `${text.slice(0, max)}\n[truncated: ${text.length - max} more characters]`
+/** `length`: the full text's length, when `text` is only its beginning. */
+function truncate(text: string, max: number, length = text.length): string {
+  if (length <= max) return text
+  return `${text.slice(0, max)}\n[truncated: ${length - max} more characters]`
 }
 
 /** The media type only, and only if it looks like one: upstream headers are untrusted. */

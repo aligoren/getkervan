@@ -6,6 +6,7 @@ import { CreateError, cliVersion, createProject, type PackageManager } from "./c
 import { defaultDevOptions, runDev } from "./dev/index.js"
 import { currentRuntime, type RuntimeInfo, typeStrippingProblem } from "./node-version.js"
 import { runSpec } from "./run.js"
+import { terminalSafe } from "./terminal.js"
 
 export {
   CreateError,
@@ -60,9 +61,10 @@ export interface RunIo {
   runtime?: RuntimeInfo
 }
 
+// Paths and names from outside reach these lines too: see terminal.ts.
 const defaultIo: RunIo = {
-  out: (line) => process.stdout.write(`${line}\n`),
-  err: (line) => process.stderr.write(`${line}\n`),
+  out: (line) => process.stdout.write(`${terminalSafe(line)}\n`),
+  err: (line) => process.stderr.write(`${terminalSafe(line)}\n`),
 }
 
 /** Runs the CLI and returns the exit code. */

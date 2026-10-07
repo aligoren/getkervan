@@ -216,6 +216,40 @@ function localRanges(policy: NetworkPolicy): Cidr[] {
   })
 }
 
+/** Where RFC 6052 puts the IPv4 address inside an IPv6 one, by prefix length (byte indexes). */
+const RFC6052_POSITIONS: Readonly<Record<number, readonly number[]>> = {
+  32: [4, 5, 6, 7],
+  40: [5, 6, 7, 9],
+  48: [6, 7, 9, 10],
+  56: [7, 9, 10, 11],
+  64: [9, 10, 11, 12],
+  96: [12, 13, 14, 15],
+}
+
+/** IPv6 prefixes that carry an IPv4 address, and where it may sit. */
+const EMBEDDING: readonly { prefix: Cidr; positions: readonly (readonly number[])[] }[] = [
+  // NAT64, well-known prefix (RFC 6052).
+  { prefix: ipaddr.parseCIDR("64:ff9b::/96"), positions: [RFC6052_POSITIONS[96] ?? []] },
+  // NAT64, local-use prefix (RFC 8215): a /48 the operator subdivides, so every longer length.
+  {
+    prefix: ipaddr.parseCIDR("64:ff9b:1::/48"),
+    positions: [48, 56, 64, 96].map((length) => RFC6052_POSITIONS[length] ?? []),
+  },
+  // 6to4 (RFC 3056).
+  { prefix: ipaddr.parseCIDR("2002::/16"), positions: [[2, 3, 4, 5]] },
+  // IPv4-compatible (deprecated) and IPv4-translated (SIIT).
+  { prefix: ipaddr.parseCIDR("::/96"), positions: [[12, 13, 14, 15]] },
+  { prefix: ipaddr.parseCIDR("::ffff:0:0:0/96"), positions: [[12, 13, 14, 15]] },
+]
+
+/** The IPv4 addresses an IPv6 address may carry (none for an ordinary address). */
+function embeddedIpv4(address: ipaddr.IPv6): ipaddr.IPv4[] {
+  const bytes = address.toByteArray()
+  return EMBEDDING.filter(({ prefix }) => inRanges(address, [prefix])).flatMap(({ positions }) =>
+    positions.map((indexes) => new ipaddr.IPv4(indexes.map((index) => bytes[index] ?? 0))),
+  )
+}
+
 /** Ranges the checks use; built once per request. */
 export interface AddressRules {
   allow?: readonly Cidr[]
@@ -244,8 +278,13 @@ export function checkAddress(address: string, rules: AddressRules = {}): Address
     const matches = (ranges: readonly Cidr[] | undefined) =>
       ranges !== undefined && (inRanges(parsed, ranges) || inRanges(raw, ranges))
     // Order: cloud metadata, explicit deny, explicit allow, this machine, then the public-unicast
-    // checks.
-    if (matches(METADATA_CIDRS)) return { allowed: false, reason: "cloud metadata address" }
+    // checks. Metadata also in IPv6 forms that carry an IPv4 address (NAT64, 6to4, ...): even a
+    // wide allowPrivate must not reach it through a translator.
+    const metadata =
+      matches(METADATA_CIDRS) ||
+      (raw.kind() === "ipv6" &&
+        embeddedIpv4(raw as ipaddr.IPv6).some((inner) => inRanges(inner, METADATA_CIDRS)))
+    if (metadata) return { allowed: false, reason: "cloud metadata address" }
     if (matches(rules.deny)) return { allowed: false, reason: "address on the deny list" }
     if (matches(rules.allow)) return { allowed: true }
     if (matches(rules.local)) return { allowed: false, reason: "address of this machine" }
