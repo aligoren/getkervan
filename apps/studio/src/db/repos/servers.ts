@@ -9,6 +9,8 @@ export interface Server {
   name: string
   publishedVersionId: string | null
   logPayloads: boolean
+  /** Set while the server is disabled (the gateway serves nothing). */
+  disabledAt: number | null
   createdAt: number
   updatedAt: number
 }
@@ -19,6 +21,7 @@ const columns = {
   name: servers.name,
   publishedVersionId: servers.publishedVersionId,
   logPayloads: servers.logPayloads,
+  disabledAt: servers.disabledAt,
   createdAt: servers.createdAt,
   updatedAt: servers.updatedAt,
 }
@@ -35,6 +38,7 @@ export function createServer(
     name: input.name,
     publishedVersionId: null,
     logPayloads: false,
+    disabledAt: null,
     createdAt: now,
     updatedAt: now,
   }
@@ -86,6 +90,22 @@ export function setLogPayloads(
   const result = db
     .update(servers)
     .set({ logPayloads, updatedAt: now })
+    .where(and(eq(servers.workspaceId, scope.workspaceId), eq(servers.id, serverId)))
+    .run()
+  return result.changes === 1
+}
+
+/** Disables (a time) or enables (null) a server. */
+export function setServerDisabled(
+  db: Db,
+  scope: WorkspaceScope,
+  serverId: string,
+  disabledAt: number | null,
+  now = Date.now(),
+): boolean {
+  const result = db
+    .update(servers)
+    .set({ disabledAt, updatedAt: now })
     .where(and(eq(servers.workspaceId, scope.workspaceId), eq(servers.id, serverId)))
     .run()
   return result.changes === 1

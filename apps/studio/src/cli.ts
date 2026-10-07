@@ -2,7 +2,7 @@ import path from "node:path"
 import { parseArgs } from "node:util"
 import { ConfigError, loadConfig } from "./config.js"
 import { hashPassword, passwordProblem, randomToken } from "./crypto.js"
-import { DatabaseError, openDatabase, writeTransaction } from "./db/open.js"
+import { DatabaseError, openDatabase, storedSecretCount, writeTransaction } from "./db/open.js"
 import { recordAudit } from "./db/repos/audit.js"
 import {
   deleteSessionsOf,
@@ -71,15 +71,32 @@ export async function runStudioCli(argv: string[], io: StudioCliIo): Promise<num
       io.err(`Error: ${error.message}`)
       return 1
     }
+    const busy = portInUseMessage(error)
+    if (busy) {
+      io.err(`Error: ${busy}`)
+      return 1
+    }
     throw error
   }
 }
 
+/** One line instead of Node's stack trace when Studio's port is taken. */
+function portInUseMessage(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined
+  const { code, port, address } = error as { code?: unknown; port?: unknown; address?: unknown }
+  if (code !== "EADDRINUSE") return undefined
+  return (
+    `Port ${typeof port === "number" ? port : "?"}${typeof address === "string" ? ` on ${address}` : ""} ` +
+    "is already in use. Stop the program using it, or set KERVAN_STUDIO_PORT to another port."
+  )
+}
+
 async function start(argv: string[], io: StudioCliIo): Promise<number> {
   parse(argv, {})
-  const running = await startStudio(loadConfig(io.env, io.cwd), {
+  const config = loadConfig(io.env, io.cwd)
+  const running = await startStudio(config, {
     print: io.err,
-    keys: envKeyProvider(io.env),
+    keys: masterKeys(io.env, config.dataDir),
   })
   const stop = () => {
     running.close().then(
@@ -90,6 +107,26 @@ async function start(argv: string[], io: StudioCliIo): Promise<number> {
   process.once("SIGINT", stop)
   process.once("SIGTERM", stop)
   return 0
+}
+
+/**
+ * The master keys, or an error that fits the data directory: when it already holds encrypted
+ * secrets, a new key is the wrong answer (they could not be read with it), so say so.
+ */
+function masterKeys(env: NodeJS.ProcessEnv, dataDir: string) {
+  try {
+    return envKeyProvider(env)
+  } catch (error) {
+    if (!(error instanceof KeyError) || env.KERVAN_STUDIO_MASTER_KEY?.trim()) throw error
+    const stored = storedSecretCount(path.join(dataDir, DATABASE_FILE))
+    if (stored === 0) throw error
+    throw new KeyError(
+      `KERVAN_STUDIO_MASTER_KEY is not set. This data directory (${dataDir}) already holds ` +
+        `${stored} encrypted secret${stored === 1 ? "" : "s"}, made with the master key it was ` +
+        "set up with: set that key. Do not create a new one: Studio could not decrypt the stored " +
+        "secrets with it.",
+    )
+  }
 }
 
 async function resetAdmin(argv: string[], io: StudioCliIo): Promise<number> {

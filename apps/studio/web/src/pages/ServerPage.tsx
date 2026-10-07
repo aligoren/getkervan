@@ -1,4 +1,4 @@
-import { Download, Loader2, Save, Upload } from "lucide-react"
+import { Download, Loader2, Power, PowerOff, Save, Upload } from "lucide-react"
 import { lazy, Suspense, useCallback, useEffect, useState } from "react"
 import { ApiError, api, type Issue, type Server, type User, type VersionInfo } from "../api.js"
 import { ErrorText, IssueList } from "../components/untrusted.js"
@@ -7,11 +7,18 @@ import { STARTER_SPEC } from "../starter.js"
 import { Badge } from "../ui/Badge.js"
 import { Button, buttonClass } from "../ui/Button.js"
 import { CopyButton } from "../ui/Copy.js"
+import { Dialog } from "../ui/Dialog.js"
 import { Alert, PageHeader, Skeleton } from "../ui/Layout.js"
-import { Select, TabPanel, Tabs } from "../ui/Radix.js"
+import { DisabledReason, Select, TabPanel, Tabs } from "../ui/Radix.js"
 import { useToast } from "../ui/Toast.js"
 import { NextSteps, rememberCommandCopied } from "./NextSteps.js"
-import { KeysPanel, LogsPanel, SecretsPanel, VersionsPanel } from "./ServerPanels.js"
+import {
+  KeysPanel,
+  LogsPanel,
+  publishBlockedReason,
+  SecretsPanel,
+  VersionsPanel,
+} from "./ServerPanels.js"
 import { StatusBadges } from "./Servers.js"
 
 // Monaco is large; load it only here.
@@ -42,6 +49,9 @@ export function ServerPage(props: { serverId: string; user: User }) {
   const bump = () => setRefresh((n) => n + 1)
   const [issues, setIssues] = useState<Issue[]>([])
   const [busy, setBusy] = useState<"save" | "publish">()
+  // The disable/enable confirmation.
+  const [switching, setSwitching] = useState(false)
+  const [switchBusy, setSwitchBusy] = useState(false)
   const [error, setError] = useState<unknown>()
   const [result, setResult] = useState<{ tone: "success" | "warning"; text: string }>()
 
@@ -165,6 +175,25 @@ export function ServerPage(props: { serverId: string; user: User }) {
     { value: "logs", label: "Calls" },
   ]
   const reload = () => void load().catch((caught: unknown) => setError(caught))
+  const disabled = typeof server.disabledAt === "number"
+  const switchServer = async () => {
+    setSwitchBusy(true)
+    try {
+      await api(
+        "POST",
+        `/servers/${encodeURIComponent(server.id)}/${disabled ? "enable" : "disable"}`,
+      )
+      notify(disabled ? `${server.name} is enabled again.` : `${server.name} is disabled.`)
+      setSwitching(false)
+      await load()
+      bump()
+    } catch (caught) {
+      setError(caught)
+      setSwitching(false)
+    } finally {
+      setSwitchBusy(false)
+    }
+  }
   const exportUrl = selected
     ? `/api/servers/${encodeURIComponent(server.id)}/versions/${encodeURIComponent(selected)}/export`
     : undefined
@@ -186,7 +215,54 @@ export function ServerPage(props: { serverId: string; user: User }) {
             <StatusBadges server={server} />
           </span>
         }
+        actions={
+          disabled ? (
+            <Button
+              variant="primary"
+              icon={<Power className="size-4" aria-hidden="true" />}
+              onClick={() => setSwitching(true)}
+            >
+              Enable server
+            </Button>
+          ) : (
+            <Button
+              variant="danger"
+              icon={<PowerOff className="size-4" aria-hidden="true" />}
+              onClick={() => setSwitching(true)}
+            >
+              Disable server
+            </Button>
+          )
+        }
       />
+      <Dialog
+        open={switching}
+        onOpenChange={setSwitching}
+        tone={disabled ? "default" : "danger"}
+        title={disabled ? `Enable ${server.name}?` : `Disable ${server.name}?`}
+        description={
+          disabled
+            ? "Clients with a valid key can connect again and get the published version."
+            : "Clients get 404 at once and open connections close; the playground stops too. Versions, secrets, keys and call logs are kept, and you can enable it again."
+        }
+        footer={
+          <>
+            <Button onClick={() => setSwitching(false)}>Cancel</Button>
+            <Button
+              variant={disabled ? "primary" : "danger"}
+              loading={switchBusy}
+              onClick={() => void switchServer()}
+            >
+              {disabled ? "Enable server" : "Disable server"}
+            </Button>
+          </>
+        }
+      />
+      {disabled ? (
+        <Alert tone="warning" className="mb-5">
+          This server is disabled: its endpoint answers 404 and the playground cannot connect.
+        </Alert>
+      ) : null}
       <div className="space-y-5">
         <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-surface py-1.5 pr-1.5 pl-3">
           <span className="shrink-0 text-xs font-medium text-fg-muted">MCP endpoint</span>
@@ -235,6 +311,16 @@ export function ServerPage(props: { serverId: string; user: User }) {
                         live
                       </Badge>
                     </span>
+                  ) : selectedVersion && publishBlockedReason(selectedVersion) && !dirty ? (
+                    <DisabledReason reason={publishBlockedReason(selectedVersion) ?? ""}>
+                      <Button
+                        variant="primary"
+                        disabled
+                        icon={<Upload className="size-4" aria-hidden="true" />}
+                      >
+                        {`Publish v${selectedVersion.number}`}
+                      </Button>
+                    </DisabledReason>
                   ) : (
                     <Button
                       variant="primary"

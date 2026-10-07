@@ -75,8 +75,10 @@ export async function createProject(options: CreateOptions): Promise<CreateResul
   }
   const files: string[] = []
   for (const relative of await listFiles(templateDir)) {
-    // npm drops .gitignore from published packages, so the template stores it as _gitignore.
-    const target = relative === "_gitignore" ? ".gitignore" : relative
+    // npm drops .gitignore and .npmrc from published packages, so the template stores them as
+    // _gitignore and _npmrc.
+    const target =
+      relative === "_gitignore" ? ".gitignore" : relative === "_npmrc" ? ".npmrc" : relative
     const content = await readFile(path.join(templateDir, relative), "utf8")
     const destination = path.join(dir, target)
     await mkdir(path.dirname(destination), { recursive: true })

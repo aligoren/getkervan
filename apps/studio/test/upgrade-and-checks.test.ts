@@ -66,7 +66,7 @@ describe("upgrading a database from before user management", () => {
     const upgraded = openDatabase(file)
     cleanups.push(() => upgraded.close())
     const applied = upgraded.sqlite.prepare("SELECT count(*) AS n FROM __drizzle_migrations").get()
-    expect(applied).toEqual({ n: 7 })
+    expect(applied).toEqual({ n: 8 })
     expect(getUser(upgraded.db, scope, "u1")).toMatchObject({
       email: "old@example.test",
       role: "admin",

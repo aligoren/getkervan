@@ -46,6 +46,11 @@ export interface LoadOptions {
   allowSecretsOverHttp?: boolean
 }
 
+/** Added after structural problems: the remaining checks run once the structure is valid. */
+export const STRUCTURE_FIRST =
+  "Fix these structure problems first: more checks (URLs, template references, secrets) run " +
+  "once the structure is valid, and may report more problems."
+
 export class SpecLoadError extends Error {
   override name = "SpecLoadError"
   readonly issues: SpecIssue[]
@@ -120,6 +125,9 @@ export async function loadSpec(text: string, options: LoadOptions = {}): Promise
     for (const issue of parsed.error.issues) {
       at(issue.path as IssuePath, zodMessage(issue, data))
     }
+    // The other checks (URLs, template references, secrets) need a well-formed spec, so they
+    // wait until the structure is fixed. Say so, rather than let a second round surprise.
+    issues.push({ path: [], message: STRUCTURE_FIRST, severity: "warning" })
     throw new SpecLoadError(fileName, issues)
   }
   const spec = parsed.data

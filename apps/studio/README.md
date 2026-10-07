@@ -31,10 +31,12 @@ node apps/studio/bin/kervan-studio.js start
 Studio encrypts secrets with the master key and does not start without it. A lost master key
 means the stored secrets are lost; set them again in the UI.
 
-The database goes into `.kervan-studio/` in the current directory. When you start Studio from
-the repository, that folder is inside the repository: set `KERVAN_STUDIO_DATA_DIR` to a folder
-elsewhere, or take care not to commit it. Studio runs in the foreground; stop it with Ctrl+C, and
-start it again with the same data directory and master key.
+The database goes into `.kervan-studio/` in the current directory (`KERVAN_STUDIO_DATA_DIR`
+changes it). A data directory Studio creates gets a `.gitignore` that keeps it out of git, the
+repository ignores `.kervan-studio/`, and Studio warns at start if git could still commit the
+database. Studio runs in the foreground; stop it with Ctrl+C, and start it again with the same
+data directory and master key. If the port is taken, Studio says so in one line; set
+`KERVAN_STUDIO_PORT` to another.
 
 `pnpm build` also builds the web UI (`apps/studio/dist-web`). Then open the URL Studio prints.
 
@@ -67,8 +69,14 @@ On first start, Studio:
 - **API keys (admins):** a key is shown once when created, with a ready `claude mcp add`
   command for the server's full endpoint URL; the list shows its prefix and last use. Revoking
   asks for confirmation and takes effect at once: open streams of that key are closed.
-- **Calls:** tool, status and duration of recent calls. Admins can also log arguments and
-  results (redacted, cut to 4 KiB).
+- **Calls:** tool, caller (the playground, or the API key by name), status and duration of
+  recent calls. Admins can also log arguments and results (redacted, cut to 4 KiB).
+- **Disable server:** takes a server offline without deleting anything. Its endpoint answers 404,
+  open connections close and the playground stops; versions, secrets, keys and call logs stay.
+  "Enable server" serves the published version again with the same keys. Same rules as
+  publishing, with a confirmation, and both are audited.
+- **Publishing a version with problems** is not offered: the button is disabled and says why
+  (the server refuses it too).
 - **Roles:** members edit, publish, use the playground and see call metadata. Admins also
   manage users, secrets and keys, delete servers, and read payloads and the audit log.
 - **Users (admins):** add users, change their role and email, reset their password, and
@@ -139,7 +147,10 @@ claude mcp add --transport http weather https://studio.example.com/s/<serverId>/
 - Publishing a version, or publishing an older one again, updates the server in place.
   Clients on MCP 2026-07-28 that listen (`subscriptions/listen`) get `list_changed` at once;
   2025-era clients, served statelessly over HTTP, see the new tools on their next `tools/list`.
-- There is no "unpublish": publish another version, or delete the server.
+- To take a server offline without deleting it, disable it (see Web UI); a disabled server
+  answers 404 like an unknown one.
+- A missing, wrong, revoked or other server's key always gets the same 401 body, which says what
+  to send: `Unauthorized. Send a valid API key for this server as 'Authorization: Bearer <key>'.`
 
 ## Configuration
 

@@ -142,8 +142,11 @@ export function planTool(
     http.allowInsecureHttp ?? defaults?.allowInsecureHttp ?? HTTP_DEFAULTS.allowInsecureHttp
   // Parsing the whole URL as a template checks its syntax and references; planUrl checks its shape.
   const urlTemplate = template(http.url, ["http", "url"])
+  // Whether this tool sends secrets decides how the http:// refusal is explained.
+  const sendsSecrets = JSON.stringify(http).includes("{{secrets.")
   const url =
-    urlTemplate && planUrl(urlTemplate, allowInsecure, (message) => error(["http", "url"], message))
+    urlTemplate &&
+    planUrl(urlTemplate, allowInsecure, sendsSecrets, (message) => error(["http", "url"], message))
 
   const query: [string, Template[]][] = []
   for (const [name, value] of Object.entries(http.query ?? {})) {
@@ -261,6 +264,7 @@ interface PlannedUrl {
 function planUrl(
   parts: Template,
   allowInsecure: boolean,
+  sendsSecrets: boolean,
   error: (message: string) => void,
 ): PlannedUrl | undefined {
   const refs: Template[number][] = []
@@ -289,8 +293,12 @@ function planUrl(
     fail("Only https:// URLs are supported.")
   else if (url.protocol === "http:" && !allowInsecure) {
     fail(
-      "Plain http:// is not allowed (secrets would travel unencrypted). Use https:// or set " +
-        "allowInsecureHttp: true.",
+      sendsSecrets
+        ? "Plain http:// is not allowed: this tool sends secrets, which would travel " +
+            "unencrypted. Use https://."
+        : "Plain http:// is not allowed by default: requests and answers would travel " +
+            "unencrypted. Use https://, or set allowInsecureHttp: true for an API that only " +
+            "speaks http.",
     )
   }
   if (url.username || url.password) {

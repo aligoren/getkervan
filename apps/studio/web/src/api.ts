@@ -42,6 +42,8 @@ export interface Server {
   name: string
   publishedVersionId: string | null
   logPayloads: boolean
+  /** Set while the server is disabled: clients and the playground get nothing. */
+  disabledAt?: number | null
   createdAt: number
   updatedAt: number
   summary?: ServerSummary | null

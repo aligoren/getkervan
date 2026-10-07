@@ -277,6 +277,27 @@ test("the theme follows the account across sessions; signed out, the system's", 
     })
 })
 
+test("a server can be disabled and enabled again from its page", async ({ browser }) => {
+  const page = await newPage(browser)
+  await signIn(page, admin)
+  await page.goto(`${studio.url}/${serverPath}`)
+  await page.getByRole("button", { name: "Disable server" }).click()
+  const dialog = page.getByRole("dialog", { name: "Disable Weather?" })
+  await expect(dialog).toContainText("Clients get 404 at once")
+  await dialog.getByRole("button", { name: "Disable server" }).click()
+  await expect(page.getByText("This server is disabled: its endpoint answers 404")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Enable server" })).toBeVisible()
+  // The server list shows it too.
+  await page.goto(`${studio.url}/#/`)
+  await expect(page.getByRole("row").filter({ hasText: "Weather" })).toContainText("disabled")
+  // And back.
+  await page.goto(`${studio.url}/${serverPath}`)
+  await page.getByRole("button", { name: "Enable server" }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Enable server" }).click()
+  await expect(page.getByRole("button", { name: "Disable server" })).toBeVisible()
+  await expect(page.getByText("This server is disabled")).toHaveCount(0)
+})
+
 test("dates are English even when the browser is Turkish", async ({ browser }) => {
   const context = await browser.newContext({
     locale: "tr-TR",

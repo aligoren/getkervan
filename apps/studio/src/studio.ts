@@ -9,7 +9,7 @@ import {
   SpecLoadError,
 } from "@kervan/spec-runtime"
 import { type Db, writeTransaction } from "./db/open.js"
-import { type ApiKeyInfo, createApiKey, revokeApiKey } from "./db/repos/api-keys.js"
+import { type ApiKeyInfo, createApiKey, listApiKeys, revokeApiKey } from "./db/repos/api-keys.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
 import { listCalls } from "./db/repos/call-logs.js"
 import {
@@ -19,6 +19,7 @@ import {
   type Server,
   setLogPayloads,
   setPublishedVersion,
+  setServerDisabled,
 } from "./db/repos/servers.js"
 import { recordCheck } from "./db/repos/version-checks.js"
 import { getVersion, type SpecVersion, saveVersion } from "./db/repos/versions.js"
@@ -197,7 +198,7 @@ export class Studio {
       if (error instanceof SpecLoadError) {
         recordCheck(this.db, scope, versionId, {
           valid: false,
-          problems: error.issues.length,
+          problems: error.issues.filter((issue) => issue.severity === "error").length,
           secrets: 0,
         })
         throw new StudioError("invalid", "The spec is not valid.", error.issues)
@@ -226,7 +227,11 @@ export class Studio {
       recordAudit(this.db, scope, actor, {
         action: "server.publish_refused",
         target: { type: "server", id: serverId },
-        details: { version: version.number, versionId, problems: error.issues.length },
+        details: {
+          version: version.number,
+          versionId,
+          problems: error.issues.filter((issue) => issue.severity === "error").length,
+        },
       })
       throw new StudioError("invalid", "Not published: fix the problems below.", error.issues)
     }
@@ -281,14 +286,52 @@ export class Studio {
   }
 
   /**
-   * A server's recent calls. Arguments and results (when the server logs them) are for admins
-   * only; members see the metadata.
+   * Disables or enables a server. Disabled, the gateway serves nothing (404) and open
+   * connections, subscriptions and playground sessions end; versions, secrets, keys and call logs
+   * stay. Enabling serves the published version again. Only a real change is audited.
+   */
+  async setServerDisabled(
+    scope: WorkspaceScope,
+    serverId: string,
+    disabled: boolean,
+    actor: Actor,
+  ): Promise<Server> {
+    const server = writeTransaction(this.db, (tx) => {
+      const current = getServer(tx, scope, serverId)
+      if (!current) return undefined
+      if ((current.disabledAt !== null) === disabled) return current
+      const disabledAt = disabled ? Date.now() : null
+      setServerDisabled(tx, scope, serverId, disabledAt)
+      recordAudit(tx, scope, actor, {
+        action: disabled ? "server.disable" : "server.enable",
+        target: { type: "server", id: serverId },
+      })
+      return { ...current, disabledAt }
+    })
+    if (!server) throw notFound()
+    if (disabled) {
+      this.gateway.remove(scope, serverId)
+      this.gateway.disconnect({ serverId })
+    } else {
+      await this.gateway.reload(scope, serverId)
+    }
+    return server
+  }
+
+  /**
+   * A server's recent calls, with who made each one (the playground, or an API key by name).
+   * Arguments and results (when the server logs them) are for admins only; members see the
+   * metadata.
    */
   listCalls(scope: WorkspaceScope, serverId: string, options: { withPayloads: boolean }) {
     if (!getServer(this.db, scope, serverId)) throw notFound()
-    return listCalls(this.db, scope, serverId).map((call) =>
-      options.withPayloads ? call : { ...call, args: undefined, result: undefined },
+    const keyNames = new Map(
+      listApiKeys(this.db, scope, serverId).map((key) => [key.id, key.name] as const),
     )
+    return listCalls(this.db, scope, serverId).map(({ apiKeyId, ...call }) => ({
+      ...(options.withPayloads ? call : { ...call, args: undefined, result: undefined }),
+      ...(apiKeyId === undefined ? {} : { apiKeyName: keyNames.get(apiKeyId) ?? "deleted key" }),
+    }))
   }
 
   /** The version as a kervan.yaml for `kervan run`, with Studio's secret bindings, no values. */
@@ -309,6 +352,9 @@ export class Studio {
     session: { userId: string; sessionHash: string },
   ): { token: string; expiresAt: number } {
     if (!getVersion(this.db, scope, serverId, versionId)) throw notFound()
+    if (getServer(this.db, scope, serverId)?.disabledAt != null) {
+      throw new StudioError("conflict", "This server is disabled. Enable it to use the playground.")
+    }
     return this.playground.issue({
       workspaceId: scope.workspaceId,
       serverId,

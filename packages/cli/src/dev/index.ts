@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import type { App } from "@kervan/core"
 import { serveHttp, serveStdio } from "@kervan/transport/node"
+import { portInUseMessage } from "../listen.js"
 import {
   currentRuntime,
   type RuntimeInfo,
@@ -119,6 +120,24 @@ export async function runDev(options: DevOptions): Promise<number> {
     host = child
   }
 
+  // Without the REPL, each call gets one line: tool, duration, outcome (never arguments or
+  // results). With the REPL, lines would break into its prompt.
+  if (!options.repl) {
+    host.app.use(async (call, next) => {
+      const started = performance.now()
+      const line = (outcome: string) =>
+        print(`call ${call.tool.name} ${Math.round(performance.now() - started)} ms ${outcome}`)
+      try {
+        const result = await next()
+        line(result.isError ? "error" : "ok")
+        return result
+      } catch (error) {
+        line("error")
+        throw error
+      }
+    })
+  }
+
   const stopWatching = options.watch
     ? watchProject(root, (files) => {
         print(`Change detected: ${files.slice(0, 3).join(", ")}${files.length > 3 ? ", ..." : ""}`)
@@ -151,7 +170,18 @@ export async function runDev(options: DevOptions): Promise<number> {
     options.stdin.once("close", stop)
   } else {
     // Always localhost with Host/Origin validation: the dev server runs your tools.
-    const server = await serveHttp(host.app, { port: options.port, host: "127.0.0.1" })
+    let server: Awaited<ReturnType<typeof serveHttp>>
+    try {
+      server = await serveHttp(host.app, { port: options.port, host: "127.0.0.1" })
+    } catch (error) {
+      // Stop what already runs (the child, the watcher), so the process can exit.
+      stopWatching()
+      await host.close()
+      const busy = portInUseMessage(error, "choose another port with --port")
+      if (!busy) throw error
+      warn(`Error: ${busy}`)
+      return 1
+    }
     closers.push(() => server.close())
     print(`Kervan dev server: ${server.url.href}`)
     if (options.repl) {

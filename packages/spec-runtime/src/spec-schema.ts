@@ -87,7 +87,8 @@ const httpDefaults = z
     maxResponseBytes: maxResponseBytes.optional(),
     maxOutputChars: maxOutputChars.optional(),
     allowInsecureHttp: z.boolean().optional().meta({
-      description: "Allow plain http:// URLs. Off by default: secrets would travel unencrypted.",
+      description:
+        "Allow plain http:// URLs. Off by default: requests, answers and any secrets would travel unencrypted.",
     }),
     followRedirects: followRedirects.optional(),
   })

@@ -462,6 +462,17 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     c.json(await check(studio, scopeOf(c), c.req.param("id"), c.req.param("vid"))),
   )
 
+  // Disabling and enabling follow the publishing rules: any signed-in user, with CSRF.
+  api.post("/servers/:id/disable", signedIn(), async (c) => {
+    const server = await studio.setServerDisabled(scopeOf(c), c.req.param("id"), true, actor(c))
+    return c.json({ server })
+  })
+
+  api.post("/servers/:id/enable", signedIn(), async (c) => {
+    const server = await studio.setServerDisabled(scopeOf(c), c.req.param("id"), false, actor(c))
+    return c.json({ server })
+  })
+
   api.post("/servers/:id/versions/:vid/publish", signedIn(), async (c) => {
     const version = await studio.publish(
       scopeOf(c),

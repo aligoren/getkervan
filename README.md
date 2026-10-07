@@ -155,29 +155,25 @@ pnpm check:pack   # publint + are-the-types-wrong
 pnpm e2e          # build, then Studio's Playwright tests (opt-in; needs Chromium)
 pnpm site:schema  # copy the editor schema to site/schema/v1.json
 pnpm check:site   # website date checks (security.txt expiry), kept out of pnpm test
+pnpm try:new <dir> # a new project from this repository (until the packages are published)
 ```
 
 `prepublishOnly` blocks publishing unless `KERVAN_ALLOW_PUBLISH=1` is set.
 
 ### Trying a new project before the packages are published
 
-`kervan create` cannot install `@kervan/*` from npm yet. Pack the local packages and install the
-tarballs instead (all four together: the CLI depends on the spec runtime). From the repository
-root, after `pnpm install && pnpm build`:
+`kervan create` cannot install `@kervan/*` from npm yet. Until it can, one command creates a
+project from this repository: it builds the packages, runs `kervan create --no-install`, packs the
+local packages into the project's `.kervan-tarballs/` folder, installs them with npm and runs the
+project's tests.
 
 ```sh
-pnpm -r --filter "./packages/*" pack --pack-destination ../kervan-tarballs
-cd ..
-node kervan/packages/cli/bin/kervan.js create my-server --no-install
-cd my-server
-npm install ../kervan-tarballs/kervan-core-0.1.0.tgz ../kervan-tarballs/kervan-transport-0.1.0.tgz \
-  ../kervan-tarballs/kervan-spec-runtime-0.1.0.tgz ../kervan-tarballs/kervan-0.1.0.tgz
-npm test
+pnpm try:new ../my-server      # a new or empty folder; --dry-run shows the steps only
+cd ../my-server
 npm run dev
 ```
 
-(Replace `kervan/` with the folder you cloned into.) `npx kervan ...` then works inside the
-project.
+This is temporary: once the packages are published, `npm create kervan@latest` replaces it.
 
 ## Contact
 

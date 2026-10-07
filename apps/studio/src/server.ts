@@ -3,6 +3,7 @@ import path from "node:path"
 import { serve } from "@hono/node-server"
 import type { Logger } from "@kervan/core"
 import { allowedHostNames, bindHost, ConfigError, type StudioConfig } from "./config.js"
+import { dataDirectoryGitWarning } from "./data-dir.js"
 import { type OpenedDatabase, openDatabase } from "./db/open.js"
 import { purgeCalls } from "./db/repos/call-logs.js"
 import { deleteExpiredSessions } from "./db/repos/sessions.js"
@@ -61,7 +62,10 @@ export async function startStudio(
     const problem = addressRangeProblem(entry)
     if (problem) throw new ConfigError(`KERVAN_STUDIO_DENY_NETWORK: ${problem}`)
   }
-  const database = openDatabase(path.join(config.dataDir, DATABASE_FILE))
+  const databaseFile = path.join(config.dataDir, DATABASE_FILE)
+  const database = openDatabase(databaseFile)
+  const exposed = dataDirectoryGitWarning(config.dataDir, databaseFile)
+  if (exposed) print(exposed)
   try {
     const scope = defaultWorkspace(database.db)
     const hasAdmin = listAdmins(database.db, scope).length > 0

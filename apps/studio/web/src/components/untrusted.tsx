@@ -205,6 +205,16 @@ export interface CallLogEntry {
   versionId: string | null
   args?: string | undefined
   result?: string | undefined
+  /** Who called; the API key by its name (the key itself never leaves the server). */
+  source?: "playground" | "api_key" | undefined
+  apiKeyName?: string | undefined
+}
+
+/** Who made a call, for the log: "Playground", the API key's name, or "—" for old entries. */
+export function callerLabel(call: Pick<CallLogEntry, "source" | "apiKeyName">): string {
+  if (call.source === "playground") return "Playground"
+  if (call.source === "api_key") return call.apiKeyName ? `Key: ${call.apiKeyName}` : "API key"
+  return "—"
 }
 
 /** Recent tool calls. Arguments and results (opt-in, admins only) come from clients and upstreams. */
@@ -216,6 +226,7 @@ export function CallLogTable(props: { calls: readonly CallLogEntry[] }) {
         <tr>
           <TH>Time</TH>
           <TH>Tool</TH>
+          <TH>Caller</TH>
           <TH>Status</TH>
           <TH className="hidden text-right sm:table-cell">Duration</TH>
           {payloads ? <TH>Payload</TH> : null}
@@ -223,7 +234,7 @@ export function CallLogTable(props: { calls: readonly CallLogEntry[] }) {
       </THead>
       <TBody>
         {props.calls.length === 0 ? (
-          <EmptyRow colSpan={payloads ? 5 : 4}>
+          <EmptyRow colSpan={payloads ? 6 : 5}>
             No calls yet. Calls from clients and the playground show up here.
           </EmptyRow>
         ) : (
@@ -231,6 +242,7 @@ export function CallLogTable(props: { calls: readonly CallLogEntry[] }) {
             <TR key={call.id} className="[&_td]:align-top">
               <TD className="whitespace-nowrap text-fg-muted">{shortTime(call.at)}</TD>
               <TD className="font-mono text-xs">{call.tool}</TD>
+              <TD className="whitespace-nowrap text-fg-muted">{callerLabel(call)}</TD>
               <TD>
                 {call.status === "ok" ? (
                   <Badge tone="success" dot>

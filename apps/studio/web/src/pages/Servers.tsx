@@ -20,6 +20,7 @@ export function StatusBadges(props: { server: Server }) {
   const latest = summary?.latest
   const published = summary?.publishedNumber ?? null
   const badges: { text: string; tone: BadgeTone }[] = []
+  if (typeof props.server.disabledAt === "number") badges.push({ text: "disabled", tone: "danger" })
   if (published !== null) badges.push({ text: `published v${published}`, tone: "success" })
   else badges.push({ text: "not published", tone: "neutral" })
   if (latest && latest.number !== published) {

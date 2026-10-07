@@ -18,11 +18,21 @@ import { CodeBlock, CopyButton } from "../ui/Copy.js"
 import { Dialog } from "../ui/Dialog.js"
 import { Checkbox, Field, Input } from "../ui/Field.js"
 import { Alert } from "../ui/Layout.js"
-import { Select } from "../ui/Radix.js"
+import { DisabledReason, Select } from "../ui/Radix.js"
 import { EmptyRow, Table, TBody, TD, TH, THead, TR } from "../ui/Table.js"
 import { useToast } from "../ui/Toast.js"
 
 const path = (serverId: string, rest = "") => `/servers/${encodeURIComponent(serverId)}${rest}`
+
+/** Why a version cannot be published, or undefined when it can (the server checks again). */
+export function publishBlockedReason(version: {
+  number: number
+  check?: { valid: boolean; problems: number } | null
+}): string | undefined {
+  if (!version.check || version.check.valid) return undefined
+  const problems = `${version.check.problems} problem${version.check.problems === 1 ? "" : "s"}`
+  return `v${version.number} has ${problems}. Open it, fix them and save a new version to publish.`
+}
 
 /** Version history: compare two versions, publish one, roll back, export. */
 export function VersionsPanel(props: {
@@ -120,7 +130,13 @@ export function VersionsPanel(props: {
                       <Button size="sm" variant="ghost" onClick={() => props.onOpen(version.id)}>
                         Open
                       </Button>
-                      {isPublished ? null : (
+                      {isPublished ? null : publishBlockedReason(version) ? (
+                        <DisabledReason reason={publishBlockedReason(version) ?? ""}>
+                          <Button size="sm" disabled>
+                            {isRollback(version) ? `Roll back to v${version.number}` : "Publish"}
+                          </Button>
+                        </DisabledReason>
+                      ) : (
                         <Button size="sm" onClick={() => setConfirm(version)}>
                           {isRollback(version) ? `Roll back to v${version.number}` : "Publish"}
                         </Button>

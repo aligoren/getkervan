@@ -312,7 +312,7 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
 - Spec tools keep the runtime limits: timeouts, response sizes, per-tool rate limits and the DNS
   lookup cap.
 
-### T16: Misleading text (names, emails, failed sign-ins)
+### T17: Misleading text (names, emails, failed sign-ins)
 
 - Text people type and others see may not hide anything (`apps/studio/src/display-text.ts`):
   controls including line breaks and NUL, bidi controls, zero-width and other format characters,
@@ -380,6 +380,17 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   it, unless confirmed. Afterwards those tools fail with "Secret X is not configured for
   host:port", and nothing is sent.
 
+### T18: Taking a server offline
+
+- Anyone who may publish (any signed-in user, with the CSRF token) can disable a server and enable
+  it again; both are audited (`server.disable`, `server.enable`), only when the state changes.
+- Disabled, the gateway answers 404 for every request, exactly as for an unknown server: a valid
+  key, the published version and playground tokens alike. The check is made on every request (and
+  again when the published version loads). Open streams and subscriptions close at once,
+  playground drafts are dropped, and new playground tokens are refused.
+- Nothing is deleted: versions, secrets, keys and call logs stay, and enabling serves the
+  published version again with the same keys. Publishing while disabled does not serve anything.
+
 ### T14: Master key and data at rest (4c; file permissions 4a)
 
 - Secrets are encrypted with AES-256-GCM, a fresh 96-bit IV per write, under a key from
@@ -407,6 +418,10 @@ All 8 findings are fixed. The reviewer's tests are kept in `apps/studio/test/rev
   - an insert over an existing id (`INSERT OR REPLACE`);
   - `DELETE`, unless the server itself is deleted.
 - Audit events: triggers refuse `UPDATE`, `DELETE` and inserts over an existing id.
+- The data directory stays out of git: a directory Studio creates gets a `.gitignore` that
+  ignores everything in it (an existing `.gitignore`, or a directory Studio did not create, is
+  left alone), the repository ignores `.kervan-studio/`, and Studio warns at start when the
+  database is inside a git working tree and tracked or not ignored.
 
 ## Reverse proxies
 

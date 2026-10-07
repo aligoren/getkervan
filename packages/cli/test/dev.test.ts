@@ -241,3 +241,21 @@ describe("preflight", () => {
     else expect(dev.stderr()).not.toMatch(/libuv bug/)
   })
 })
+
+describe("kervan dev without the REPL", () => {
+  it("prints one line per call: tool, duration, outcome; never arguments or results", {
+    timeout: 30_000,
+  }, async () => {
+    const { session } = await setup("modern", [], { KERVAN_TEST_API_KEY: SECRET })
+    await callText(session, "slow", { ms: 5 })
+    await session.client.callTool({ name: "leak", arguments: {} })
+    await expect.poll(() => session.stderr(), POLL).toMatch(/^call leak \d+ ms error$/m)
+    expect(session.stderr()).toMatch(/^call slow \d+ ms ok$/m)
+    const lines = session
+      .stderr()
+      .split("\n")
+      .filter((line) => line.startsWith("call "))
+    expect(lines.join("\n")).not.toContain(SECRET)
+    expect(lines.join("\n")).not.toContain('"ms"')
+  })
+})

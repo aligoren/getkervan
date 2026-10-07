@@ -4,7 +4,7 @@ import * as RadixSelect from "@radix-ui/react-select"
 import * as RadixTabs from "@radix-ui/react-tabs"
 import * as RadixTooltip from "@radix-ui/react-tooltip"
 import { Check, ChevronDown } from "lucide-react"
-import type { ReactNode } from "react"
+import { type ReactNode, useId } from "react"
 import { cn } from "./cn.js"
 import { Scroller } from "./Scroller.js"
 
@@ -127,6 +127,27 @@ export function Tooltip(props: { content: ReactNode; children: ReactNode }) {
         </RadixTooltip.Content>
       </RadixTooltip.Portal>
     </RadixTooltip.Root>
+  )
+}
+
+/**
+ * A disabled control with the reason it is disabled: shown in a tooltip on hover or keyboard
+ * focus, and read to screen readers (a disabled button gets no events, so the wrapper does).
+ */
+export function DisabledReason(props: { reason: string; children: ReactNode }) {
+  const id = useId()
+  return (
+    <RadixTooltip.Provider delayDuration={150}>
+      <Tooltip content={props.reason}>
+        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the reason must be reachable by keyboard */}
+        <span tabIndex={0} aria-describedby={id} className="inline-flex rounded-md">
+          {props.children}
+          <span id={id} className="visually-hidden">
+            {props.reason}
+          </span>
+        </span>
+      </Tooltip>
+    </RadixTooltip.Provider>
   )
 }
 

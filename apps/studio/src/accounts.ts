@@ -106,7 +106,11 @@ export async function setupAdmin(
 }
 
 function invalidSetupToken(): StudioError {
-  return new StudioError("forbidden", "The setup token is invalid or has expired.")
+  return new StudioError(
+    "forbidden",
+    "The setup token is invalid or has expired. Restart Studio: its console prints a new " +
+      "setup token, valid for 30 minutes.",
+  )
 }
 
 /** Adds a user to the workspace (admins only; the API checks the role). */

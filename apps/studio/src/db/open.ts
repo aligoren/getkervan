@@ -6,6 +6,7 @@ import { type BetterSQLite3Database, drizzle } from "drizzle-orm/better-sqlite3"
 import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import { readMigrationFiles } from "drizzle-orm/migrator"
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core"
+import { ignoreNewDataDirectory } from "../data-dir.js"
 import * as schema from "./schema.js"
 
 /** The database or a transaction on it: repositories accept both. */
@@ -93,10 +94,30 @@ export function openDatabase(
   }
 }
 
+/**
+ * How many encrypted secrets an existing database holds, read without changing anything (no
+ * migration, no file created). 0 when there is no database yet or it cannot be read.
+ */
+export function storedSecretCount(file: string): number {
+  if (!existsSync(file)) return 0
+  let sqlite: Database.Database | undefined
+  try {
+    sqlite = new Database(file, { readonly: true, fileMustExist: true })
+    const row = sqlite.prepare("SELECT count(*) AS n FROM secrets").get() as { n: number }
+    return row.n
+  } catch {
+    return 0
+  } finally {
+    sqlite?.close()
+  }
+}
+
 /** Creates the directory and the file with owner-only permissions before SQLite opens them. */
 function prepareFiles(file: string): void {
   const dir = path.dirname(path.resolve(file))
-  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  const created = existsSync(dir) ? undefined : mkdirSync(dir, { recursive: true, mode: 0o700 })
+  // A directory Studio creates is its own: keep it out of git.
+  if (created !== undefined) ignoreNewDataDirectory(dir)
   if (process.platform !== "win32") chmodSync(dir, 0o700)
   // SQLite creates the -wal and -shm files with the database file's permissions.
   closeSync(openSync(file, "a", 0o600))

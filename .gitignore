@@ -9,3 +9,4 @@ coverage/
 !.env.example
 dist-web/
 .playwright-mcp/
+.kervan-studio/

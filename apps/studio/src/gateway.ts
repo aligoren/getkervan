@@ -339,6 +339,7 @@ export class Gateway {
         result: payloadText(vault.redactValue(outcome)),
       }
     }
+    const source = extra?.source === "playground" ? "playground" : "api_key"
     recordCall(this.#options.db, scope, {
       serverId,
       versionId,
@@ -346,6 +347,10 @@ export class Gateway {
       status,
       durationMs,
       ...payloads,
+      source,
+      ...(source === "api_key" && typeof call.ctx.auth?.clientId === "string"
+        ? { apiKeyId: call.ctx.auth.clientId }
+        : {}),
     })
   }
 
@@ -391,6 +396,8 @@ export class Gateway {
       extra: {
         workspaceId: key.scope.workspaceId,
         serverId: key.serverId,
+        // For the call log: the playground, or which API key (its id, never the key).
+        source: key.versionId === undefined ? "api_key" : "playground",
         ...(key.versionId === undefined ? {} : { versionId: key.versionId }),
       },
     }
@@ -409,6 +416,9 @@ export class Gateway {
     if (typeof workspaceId !== "string" || typeof serverId !== "string") return FORBIDDEN
     if (serverId !== params.serverId) return FORBIDDEN
     const scope = workspaceScope(workspaceId)
+    // A disabled server is not served at all: the same 404 as an unknown server.
+    const server = getServer(this.#options.db, scope, serverId)
+    if (!server || server.disabledAt !== null) return null
     const versionId = auth?.extra?.versionId
     if (typeof versionId === "string") return this.#draft(scope, serverId, versionId)
     const key = servedKey(scope, serverId)
@@ -508,7 +518,7 @@ export class Gateway {
     const version =
       server?.publishedVersionId &&
       getVersion(db, served.scope, served.serverId, server.publishedVersionId)
-    if (!server || !version) {
+    if (!server || !version || server.disabledAt !== null) {
       this.remove(served.scope, served.serverId)
       return
     }
@@ -555,9 +565,16 @@ function playgroundCallerId(userId: string): string {
   return `playground:${userId}`
 }
 
+/**
+ * The one answer for a missing, unknown, revoked or other server's key: always the same body, so
+ * it tells nothing about which keys or servers exist, only what to send.
+ */
+export const UNAUTHORIZED_MESSAGE =
+  "Unauthorized. Send a valid API key for this server as 'Authorization: Bearer <key>'."
+
 function unauthorized(): Response {
   return Response.json(
-    { jsonrpc: "2.0", error: { code: -32001, message: "Unauthorized" }, id: null },
+    { jsonrpc: "2.0", error: { code: -32001, message: UNAUTHORIZED_MESSAGE }, id: null },
     { status: 401, headers: { "www-authenticate": 'Bearer realm="kervan-studio"' } },
   )
 }

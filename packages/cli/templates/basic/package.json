@@ -9,8 +9,8 @@
   },
   "scripts": {
     "dev": "kervan dev src/index.ts",
-    "start": "node src/index.ts",
-    "start:http": "node src/index.ts --http",
+    "start": "node check-node.mjs && node src/index.ts",
+    "start:http": "node check-node.mjs && node src/index.ts --http",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

@@ -84,7 +84,7 @@
               "description": "Longest tool output sent to the model; longer output is cut."
             },
             "allowInsecureHttp": {
-              "description": "Allow plain http:// URLs. Off by default: secrets would travel unencrypted.",
+              "description": "Allow plain http:// URLs. Off by default: requests, answers and any secrets would travel unencrypted.",
               "type": "boolean"
             },
             "followRedirects": {

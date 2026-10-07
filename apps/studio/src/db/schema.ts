@@ -73,6 +73,8 @@ export const servers = sqliteTable(
     publishedVersionId: text("published_version_id"),
     /** Opt-in: also log (redacted, truncated) arguments and results of tool calls. */
     logPayloads: integer("log_payloads", { mode: "boolean" }).notNull().default(false),
+    /** Set while the server is disabled: the gateway serves nothing, nothing is deleted. */
+    disabledAt: integer("disabled_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -203,6 +205,9 @@ export const callLogs = sqliteTable(
     /** Only when the server opts in; redacted and size-limited. */
     args: text("args"),
     result: text("result"),
+    /** Who called: the playground, or an API key (its id; never the key). Null before 0007. */
+    source: text("source", { enum: ["playground", "api_key"] }),
+    apiKeyId: text("api_key_id"),
   },
   (t) => [index("call_logs_server_at").on(t.serverId, t.at)],
 )

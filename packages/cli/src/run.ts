@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import { serveHttp, serveStdio } from "@kervan/transport/node"
 import { findProjectRoot, watchProject } from "./dev/watch.js"
+import { portInUseMessage } from "./listen.js"
 import { cliNetworkPolicy, INSECURE_SECRETS_WARNING, loadEnvFiles, SpecHost } from "./spec-host.js"
 
 export interface RunOptions {
@@ -101,11 +102,21 @@ export async function runSpec(options: RunOptions): Promise<number> {
   }
 
   if (options.mode === "http") {
-    const server = await serveHttp(host.app, {
-      port: options.port,
-      host: options.host,
-      ...(options.allowedHosts.length > 0 ? { allowedHosts: options.allowedHosts } : {}),
-    })
+    let server: Awaited<ReturnType<typeof serveHttp>>
+    try {
+      server = await serveHttp(host.app, {
+        port: options.port,
+        host: options.host,
+        ...(options.allowedHosts.length > 0 ? { allowedHosts: options.allowedHosts } : {}),
+      })
+    } catch (error) {
+      for (const close of closers) await close().catch(() => {})
+      await host.close()
+      const busy = portInUseMessage(error, "choose another port with --port")
+      if (!busy) throw error
+      print(`Error: ${busy}`)
+      return 1
+    }
     closers.push(() => server.close())
     print(`Serving ${host.app.name} on ${server.url.href}`)
   } else {

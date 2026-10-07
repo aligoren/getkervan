@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -23,7 +23,9 @@ afterEach(async () => {
 
 const EXPECTED_FILES = [
   ".gitignore",
+  ".npmrc",
   "README.md",
+  "check-node.mjs",
   "package.json",
   "src/app.ts",
   "src/index.ts",
@@ -50,7 +52,10 @@ describe("createProject", () => {
       engines: { node: "^22.18.0 || >=23.6.0" },
       dependencies: { "@kervan/core": "^0.1.0", "@kervan/transport": "^0.1.0" },
       devDependencies: { kervan: "^0.1.0" },
-      scripts: { dev: "kervan dev src/index.ts", start: "node src/index.ts" },
+      scripts: {
+        dev: "kervan dev src/index.ts",
+        start: "node check-node.mjs && node src/index.ts",
+      },
     })
     expect(existsSync(path.join(result.dir, "_gitignore"))).toBe(false)
   })
@@ -174,4 +179,39 @@ describe("command line", () => {
     expect(runBin(bin, ["--version"], parent).stdout.trim()).toBe("0.1.0")
     // Four process starts: slow on a busy Windows machine.
   }, 30_000)
+})
+
+describe("a generated project on an old Node.js", () => {
+  // A Node.js process that reports an older version (process.versions is redefined first).
+  const asNode = (version: string, script: string, cwd: string) =>
+    spawnSync(
+      process.execPath,
+      [
+        "--import",
+        `data:text/javascript,Object.defineProperty(process,"versions",{value:{...process.versions,node:"${version}"}})`,
+        script,
+      ],
+      { cwd, encoding: "utf8" },
+    )
+
+  it("says which version it needs instead of failing on .ts files", async () => {
+    const parent = await tempParent()
+    const result = await createProject({ dir: path.join(parent, "old-node"), install: false })
+    const pkg = JSON.parse(readFileSync(path.join(result.dir, "package.json"), "utf8"))
+    expect(pkg.scripts.start).toBe("node check-node.mjs && node src/index.ts")
+    expect(pkg.scripts["start:http"]).toBe("node check-node.mjs && node src/index.ts --http")
+    // npm refuses to install on an unsupported Node.js, with its own clear message.
+    expect(readFileSync(path.join(result.dir, ".npmrc"), "utf8")).toMatch(/^engine-strict=true$/m)
+    expect(pkg.engines.node).toBe("^22.18.0 || >=23.6.0")
+
+    const old = asNode("22.17.1", "check-node.mjs", result.dir)
+    expect(old.status).toBe(1)
+    expect(old.stderr).toContain(
+      "This project needs Node.js 22.18 or newer (or 23.6+) to run its TypeScript sources; you have 22.17.1. Upgrade Node.js.",
+    )
+    for (const fine of ["22.18.0", "23.6.0", "24.21.0"]) {
+      expect(asNode(fine, "check-node.mjs", result.dir).status, fine).toBe(0)
+    }
+    expect(asNode("23.5.0", "check-node.mjs", result.dir).status).toBe(1)
+  })
 })

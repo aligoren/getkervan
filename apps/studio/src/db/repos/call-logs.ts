@@ -15,6 +15,9 @@ export interface CallRecord {
   /** Present only when the server opted in; already redacted and cut. */
   args?: string | undefined
   result?: string | undefined
+  /** Who called: the playground, or an API key (by id, never the key itself). */
+  source?: "playground" | "api_key" | undefined
+  apiKeyId?: string | undefined
 }
 
 export interface CallLog extends CallRecord {
@@ -34,6 +37,8 @@ export function recordCall(db: Db, scope: WorkspaceScope, record: CallRecord, no
       at: now,
       args: record.args ?? null,
       result: record.result ?? null,
+      source: record.source ?? null,
+      apiKeyId: record.apiKeyId ?? null,
     })
     .run()
 }
@@ -46,10 +51,12 @@ export function listCalls(db: Db, scope: WorkspaceScope, serverId: string, limit
     .orderBy(desc(callLogs.id))
     .limit(Math.min(Math.max(limit, 1), 1000))
     .all()
-    .map(({ workspaceId: _workspaceId, args, result, ...row }) => ({
+    .map(({ workspaceId: _workspaceId, args, result, source, apiKeyId, ...row }) => ({
       ...row,
       args: args ?? undefined,
       result: result ?? undefined,
+      source: source ?? undefined,
+      apiKeyId: apiKeyId ?? undefined,
     }))
 }
 
