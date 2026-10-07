@@ -4,7 +4,11 @@ Turns a declarative `kervan.yaml` file into MCP tools that call HTTP APIs. Every
 to an ordinary `app.tool()` definition, so anything a spec does can also be done in code
 (`httpTool()`).
 
-> **Status:** pre-release. Run specs with `kervan run kervan.yaml` or `kervan dev kervan.yaml`.
+> **Not published yet.** This package is not on npm yet; the install and `npx` commands below
+> work once it is. Until then, build Kervan from source (see the repository README,
+> "Development").
+>
+> Run specs with `kervan run kervan.yaml` or `kervan dev kervan.yaml`.
 
 ```yaml
 # yaml-language-server: $schema=./node_modules/@kervan/spec-runtime/schema/kervan.schema.json
@@ -213,6 +217,13 @@ Add the comment line above to the top of `kervan.yaml`, or map the schema in VS 
 ```json
 { "yaml.schemas": { "./node_modules/@kervan/spec-runtime/schema/kervan.schema.json": "kervan.yaml" } }
 ```
+
+The schema's `$id` is `https://getkervan.dev/schema/v1.json`. It is only a name: the schema ships
+in this package, and loading or validating a spec never goes to the network. Once the website is
+published, the same file will be served at that address, and generated projects and Studio's
+starter spec can point editors at it with
+`# yaml-language-server: $schema=https://getkervan.dev/schema/v1.json`. Until then, use the
+package path above.
 
 ## Known limits
 

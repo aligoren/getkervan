@@ -17,7 +17,8 @@ window.MonacoEnvironment = {
 
 const MODEL_URI = monaco.Uri.parse("file:///kervan.yaml")
 
-// The published editor schema; never fetched from the network.
+// The editor schema bundled from @kervan/spec-runtime; never fetched from the network. Its `$id`
+// is only a name for it here.
 configureMonacoYaml(monaco, {
   enableSchemaRequest: false,
   hover: true,
@@ -26,7 +27,7 @@ configureMonacoYaml(monaco, {
 
   schemas: [
     {
-      uri: "https://kervan.dev/kervan.schema.json",
+      uri: kervanSchema.$id,
       fileMatch: ["kervan.yaml"],
       schema: kervanSchema as never,
     },

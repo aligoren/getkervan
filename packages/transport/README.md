@@ -1,5 +1,9 @@
 # @kervan/transport
 
+> **Not published yet.** This package is not on npm yet; the install and `npx` commands below
+> work once it is. Until then, build Kervan from source (see the repository README,
+> "Development").
+
 Serve a [`@kervan/core`](../core) app over stdio or Streamable HTTP. Both MCP 2026-07-28 clients and
 2025-era clients (up to `2025-11-25`) are served from the same app.
 

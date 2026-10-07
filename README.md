@@ -5,10 +5,15 @@ servers. It is a thin layer over the official SDK (`@modelcontextprotocol/server
 tools, and Kervan handles validation, error masking, timeouts, transports and change
 notifications. Tools can also be declared in a `kervan.yaml` file, without code.
 
-> **Status: 0.1, pre-release.** The API is listed in [docs/API.md](docs/API.md) with its
-> stability; experimental parts may change in any release.
+> **Status: pre-release, not published yet.** No package is on npm and the source repository is
+> not public yet; the first release (0.1) is being prepared. To try Kervan today, build it from
+> source (see [Development](#development)). The API planned for 0.1 is listed in
+> [docs/API.md](docs/API.md) with its stability.
 
 ## Quick start
+
+These commands work once the packages are published to npm. Until then, build from source
+([Development](#development)) and use `node packages/cli/bin/kervan.js` instead of `npx kervan`.
 
 ```sh
 npm create kervan@latest my-server
@@ -42,7 +47,7 @@ app.tool("get_weather", {
 await serve(app) // stdio by default; --http for Streamable HTTP on 127.0.0.1:3000
 ```
 
-The same tool as a spec, served with `npx kervan run kervan.yaml`:
+The same tool as a spec, served with `npx kervan run kervan.yaml` (once published):
 
 ```yaml
 specVersion: 1
@@ -77,7 +82,7 @@ claude mcp add weather -- npx kervan run /absolute/path/to/kervan.yaml
 | [`@kervan/transport`](packages/transport) | stdio and Streamable HTTP on Node, a fetch handler for Workers/Deno/Bun, multi-tenant `resolveServer`, and `createTestClient`. |
 | [`@kervan/spec-runtime`](packages/spec-runtime) | `kervan.yaml` specs: HTTP tools with templates, JMESPath output selection, SSRF protection and secret redaction. |
 | [`kervan`](packages/cli) | The CLI: `kervan create`, `kervan dev` (hot reload, REPL), `kervan run`. |
-| [`create-kervan`](packages/create-kervan) | `npm create kervan`. |
+| [`create-kervan`](packages/create-kervan) | `npm create kervan` (once published). |
 
 Examples: [`weather`](examples/weather) (code), [`spec`](examples/spec) (`kervan.yaml`),
 [`dynamic`](examples/dynamic) (runtime changes and multi-tenancy).
@@ -108,7 +113,9 @@ addresses refused), context-aware template escaping, secret redaction in every r
 log line, response size and type limits, and per-tool rate limits.
 
 The security model, its known limits, and how to report a vulnerability are in
-[SECURITY.md](SECURITY.md).
+[SECURITY.md](SECURITY.md). Report vulnerabilities privately, through GitHub's private
+vulnerability reporting or [security@getkervan.dev](mailto:security@getkervan.dev), never in a
+public issue.
 
 ## Compatibility
 
@@ -136,7 +143,7 @@ ecosystem moves quickly.
 
 ## Development
 
-Requires Node 22.18+ and pnpm.
+Requires Node 22.18+ and pnpm. This is also how to use Kervan before it is published.
 
 ```sh
 pnpm install
@@ -146,9 +153,21 @@ pnpm lint         # Biome
 pnpm typecheck    # sources and tests
 pnpm check:pack   # publint + are-the-types-wrong
 pnpm e2e          # build, then Studio's Playwright tests (opt-in; needs Chromium)
+pnpm site:schema  # copy the editor schema to site/schema/v1.json
+pnpm check:site   # website date checks (security.txt expiry), kept out of pnpm test
 ```
 
 `prepublishOnly` blocks publishing unless `KERVAN_ALLOW_PUBLISH=1` is set.
+
+## Contact
+
+- Questions and feedback: [hello@getkervan.dev](mailto:hello@getkervan.dev)
+- Security reports: [security@getkervan.dev](mailto:security@getkervan.dev) (see
+  [SECURITY.md](SECURITY.md))
+
+The website, [getkervan.dev](https://getkervan.dev), is a static page in [`site/`](site); see
+[docs/DEPLOY-SITE.md](docs/DEPLOY-SITE.md). Kervan itself never contacts it: no telemetry, no
+update checks, no remote schemas.
 
 ## License
 

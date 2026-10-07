@@ -23,6 +23,8 @@ export default defineConfig({
           setupFiles: ["test/setup.ts"],
         },
       },
+      // Repository-wide checks (the website, where the domain may appear).
+      { test: { name: "repo", root: "scripts", include: ["test/**/*.test.ts"] } },
       {
         test: { name: "example-weather", root: "examples/weather", include: ["test/**/*.test.ts"] },
       },

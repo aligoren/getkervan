@@ -1,0 +1,66 @@
+// The project's domain is for people (docs, contact details, the website) and for naming the editor
+// schema. Code never talks to it: no telemetry, no update checks, no remote schemas. This test keeps
+// the domain out of every place it could turn into a network request.
+import { readdirSync, readFileSync, statSync } from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { describe, expect, it } from "vitest"
+
+const DOMAIN = "getkervan.dev"
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
+const SKIP = new Set(["node_modules", ".git", "dist", "dist-web", "coverage", ".playwright-mcp"])
+
+function files(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    if (SKIP.has(name)) return []
+    const full = path.join(dir, name)
+    const stat = statSync(full)
+    if (stat.isDirectory()) return files(full)
+    return stat.size < 4_000_000 ? [full] : []
+  })
+}
+
+const mentions = files(root)
+  .map((file) => ({ file: path.relative(root, file).split(path.sep).join("/"), text: "" }))
+  .map((entry) => ({ ...entry, text: readFileSync(path.join(root, entry.file), "utf8") }))
+  .filter((entry) => !entry.text.includes("\u0000") && entry.text.includes(DOMAIN))
+
+/** Where the domain may appear, and (for the schema) on which line. */
+function allowed(file: string, text: string): boolean {
+  if (file === "scripts/test/domain.test.ts") return true
+  if (file.endsWith(".md")) return true
+  if (file.startsWith("site/")) return true
+  if (file === "packages/spec-runtime/scripts/schema-id.mjs") return true
+  if (file.endsWith("package.json")) return true
+  if (file === "packages/spec-runtime/schema/kervan.schema.json") {
+    // Only as the schema's `$id`.
+    return text
+      .split("\n")
+      .filter((line) => line.includes(DOMAIN))
+      .every((line) => /^\s*"\$id": "https:\/\/getkervan\.dev\/schema\/v1\.json",$/.test(line))
+  }
+  return false
+}
+
+describe(`the ${DOMAIN} domain`, () => {
+  it("is found by this test where it is expected (the check is not blind)", () => {
+    const found = mentions.map((entry) => entry.file)
+    expect(found).toEqual(
+      expect.arrayContaining([
+        "SECURITY.md",
+        "site/.well-known/security.txt",
+        "packages/spec-runtime/schema/kervan.schema.json",
+      ]),
+    )
+  })
+
+  it("appears only in docs, the website, contact details and the schema's id", () => {
+    const outside = mentions.filter((entry) => !allowed(entry.file, entry.text))
+    expect(outside.map((entry) => entry.file)).toEqual([])
+  })
+
+  it("never appears in source code (no requests to it at run time)", () => {
+    const inSource = mentions.filter((entry) => /(^|\/)src\//.test(entry.file))
+    expect(inSource.map((entry) => entry.file)).toEqual([])
+  })
+})

@@ -18,6 +18,7 @@
     "apps/*/playwright.config.ts",
     "examples/*/test",
     "examples/*/src",
+    "scripts/test",
     "vitest.config.ts"
   ]
 }

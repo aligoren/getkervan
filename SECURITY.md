@@ -2,33 +2,52 @@
 
 ## Supported versions
 
-Kervan is in its 0.x series. Security fixes go into the latest 0.x release only.
+Kervan has not been released yet. Until the first release (0.1), reports are about the `main`
+branch. After it, security fixes go into the latest 0.x release only. This covers the framework
+packages (`@kervan/core`, `@kervan/transport`, `@kervan/spec-runtime`, `kervan`, `create-kervan`)
+and Kervan Studio.
 
 | Version | Supported |
 | --- | --- |
-| 0.1.x (latest) | Yes |
-| Older | No |
+| `main` (unreleased) | Yes |
+| Released versions | None yet |
 
 ## Reporting a vulnerability
 
-**Please do not open a public issue for a security problem.**
+**Please do not open a public issue, discussion or pull request for a security problem.**
 
-Report it privately through GitHub's private vulnerability reporting: open the repository's
-**Security** tab and choose **Report a vulnerability**.
-<!-- MAINTAINER: until the repository is public, add a private contact address here. -->
+1. **Preferred: GitHub private vulnerability reporting.** On the Kervan repository, open the
+   **Security** tab and choose **Report a vulnerability**. The report stays private between you
+   and the maintainers, and becomes the draft of the security advisory.
+2. **Or by email:** [security@getkervan.dev](mailto:security@getkervan.dev). Use it if you cannot
+   use GitHub, or for anything that does not fit the form.
 
 Please include:
 
-- the affected package(s) and version(s), and your Node.js version and OS;
-- what an attacker can do, and under which assumptions (who controls the spec, the client, the
-  upstream API, the network);
-- a minimal reproduction: a spec, a tool definition or a test is ideal;
+- the affected package(s) or Studio, their version(s), and your Node.js version and OS;
+- the steps to reproduce it: a spec, a tool definition, a request or a failing test is ideal;
+- the impact: what an attacker can do, and under which assumptions (who controls the spec, the
+  client, the upstream API, the network);
 - whether you plan to disclose it, and when.
 
-What to expect: we aim to acknowledge a report within 3 working days, to confirm or rule out the
-issue within 10 working days, and to release a fix for confirmed issues as soon as it is ready,
-with a security advisory that credits you unless you ask us not to. We will keep you informed
-along the way. Please give us a reasonable time to fix the issue before disclosing it.
+**Never send real credentials.** Reproductions, tests, examples and logs must use made-up
+values: no real API keys, Studio `kvn_` keys, tokens, passwords or master keys. If a real one
+was exposed while you investigated, revoke it first.
+
+### What happens next
+
+- **Acknowledgement within 5 working days.**
+- **Assessment:** we confirm or rule out the issue, agree on its severity with you, and keep you
+  updated at least every 10 working days until it is resolved.
+- **Fix and advisory:** a fixed release and a GitHub security advisory, crediting you unless you
+  ask us not to.
+
+### Coordinated disclosure
+
+We ask you to keep the details private until a fix is released, or for **90 days** from your
+report, whichever comes first. If a fix needs longer, we will explain why and agree on a new date
+with you. If the issue is being actively exploited, we may publish an advisory sooner, together
+with you.
 
 ## Security model
 

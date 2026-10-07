@@ -11,3 +11,7 @@ allowBuilds:
   better-sqlite3: true
   # drizzle-kit (development only) works without esbuild's install check.
   esbuild: false
+overrides:
+  # drizzle-kit (development only) reaches esbuild 0.18 through @esbuild-kit/core-utils, which is
+  # affected by GHSA-67mh-4wv8-2f99 (fixed in 0.25.0). The esbuild API it uses is unchanged.
+  '@esbuild-kit/core-utils>esbuild': 0.25.12

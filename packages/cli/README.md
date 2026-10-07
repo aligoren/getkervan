@@ -1,5 +1,9 @@
 # kervan
 
+> **Not published yet.** This package is not on npm yet; the install and `npx` commands below
+> work once it is. Until then, build Kervan from source (see the repository README,
+> "Development").
+
 Command line tools for [Kervan](../../README.md) MCP servers.
 
 ```sh

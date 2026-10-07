@@ -1,6 +1,6 @@
 # {{name}}
 
-An MCP server built with [Kervan](https://www.npmjs.com/package/kervan).
+An MCP server built with Kervan.
 
 ```sh
 npm run dev        # hot reload + terminal inspector

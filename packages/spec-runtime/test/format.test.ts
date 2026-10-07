@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs"
-import { describe, expect, it } from "vitest"
+import http from "node:http"
+import https from "node:https"
+import { describe, expect, it, vi } from "vitest"
+import { SCHEMA_ID } from "../scripts/schema-id.mjs"
 import { loadSpec, SpecLoadError, specJsonSchema } from "../src/index.js"
 
 const noSecrets = { get: () => undefined }
@@ -188,10 +191,46 @@ describe("secrets at load time", () => {
 
 describe("published JSON Schema", () => {
   it("is up to date with the spec schema (run `pnpm --filter @kervan/spec-runtime gen:schema`)", () => {
-    const committed = JSON.parse(
+    const { $id, ...committed } = JSON.parse(
       readFileSync(new URL("../schema/kervan.schema.json", import.meta.url), "utf8"),
     )
     expect(committed).toEqual(specJsonSchema())
+    // Its public name; editors use it as an identifier, nothing fetches it.
+    expect($id).toBe(SCHEMA_ID)
+  })
+
+  it("validates offline: the schema ships in the package and nothing is fetched", async () => {
+    const fetched = vi.fn(() => Promise.reject(new Error("no network in this test")))
+    vi.stubGlobal("fetch", fetched)
+    const httpsRequest = vi.spyOn(https, "request")
+    const httpsGet = vi.spyOn(https, "get")
+    const httpRequest = vi.spyOn(http, "request")
+    try {
+      // A spec that names the schema by its public id still loads, without going to the network.
+      const loaded = await loadSpec(
+        `$schema: ${SCHEMA_ID}\nspecVersion: 1\nname: offline\nversion: 0.1.0\ntools:${tool()}`,
+        { secrets: noSecrets },
+      )
+      expect(loaded.tools.map((t) => t.name)).toEqual(["list_items"])
+      await expect(
+        loadSpec(`$schema: ${SCHEMA_ID}\nspecVersion: 2\nname: offline\ntools: []\n`, {
+          secrets: noSecrets,
+        }),
+      ).rejects.toBeInstanceOf(SpecLoadError)
+      expect(fetched).not.toHaveBeenCalled()
+      expect(httpsRequest).not.toHaveBeenCalled()
+      expect(httpsGet).not.toHaveBeenCalled()
+      expect(httpRequest).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    }
+  })
+
+  it("is in the package, at the path editors and Studio import", () => {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
+    expect(pkg.exports["./schema/kervan.schema.json"]).toBe("./schema/kervan.schema.json")
+    expect(pkg.files).toContain("schema")
   })
 
   it("describes the fields an editor completes", () => {
