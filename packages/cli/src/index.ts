@@ -40,7 +40,7 @@ Commands:
     --allow-private-network  Specs only: let tools reach private and loopback addresses
     --allow-insecure-secrets Specs only: let tools send secrets over plain http
     --deny-network <cidr>    Specs only: an address or range tools may never reach (repeatable)
-  studio <cmd>   Run a Kervan Studio command (start, reset-admin) if Studio is installed
+  studio <cmd>   Run a Kervan Studio command (start, create-admin, reset-admin) if installed
   run <spec>     Serve a kervan.yaml spec
     --http               Serve Streamable HTTP instead of stdio
     --port <port>        HTTP port (default 3000)
