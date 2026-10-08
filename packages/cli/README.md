@@ -11,6 +11,9 @@ npx kervan create my-server          # or: npm create kervan@latest my-server
 cd my-server && npm run dev
 ```
 
+`kervan --help` lists every command; `kervan <command> --help` (`kervan run --help`) shows one
+command's options.
+
 ## `kervan create <dir>`
 
 Creates a project from the `basic` template: an app with two tools, a test using

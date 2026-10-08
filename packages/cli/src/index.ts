@@ -22,40 +22,85 @@ export {
 } from "./create.js"
 export type { RuntimeInfo } from "./node-version.js"
 
+/** Each command's usage, summary and option lines: the source of both help texts. */
+const COMMANDS = {
+  create: {
+    usage: "create <dir>",
+    summary: "Create a new Kervan MCP server project",
+    options: [
+      "--name <name>        Package name (default: the directory name)",
+      "--pm <manager>       npm, pnpm, yarn or bun (default: the one running this command, else npm)",
+      "--no-install         Skip installing dependencies",
+    ],
+  },
+  dev: {
+    usage: "dev <entry>",
+    summary: "Run a server (a .ts/.js entry or a kervan.yaml spec) with hot reload",
+    options: [
+      "--http               Serve on http://127.0.0.1:<port>/mcp with a REPL (default in a terminal)",
+      "--stdio              Serve on stdin/stdout (default when started by an MCP client)",
+      "--port <port>        HTTP port (default 3000)",
+      "--drain-timeout <ms> How long a reload waits for running calls (default 10000)",
+      "--repl / --no-repl   Force the terminal inspector on or off",
+      "--no-watch           Do not restart on file changes",
+      "--env-file <path>    Load environment variables (repeatable; set variables win)",
+      "--allow-private-network  Specs only: let tools reach private and loopback addresses",
+      "--allow-insecure-secrets Specs only: let tools send secrets over plain http",
+      "--deny-network <cidr>    Specs only: an address or range tools may never reach (repeatable)",
+    ],
+  },
+  studio: {
+    usage: "studio <cmd>",
+    summary: "Run a Kervan Studio command (start, create-admin, reset-admin) if installed",
+    options: [],
+  },
+  run: {
+    usage: "run <spec>",
+    summary: "Serve a kervan.yaml spec",
+    options: [
+      "--http               Serve Streamable HTTP instead of stdio",
+      "--port <port>        HTTP port (default 3000)",
+      "--host <host>        HTTP bind address (default 127.0.0.1)",
+      "--allowed-host <h>   Host name clients use (repeatable; required off localhost)",
+      "--env-file <path>    Load environment variables (repeatable; set variables win)",
+      "--watch              Reload the spec when it changes",
+      "--allow-private-network  Let tools reach private addresses (refused in production)",
+      "--allow-insecure-secrets Let tools send secrets over plain http (refused in production)",
+      "--deny-network <cidr>    An address or range tools may never reach (repeatable)",
+    ],
+  },
+} as const
+
+type CommandName = keyof typeof COMMANDS
+
 const HELP = `Usage: kervan <command> [options]
 
 Commands:
-  create <dir>   Create a new Kervan MCP server project
-    --name <name>        Package name (default: the directory name)
-    --pm <manager>       npm, pnpm, yarn or bun (default: the one running this command, else npm)
-    --no-install         Skip installing dependencies
-  dev <entry>    Run a server (a .ts/.js entry or a kervan.yaml spec) with hot reload
-    --http               Serve on http://127.0.0.1:<port>/mcp with a REPL (default in a terminal)
-    --stdio              Serve on stdin/stdout (default when started by an MCP client)
-    --port <port>        HTTP port (default 3000)
-    --drain-timeout <ms> How long a reload waits for running calls (default 10000)
-    --repl / --no-repl   Force the terminal inspector on or off
-    --no-watch           Do not restart on file changes
-    --env-file <path>    Load environment variables (repeatable; set variables win)
-    --allow-private-network  Specs only: let tools reach private and loopback addresses
-    --allow-insecure-secrets Specs only: let tools send secrets over plain http
-    --deny-network <cidr>    Specs only: an address or range tools may never reach (repeatable)
-  studio <cmd>   Run a Kervan Studio command (start, create-admin, reset-admin) if installed
-  run <spec>     Serve a kervan.yaml spec
-    --http               Serve Streamable HTTP instead of stdio
-    --port <port>        HTTP port (default 3000)
-    --host <host>        HTTP bind address (default 127.0.0.1)
-    --allowed-host <h>   Host name clients use (repeatable; required off localhost)
-    --env-file <path>    Load environment variables (repeatable; set variables win)
-    --watch              Reload the spec when it changes
-    --allow-private-network  Let tools reach private addresses (refused in production)
-    --allow-insecure-secrets Let tools send secrets over plain http (refused in production)
-    --deny-network <cidr>    An address or range tools may never reach (repeatable)
+${Object.values(COMMANDS)
+  .map((command) =>
+    [
+      `  ${command.usage.padEnd(15)}${command.summary}`,
+      ...command.options.map((line) => `    ${line}`),
+    ].join("\n"),
+  )
+  .join("\n")}
 
 Options:
   -h, --help     Show this help
   -v, --version  Show the version
 `
+
+/** `kervan <command> --help`: one command's usage and options. */
+function commandHelp(name: Exclude<CommandName, "studio">): string {
+  const command = COMMANDS[name]
+  return `Usage: kervan ${command.usage} [options]
+
+${command.summary}.
+
+Options:
+${[...command.options, "-h, --help           Show this help"].map((line) => `  ${line}`).join("\n")}
+`
+}
 
 export interface RunIo {
   out: (line: string) => void
@@ -81,6 +126,14 @@ export async function run(argv: string[], io: RunIo = defaultIo): Promise<number
   }
   if (command === "-v" || command === "--version") {
     io.out(cliVersion())
+    return 0
+  }
+  // Help for one command, before any check: `kervan run --help` (Studio's commands have their own).
+  if (
+    (command === "dev" || command === "run" || command === "create") &&
+    rest.some((arg) => arg === "--help" || arg === "-h")
+  ) {
+    io.out(commandHelp(command))
     return 0
   }
   try {
