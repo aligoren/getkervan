@@ -71,7 +71,92 @@ export function siteParams(toml) {
     if (raw === "true" || raw === "false") return raw === "true"
     return raw.replace(/^"|"$/g, "")
   }
-  return { baseURL: value("baseURL"), published: value("published"), repoURL: value("repoURL") }
+  return {
+    baseURL: value("baseURL"),
+    published: value("published"),
+    repoURL: value("repoURL"),
+    npmTag: value("npmTag"),
+  }
+}
+
+/** The npm packages the site's install commands name. */
+export const NPM_PACKAGES = [
+  "@kervan/core",
+  "@kervan/transport",
+  "@kervan/spec-runtime",
+  "kervan",
+  "create-kervan",
+]
+
+/** A Kervan package named in an npm command, with its `@version` or `@tag` if any. */
+const PACKAGE_SPEC = /(?<=^|\s)(@kervan\/[a-z-]+|create-kervan|kervan)(@[^\s]+)?(?=\s|$)/g
+
+/**
+ * With the packages published, every npm command on the site names the dist-tag the release is
+ * under (`params.npmTag`): `npm create kervan@next`, `npx kervan@next run`, `npm install
+ * @kervan/core@next`. Under a pre-release tag a bare name would ask for `latest`. Under `latest`
+ * the tag may be left out.
+ */
+export function npmCommandProblems(code, params) {
+  if (params.published !== true) return []
+  const tag = params.npmTag
+  if (typeof tag !== "string" || tag === "") return ["params.npmTag is not set."]
+  const problems = []
+  for (const line of code.split("\n")) {
+    if (!NPM_COMMANDS.test(line)) continue
+    for (const [, name, version] of line.matchAll(PACKAGE_SPEC)) {
+      const ok = version === `@${tag}` || (tag === "latest" && version === undefined)
+      if (!ok) problems.push(`${name}${version ?? ""} should be ${name}@${tag}: ${line.trim()}`)
+    }
+  }
+  return problems
+}
+
+/**
+ * With the packages published, the registry must have each of them under `params.npmTag`;
+ * otherwise the site would show install commands that fail (a post-publish change merged before
+ * the release). `answers` maps a package name to its registry document (`dist-tags`), or to
+ * undefined when the registry does not know it, or to an Error when it could not be asked.
+ */
+export function registryProblems(params, answers) {
+  const errors = []
+  const warnings = []
+  if (params.published !== true) return { errors, warnings }
+  for (const name of NPM_PACKAGES) {
+    const answer = answers.get(name)
+    if (answer instanceof Error) {
+      warnings.push(`Could not ask the npm registry about ${name} (${answer.message}).`)
+    } else if (!answer?.["dist-tags"]?.[params.npmTag]) {
+      errors.push(
+        `params.published is true, but ${name} has no "${params.npmTag}" dist-tag on npm: publish first, or set published back to false.`,
+      )
+    }
+  }
+  return { errors, warnings }
+}
+
+/** The registry's document for each package (no versions downloaded), for `registryProblems`. */
+async function askRegistry(names) {
+  const answers = new Map()
+  for (const name of names) {
+    try {
+      const response = await fetch(`https://registry.npmjs.org/${name.replace("/", "%2f")}`, {
+        headers: { accept: "application/vnd.npm.install-v1+json" },
+        signal: AbortSignal.timeout(15_000),
+      })
+      answers.set(
+        name,
+        response.status === 404
+          ? undefined
+          : response.ok
+            ? await response.json()
+            : new Error(`HTTP ${response.status}`),
+      )
+    } catch (error) {
+      answers.set(name, error instanceof Error ? error : new Error(String(error)))
+    }
+  }
+  return answers
 }
 
 export const REPO_PLACEHOLDER = "REPLACE-WITH-ORG"
@@ -510,6 +595,11 @@ export function checkBuild(view, params, options = {}) {
         `${where}: shows an npm command (${NPM_COMMANDS.exec(code)?.[0]}) while params.published is false.`,
       )
     }
+    for (const problem of npmCommandProblems(
+      [...main.matchAll(/<pre[\s\S]*?<\/pre>/g)].map((block) => textOf(block[0])).join("\n"),
+      params,
+    ))
+      errors.push(`${where}: ${problem}`)
     if (html.includes(REPO_PLACEHOLDER)) placeholderPages.push(where)
 
     // The framework book does not mention the optional web UI, but for one line.
@@ -826,7 +916,7 @@ export function checkBuild(view, params, options = {}) {
   return { errors, warnings }
 }
 
-function main() {
+async function main() {
   const read = (file) => readFileSync(path.join(root, file), "utf8")
   const strict = process.argv.includes("--strict")
   const dirArg = process.argv.indexOf("--dir")
@@ -846,6 +936,12 @@ function main() {
   const config = checkConfig(params)
   errors.push(...config.errors)
   warnings.push(...config.warnings)
+  // Only once published: then the npm commands must work, so the registry is asked.
+  if (params.published === true) {
+    const registry = registryProblems(params, await askRegistry(NPM_PACKAGES))
+    errors.push(...registry.errors)
+    warnings.push(...registry.warnings)
+  }
   if (existsSync(path.join(dir, "index.html"))) {
     const built = checkBuild(siteView(dir), params, {
       exampleSpec: read("examples/spec/kervan.yaml"),
@@ -864,4 +960,9 @@ function main() {
   console.log(warnings.length > 0 ? "check:site passed with warnings." : "check:site passed.")
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(`error: ${error.message}`)
+    process.exit(1)
+  })
+}

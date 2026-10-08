@@ -668,6 +668,12 @@ run("each check:site rule catches its problem", () => {
     expect(newErrors({ "changelog/index.html": withNpm }, { published: false })).toEqual([
       expect.stringContaining("shows an npm command (npm create kervan"),
     ])
-    expect(newErrors({ "changelog/index.html": withNpm }, { published: true })).toEqual([])
+    // Published under a release candidate's tag (hugo.toml's npmTag, "next"): the command must
+    // name that tag, or it would install `latest`.
+    expect(newErrors({ "changelog/index.html": withNpm }, { published: true })).toEqual([
+      expect.stringContaining("kervan@latest should be kervan@next"),
+    ])
+    const withTag = withNpm.replace("kervan@latest", "kervan@next")
+    expect(newErrors({ "changelog/index.html": withTag }, { published: true })).toEqual([])
   })
 })

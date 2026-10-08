@@ -17,9 +17,16 @@ export interface SiteParams {
   baseURL?: string
   published?: boolean
   repoURL?: string
+  npmTag?: string
   [key: string]: unknown
 }
 export declare function siteParams(toml: string): SiteParams
+export declare const NPM_PACKAGES: string[]
+export declare function npmCommandProblems(code: string, params: SiteParams): string[]
+export declare function registryProblems(
+  params: SiteParams,
+  answers: Map<string, unknown>,
+): { errors: string[]; warnings: string[] }
 export declare function siteView(dir: string, overrides?: Record<string, string | null>): SiteView
 export declare function checkBuild(
   view: SiteView,

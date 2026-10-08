@@ -212,7 +212,14 @@ book never mentions Studio except the one line pointing to its docs, and each of
 `examples/calculator/src/calculator.ts` unchanged, no Studio screenshot in its first screen (the
 hero) and at most two Studio screenshots in all.
 
-An npm install command in a code block while `params.published` is false is an error.
+An npm install command in a code block while `params.published` is false is an error. Once it is
+true, every npm command that names a Kervan package must name `params.npmTag` too
+(`npm create kervan@next`, `npx kervan@next`, `npm install @kervan/core@next`); under `latest`
+the tag may be left out. And `check:site` then asks the npm registry (`registry.npmjs.org`, the
+abbreviated package document only) whether each of the five packages has that dist-tag: a missing
+package is an error, an unreachable registry a warning (an error with `--strict`). This keeps a
+post-publish change that is merged before the release from deploying install commands that fail.
+It is the only network request `check:site` makes, and only while `published` is true.
 
 Warnings (they fail with `--strict`, which the Cloudflare Pages build and release day use; CI runs
 without it, so the repository can be pushed before its URL is set): `params.repoURL` is still the
@@ -239,13 +246,15 @@ in the browser with the old gallery).
 
 ## Before the release, and on release day
 
-`site/hugo.toml` has two switches:
+`site/hugo.toml` has three switches:
 
 - `params.published = false`: install steps are from source (`pnpm try:new`), commands use
   `node .../kervan.js`, the changelog says 0.1 is in preparation. When the packages are on npm,
-  set it to `true`: the `install` and `connect-command` shortcodes switch to `npm create
-  kervan@latest` and `npx kervan`. Then search the content for `check="source"` and `check="clone"`
-  blocks that should become `published`.
+  set it to `true` (the `post-publish/<version>` branch, merged after the release): the `install`
+  and `connect-command` shortcodes switch to `npm create kervan@<npmTag>` and `npx
+  kervan@<npmTag>`, and included READMEs get the tag too.
+- `params.npmTag`: the dist-tag those commands name: `next` for a release candidate, `latest`
+  from 0.1.0 (then the landing page and footer stop calling it a release candidate).
 - `params.repoURL`: a placeholder until the repository exists. Every "View source" link and every
   included README link uses it.
 

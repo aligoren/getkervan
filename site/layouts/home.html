@@ -12,7 +12,7 @@
 {{- $code := $ts.Content | replaceRE "\r\n" "\n" -}}
 <section class="hero" aria-labelledby="hero-title">
   <div class="wrap">
-    <span class="eyebrow">Open source &middot; MIT &middot; pre-release</span>
+    <span class="eyebrow">Open source &middot; MIT &middot; {{ if not site.Params.published }}pre-release{{ else if ne site.Params.npmTag "latest" }}release candidate{{ else }}version 0.1{{ end }}</span>
     <h1 id="hero-title">MCP servers from a YAML spec, or from TypeScript</h1>
     <p class="lead">Kervan is a framework for <a href="/guides/what-is-mcp/">Model Context Protocol</a> servers. Describe HTTP tools in a <code>kervan.yaml</code> file and serve them with one command, or write tools in TypeScript on the official MCP SDK. Both kinds of tool get validated arguments, masked errors and a timeout on every call; spec tools add SSRF protection, secret redaction and rate limits.</p>
     <div class="actions">
@@ -21,6 +21,8 @@
     </div>
     {{- if not site.Params.published }}
     <p class="note">Kervan is not on npm yet: the quickstart builds it from source. Version 0.1 is in preparation.</p>
+    {{- else if ne site.Params.npmTag "latest" }}
+    <p class="note">Version 0.1 is a release candidate on npm, under the <code>{{ site.Params.npmTag }}</code> tag.</p>
     {{- end }}
   </div>
 </section>

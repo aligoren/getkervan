@@ -38,6 +38,6 @@
         </ul>
       </div>
     </div>
-    <p class="fine">Kervan is open source under the MIT license. It is in development and not published yet. Kervan is not affiliated with Anthropic or the Model Context Protocol project.</p>
+    <p class="fine">Kervan is open source under the MIT license. {{ if not site.Params.published }}It is in development and not published yet.{{ else if ne site.Params.npmTag "latest" }}Version 0.1 is a release candidate.{{ end }} Kervan is not affiliated with Anthropic or the Model Context Protocol project.</p>
   </div>
 </footer>

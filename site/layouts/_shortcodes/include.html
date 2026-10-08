@@ -74,6 +74,10 @@
 {{- /* Before the packages are on npm, `npx kervan` cannot work: show the from-source command. */ -}}
 {{- if not site.Params.published -}}
   {{- $md = replace $md "npx kervan " "node /path/to/kervan/packages/cli/bin/kervan.js " -}}
+{{- else if ne site.Params.npmTag "latest" -}}
+  {{- /* A release candidate is under its own tag: a bare name or @latest would miss it. */ -}}
+  {{- $md = replace $md "npx kervan " (printf "npx kervan@%s " site.Params.npmTag) -}}
+  {{- $md = replace $md "kervan@latest" (printf "kervan@%s" site.Params.npmTag) -}}
 {{- end -}}
 {{- /* Relative links to repository files: to the source repository. */ -}}
 {{- $dir := path.Dir $file -}}

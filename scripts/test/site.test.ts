@@ -2,7 +2,15 @@
 // shares with Studio, the Hugo version pin, and check:site's date logic.
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { checkSecurityTxt, exitCode, securityTxtFields } from "../check-site.mjs"
+import {
+  checkSecurityTxt,
+  exitCode,
+  NPM_PACKAGES,
+  npmCommandProblems,
+  registryProblems,
+  securityTxtFields,
+  siteParams,
+} from "../check-site.mjs"
 import { hugoProblem, parseHugoVersion, pinnedHugoVersion } from "../site/build.mjs"
 
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8")
@@ -112,5 +120,104 @@ describe("check:site's dates", () => {
     expect([exitCode(none, true), exitCode(warned, true), exitCode(failed, true)]).toEqual([
       0, 1, 1,
     ])
+  })
+})
+
+describe("the published flag's npm commands", () => {
+  const published = { published: true, npmTag: "next" }
+
+  it("are left alone before the release (another rule refuses them then)", () => {
+    expect(npmCommandProblems("npm create kervan@latest my-server", { published: false })).toEqual(
+      [],
+    )
+  })
+
+  it("name the release's dist-tag on every Kervan package", () => {
+    const good = [
+      "npm create kervan@next my-server",
+      "cd my-server",
+      "npm install @kervan/core@next @kervan/transport@next",
+      "npm install --save-dev kervan@next",
+      "npx kervan@next run kervan.yaml --http",
+      "claude mcp add open-meteo -- npx kervan@next run /absolute/path/to/kervan.yaml",
+    ].join("\n")
+    expect(npmCommandProblems(good, published)).toEqual([])
+  })
+
+  it.each([
+    ["npm create kervan@latest my-server", "kervan@latest"],
+    ["npm create kervan my-server", "kervan"],
+    ["npx kervan run kervan.yaml", "kervan"],
+    ["npm install @kervan/core@next @kervan/transport", "@kervan/transport"],
+    ["npm i -D kervan@0.1.0", "kervan@0.1.0"],
+  ])("refuse %j", (code, spec) => {
+    expect(npmCommandProblems(code, published)).toEqual([
+      expect.stringMatching(new RegExp(`^${spec.replace(/[.@/]/g, "$&")} should be`)),
+    ])
+  })
+
+  it("may leave the tag out under latest", () => {
+    const latest = { published: true, npmTag: "latest" }
+    expect(
+      npmCommandProblems("npm create kervan my-server\nnpx kervan@latest run x", latest),
+    ).toEqual([])
+    expect(npmCommandProblems("npm create kervan@next my-server", latest)).toHaveLength(1)
+  })
+
+  it("is the tag hugo.toml names", () => {
+    expect(siteParams(read("site/hugo.toml")).npmTag).toMatch(/^[a-z][a-z0-9-]*$/)
+  })
+})
+
+describe("the registry, once published", () => {
+  const tagged = (tag: string) => ({ "dist-tags": { [tag]: "0.1.0-rc.1" } })
+  const answers = (each: (name: string) => unknown) =>
+    new Map(NPM_PACKAGES.map((name) => [name, each(name)]))
+  const params = { published: true, npmTag: "next" }
+
+  it("is not asked before the release", () => {
+    expect(registryProblems({ published: false, npmTag: "next" }, new Map())).toEqual({
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it("has every package under the tag", () => {
+    expect(
+      registryProblems(
+        params,
+        answers(() => tagged("next")),
+      ),
+    ).toEqual({
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it("fails when a package is missing or not under the tag (merged before the release)", () => {
+    const result = registryProblems(
+      params,
+      answers((name) =>
+        name === "kervan"
+          ? undefined
+          : name === "create-kervan"
+            ? tagged("latest")
+            : tagged("next"),
+      ),
+    )
+    expect(result.errors).toEqual([
+      expect.stringContaining('kervan has no "next" dist-tag'),
+      expect.stringContaining('create-kervan has no "next" dist-tag'),
+    ])
+  })
+
+  it("warns, not passes, when the registry cannot be asked (--strict fails on it)", () => {
+    const result = registryProblems(
+      params,
+      answers(() => new Error("offline")),
+    )
+    expect(result.errors).toEqual([])
+    expect(result.warnings).toHaveLength(NPM_PACKAGES.length)
+    expect(exitCode(result, true)).toBe(1)
   })
 })
