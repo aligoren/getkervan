@@ -314,10 +314,10 @@ describe("the Node.js version", () => {
       "garbage",
     ]) {
       expect(nodeVersionProblem(version), version).toMatch(
-        /needs Node\.js 22\.17\.1 or a later 22\.x, or 24\.15\.0 or later/,
+        /needs Node\.js 22\.23\.3 or a later 22\.x, or 24\.15\.0 or later/,
       )
     }
-    for (const version of ["22.17.1", "22.23.3", "v24.15.0", "24.21.0", "25.0.0", "26.2.1"]) {
+    for (const version of ["22.23.3", "22.24.0", "v24.15.0", "24.21.0", "25.0.0", "26.2.1"]) {
       expect(nodeVersionProblem(version), version).toBeUndefined()
     }
   })

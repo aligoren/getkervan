@@ -5,7 +5,7 @@
 
 /** The oldest tested release of each supported line; a newer line counts from its first release. */
 export const SUPPORTED_NODE = [
-  [22, 17, 1],
+  [22, 23, 3],
   [24, 15, 0],
 ] as const
 

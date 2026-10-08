@@ -12,7 +12,7 @@ blank).
 
 | Input | Who chooses it | Checked in | Reaches | Treatment |
 | --- | --- | --- | --- | --- |
-| Email (setup, adding a user, changing an email) | admin | `apps/studio/src/accounts.ts`, `display-text.ts` | UI (users, audit names), API JSON, `reset-admin` output | Hidden characters refused (400, names the code point); may not read as another user's display name. React text. |
+| Email (setup, `create-admin`, adding a user, changing an email) | admin, operator | `apps/studio/src/accounts.ts`, `display-text.ts` | UI (users, audit names), API JSON, `create-admin` prompt and output, `reset-admin` output | Hidden characters refused (400, or the command's error, naming the code point), before `create-admin` shows it in its prompt; may not read as another user's display name. React text. |
 | Email of a failed sign-in | anyone | `api/routes.ts` (`sanitizeDisplayText`) | audit row, audit page | Kept for the record with hidden characters as visible escapes and backslashes doubled; 320 characters. |
 | Display name | each user | `accounts.ts`, `display-text.ts` | UI (shell, users, audit names), API JSON | Hidden characters refused; may not read as a reserved label or as any email (no account oracle). React text. |
 | Server name | members | `studio.ts` (`unsafeTextProblem`) | UI, audit names | Hidden characters refused. React text. |
@@ -51,7 +51,7 @@ blank).
 | Surface | Rule |
 | --- | --- |
 | Studio web UI | Only React text (never HTML, Markdown, links or images from untrusted text); CSP `script-src 'self'`. Untrusted text goes through `Visible` (`web/src/components/untrusted.tsx`). |
-| Studio console (stderr) | Fixed messages; data through `inspect` (escaped, one line) and redacted. |
+| Studio console (stderr) | Fixed messages; data redacted string by string, then through `inspect` (escaped, one line), then the line redacted again. |
 | MCP clients and the model | What the spec says, without hidden characters; upstream data redacted and selected. |
 | CLI terminal (`kervan run`, `kervan dev`, `kervan create`) | Every line through `terminalSafe` (`packages/cli/src/terminal.ts`). |
 | Exported `kervan.yaml` | The saved text exactly; bindings, never secret values. |

@@ -14,6 +14,9 @@ The security design is in [docs/THREAT-MODEL-STUDIO.md](../../docs/THREAT-MODEL-
 
 ## Running it
 
+Studio needs Node.js 22.23.3 or a later 22.x, or 24.15.0 or later: the oldest releases the whole
+test suite has passed on. It refuses to start on anything older (see "Node.js versions" below).
+
 ```sh
 pnpm build
 # Once: create a master key and keep it somewhere safe (a password manager, a secret store).
@@ -45,6 +48,34 @@ On first start, Studio:
 1. listens on `127.0.0.1` only (whatever `KERVAN_STUDIO_HOST` says);
 2. prints a one-time setup token, valid for 30 minutes, that creates the first admin;
 3. issues a new token, and invalidates the old one, on every restart until an admin exists.
+
+### Creating the first admin from the shell
+
+Where the browser cannot reach Studio's loopback address (a container, a remote server without
+a tunnel), create the first admin with a command on the host instead:
+
+```sh
+node apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
+```
+
+- It asks for the password twice and does not show it. Without a terminal, pipe it in with
+  `--password-stdin` (one line). The password is never taken from an argument or an environment
+  variable: those end up in shell history and process listings.
+- The email and the password get the same checks as the setup page.
+- It needs the same `KERVAN_STUDIO_DATA_DIR` and `KERVAN_STUDIO_MASTER_KEY` as `start` (a missing
+  or wrong key is reported the same way), and works whether or not Studio is running.
+- It works only while there is no admin. Admins add other users in the UI; `reset-admin`
+  (below) recovers an admin account.
+- The setup token Studio printed stops working. A running Studio notices the new admin within a
+  few seconds and starts listening on `KERVAN_STUDIO_HOST`; no restart is needed.
+- It writes an audit event (`studio.setup` by the command line), without the password.
+- The admin signs in with the password they chose (no forced change).
+
+In a container (see `docs/RELEASING.md` for the image draft):
+
+```sh
+docker exec -it kervan-studio node apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
+```
 
 ## Web UI
 
@@ -92,7 +123,9 @@ On first start, Studio:
   - A password reset asks for your own password, sets a temporary one (yours, or a generated
     one shown once), and signs the user out everywhere. They must choose a new password at
     their next sign-in; until then the API refuses everything else.
-  - A role change asks for confirmation and your own password (the server insists too).
+  - A role change asks for confirmation and your own password (the server insists too). It
+    signs the user out everywhere (their playground tokens end too): they sign in again with
+    the new role.
   - The last active admin cannot be deactivated or made a member.
 - **Navigation:** a sidebar on wide screens and a menu drawer on phones. Every user sees
   Servers (members edit, validate and publish specs and use the playground), Settings and
@@ -253,6 +286,16 @@ This command:
 - writes an audit event (without the password).
 
 It needs access to the data directory, so only someone with a shell on the host can run it.
+
+## Node.js versions
+
+Studio refuses to start on Node.js older than 22.23.3 (on the 22 line) or 24.15.0, with one line
+saying so; `engines` in its `package.json` says the same. Those are the oldest releases the whole
+test suite has passed on. (On 22.17.1 Studio's own tests passed, but the framework's tests run
+TypeScript files directly, which needs 22.18, so that run was not green.) Node.js 22.0 to 22.12 in particular were never tested: they name
+the permission model differently (`--experimental-permission`), and the separate process that
+runs `select` expressions depends on it (threat model, T19). On Windows, prefer 24.21 or later
+on the 24 line: earlier 24.x releases have an intermittent libuv crash.
 
 ## Data and backups
 

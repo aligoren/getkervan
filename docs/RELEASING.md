@@ -133,23 +133,35 @@ Studio is `private` and is not on npm. Options:
 3. **An npm package** (`@kervan/studio`). Possible, but Studio is an application with a native
    dependency (better-sqlite3), not a library.
 
-Recommendation: from source for 0.1; a Docker image once the first-admin step below works in a
-container.
+Recommendation: from source for 0.1; a Docker image after it (the first-admin step below now
+works in a container).
 
 **Setting up in a container.** Until the first admin exists, Studio listens on 127.0.0.1 only
 (T9 in the threat model). Inside a container, that is the container's own loopback: a published
-port does not reach it, so the setup page cannot be opened from outside. Options:
+port does not reach it, so the setup page cannot be opened from outside. The operator creates
+the first admin with `kervan-studio create-admin` through `docker exec` instead; the network
+never offers setup. The running Studio notices the admin within a few seconds and starts
+listening on `KERVAN_STUDIO_HOST` (no restart).
 
-- (recommended) a `kervan-studio create-admin --email <e> --password-stdin` command, like
-  `reset-admin`: the operator runs it with `docker exec`, and the network never offers setup;
-- run the first start with `--network host` (Linux) and open the setup page through an SSH
-  tunnel to the server's loopback, then restart normally (works today, but awkward);
-- an opt-in setting that allows setup on the configured interface (weakens T9; not recommended).
+```sh
+# With a terminal: asks for the password twice, hidden.
+docker exec -it kervan-studio node apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
+
+# Without one (automation): the password from a file, on stdin; never as an argument.
+docker exec -i kervan-studio node apps/studio/bin/kervan-studio.js create-admin \
+  --email admin@example.com --password-stdin < /root/first-admin-password.txt
+```
+
+`docker exec` runs with the container's environment, so the command finds the same
+`KERVAN_STUDIO_DATA_DIR` and `KERVAN_STUDIO_MASTER_KEY` as Studio. It is refused once any admin
+exists (`reset-admin` recovers an admin). The other ways in, for the record: a first start with
+`--network host` (Linux) and the setup page through an SSH tunnel (awkward), or an opt-in setting
+that offers setup on the configured interface (weakens T9; not built).
 
 **A Dockerfile draft.** Not in the repository's build or workflows. It was built and run locally
-once to check it (healthy in 6 seconds, as the `node` user, with a read-only root file system);
-nothing was pushed. Before use: pin the base image by digest, and decide the first-admin step
-above.
+to check it (healthy within seconds, as the `node` user, with a read-only root file system), and
+the first admin was created with `create-admin` through `docker exec` as above; nothing was
+pushed. Before use: pin the base image by digest.
 
 ```dockerfile
 # syntax=docker/dockerfile:1

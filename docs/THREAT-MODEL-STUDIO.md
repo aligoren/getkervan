@@ -31,7 +31,7 @@ Status: all three parts are implemented:
 | **Upstream API** | Untrusted | Answers spec tools' requests; its responses, headers and redirects are attacker-controlled. |
 | **Model** | Untrusted channel | Reads tool descriptions and results (prompt injection travels this way). |
 | **Network attacker** | Untrusted | Reaches Studio over the network or through a victim's browser (CSRF, DNS rebinding, XSS payloads). |
-| **Operator shell** | Trusted | Runs `kervan-studio` commands on the host (setup token, `reset-admin`). |
+| **Operator shell** | Trusted | Runs `kervan-studio` commands on the host (setup token, `create-admin`, `reset-admin`). |
 
 ## Assets
 
@@ -102,6 +102,14 @@ prove, and every accepted risk, with its status.
 - Tool results and `ToolError` messages are then redacted again, in raw, URL-encoded,
   form-encoded and JSON-escaped forms. Studio's logger redacts every known value from messages
   and serialized data.
+- **The logger redacts data before formatting it** (hardening round): string by string, keys,
+  error messages, stacks, causes and fields included, then the whole line again. Node's `inspect`
+  escapes some characters its own way (`\x1B`, `\'`) and cuts strings at 10,000 characters, so a
+  secret with control characters, all three quote marks or more than 10,000 characters used to
+  come out unredacted or as a prefix (proven by a test, now fixed and mutation-tested). Bytes are
+  described by size, not printed as hex.
+- Secret values must be valid Unicode text: an unpaired surrogate is refused when it is set
+  (Studio) and when it is registered (the framework's vault), instead of failing later.
 - A `raw: true` JSON body is also decoded and redacted value by value, because JSON can spell a
   string in ways text redaction does not list (`\/`, `\u0041`). If that finds a secret, the
   redacted JSON is returned re-encoded instead of the upstream's text.
@@ -216,6 +224,12 @@ prove, and every accepted risk, with its status.
   and throttled like a sign-in (as for a password reset): a stolen admin session alone cannot
   make a new admin, or an account with a password the thief knows (adding a user: release
   review).
+- **A role change ends all of the user's sessions** in the same transaction (and so their
+  playground tokens), and their open playground streams (hardening round). Promoted or demoted,
+  they sign in again: a session taken before a promotion never becomes an admin's, and a demoted
+  admin's session is gone, not merely held back. The audit event counts the sessions ended
+  (`user.role`, `sessionsEnded`). An admin changing their own role signs themselves out too; the
+  UI says so before.
 - **Checks that wait on a password hash are made again when writing** (release review). Requests
   check a password or a role, then wait on scrypt; the write that follows must not act on what
   changed meanwhile (tested with a pause inside scrypt):
@@ -295,6 +309,8 @@ prove, and every accepted risk, with its status.
   still live, so signing out, an idle or absolute session timeout and `reset-admin` end the
   token at once. An event stream it opened ends when the token expires.
 - At most 32 drafts are loaded; loading another unloads the least recently used.
+- A signature is accepted only in its one canonical base64url spelling (hardening round):
+  base64url decoding ignores unused bits and stray characters, so a token had several spellings.
 
 ### T9: Taking over a fresh installation (4a)
 
@@ -306,6 +322,23 @@ prove, and every accepted risk, with its status.
 - Setup in the browser (4b) consumes the token in the same transaction that creates the admin.
   It is refused once any admin exists. Only then does Studio also listen on
   `KERVAN_STUDIO_HOST`.
+- **`kervan-studio create-admin`** (operator shell, hardening round) creates the first admin
+  without the browser, for containers, where the loopback-only setup page cannot be reached from
+  outside. The network never offers setup:
+  - only someone who can run commands on the host, with the data directory and the master key
+    (resolved and checked as at a start), gets this far; no setup token is needed;
+  - the password is typed hidden (asked twice) or read from stdin; an argument (`--password`, or
+    a plain one) is refused, and no environment variable is read;
+  - the same checks as the setup page (email rules including hidden characters, password length);
+    the email is checked before it is shown in the prompt;
+  - refused once any admin exists, checked before asking for the password and again inside the
+    write transaction (BEGIN IMMEDIATE), so a browser setup in a running Studio and the command
+    cannot both create an admin (tested with real processes);
+  - every unused setup token is retired in the same transaction: the token Studio printed stops
+    working;
+  - audited as `studio.setup` with the actor `cli`, never with the password;
+  - a running Studio checks every second, while it has no admin, whether one exists, and then
+    moves from loopback to `KERVAN_STUDIO_HOST` as after a browser setup.
 
 ### T10: Tenant and server isolation (4a)
 
@@ -375,9 +408,10 @@ prove, and every accepted risk, with its status.
   it in the UI.
 - Events recorded (`apps/studio/test/audit-catalogue.test.ts` triggers each one through the API
   and pins the list):
-  - `studio.setup`; `login.success` and `login.failure` (with the client IP); `logout`;
+  - `studio.setup` (also by `kervan-studio create-admin`, actor `cli`); `login.success` and
+    `login.failure` (with the client IP); `logout`;
     `session.end` and `session.end_others` (sessions a user signed out);
-  - `user.create`, `user.role`, `user.email`, `user.password_reset` (also by
+  - `user.create`, `user.role` (with the sessions it ended), `user.email`, `user.password_reset` (also by
     `kervan-studio reset-admin`), `user.password_change`, `user.profile`, `user.theme` (only
     when it changes), `user.disable` and `user.enable`;
   - `server.create`, `server.delete`, `server.settings` (the call-log setting);
@@ -454,6 +488,10 @@ prove, and every accepted risk, with its status.
     no `KERVAN_` variable, and every file, process, worker and network attempt refused.
 - Tests: a 34-character expression that used to end the process, a 1,000^3 nested `map`, and
   gradual growth past the heap limit, each in a child process; the process is not kept alive.
+- Studio refuses to start on Node.js versions the test suite has not passed on (older than 22.23.3
+  on the 22 line, or than 24.15.0), before it loads anything (hardening round). Node.js 22.0 to
+  22.12 name the permission flag differently (`--experimental-permission`) and were never tested
+  with this sandbox. The framework's own minimum stays `>=22` (and `kervan run` needs 22.18).
 - Limit: one slow expression holds one of the two processes until its timeout, so calls of other
   tools may wait (their wait counts against their own timeout). Rate limits bound how often a
   key can do this.
@@ -510,7 +548,8 @@ prove, and every accepted risk, with its status.
     existing database).
   - Windows: the files inherit the directory's ACL, so keep the data directory in a private
     location.
-  - Opened in WAL mode with a busy timeout and foreign keys on.
+  - Opened in WAL mode with a busy timeout and foreign keys on, and `temp_store = MEMORY`:
+    sorts and temporary tables never go to the system's temp folder (hardening round).
   - Studio refuses to start when a migration fails or when the database was written by a
     newer version.
 - Spec versions are immutable. Triggers refuse:
@@ -523,6 +562,13 @@ prove, and every accepted risk, with its status.
   left alone), the repository ignores `.kervan-studio/`, and Studio warns at start when the
   database, or its `-wal` or `-shm` file, is inside a git working tree and tracked or not
   ignored (a rule like `*.db` covers the database but not those; release review).
+- That start-up check runs only read-only git commands, and git runs no program the repository
+  names (hardening round): a data directory may sit in a tree someone else prepared, whose
+  `.git/config` sets `core.fsmonitor` (which `ls-files` and `check-ignore` run; proven by a test).
+  Program-running settings are turned off on the command line (`core.fsmonitor`, `core.hooksPath`,
+  askpass, credential helpers, external diff, transport protocols), no system or global config
+  file is read (so no `safe.directory` exception from them: a repository owned by another user is
+  refused and the check is skipped), and no `GIT_*` variable of Studio's environment reaches git.
 
 ## Reverse proxies
 
