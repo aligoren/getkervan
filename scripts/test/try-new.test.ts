@@ -63,12 +63,20 @@ describe("pnpm try:new", () => {
   })
 
   it("on Windows quotes every argument but not the command name", () => {
-    expect(windowsCommandLine("npm", ["install", "C:/a & b/x.tgz"])).toBe('npm "install" "C:/a & b/x.tgz"')
+    expect(windowsCommandLine("npm", ["install", "C:/a & b/x.tgz"])).toBe(
+      'npm "install" "C:/a & b/x.tgz"',
+    )
   })
 
-  it.runIf(process.platform === "win32")("starts npm through cmd.exe that way (a quoted name breaks npm.cmd)", () => {
-    const result = spawnSync(windowsCommandLine("npm", ["--version"]), { shell: true, encoding: "utf8" })
-    expect(result.status, result.stderr).toBe(0)
-    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/)
-  })
+  it.runIf(process.platform === "win32")(
+    "starts npm through cmd.exe that way (a quoted name breaks npm.cmd)",
+    () => {
+      const result = spawnSync(windowsCommandLine("npm", ["--version"]), {
+        shell: true,
+        encoding: "utf8",
+      })
+      expect(result.status, result.stderr).toBe(0)
+      expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/)
+    },
+  )
 })

@@ -4,3 +4,4 @@ export declare function plan(
   version: string,
 ): { title: string; cwd: string; command: string; args: string[] }[]
 export declare function main(argv: string[], cwd?: string): number
+export declare function windowsCommandLine(command: string, args: string[]): string
