@@ -4,15 +4,17 @@
 */ -}}
 {{- $example := hugo.Data.generated.example -}}
 {{- $part := .Get "part" -}}
+{{- $json := dict "indent" "  " -}}
 {{- if eq $part "spec" -}}
 {{- $spec := (resources.Get "repo/examples/spec/kervan.yaml").Content | replaceRE "\r\n" "\n" | replaceRE "^# yaml-language-server:[^\n]*\n" "" -}}
-<div class="code" data-example="spec" data-lang="yaml"><span class="code-label">examples/spec/kervan.yaml</span>{{ transform.Highlight ($spec | strings.TrimRight "\n") "yaml" "" }}</div>
+{{- partial "code.html" (dict "code" $spec "lang" "yaml" "label" "examples/spec/kervan.yaml" "attrs" (dict "example" "spec")) -}}
 {{- else if eq $part "tools" -}}
-<div class="code" data-lang="json"><span class="code-label">tools/list result (recorded)</span>{{ transform.Highlight ($example.toolsList.result | jsonify (dict "indent" "  ")) "json" "" }}</div>
+{{- partial "code.html" (dict "code" ($example.toolsList.result | jsonify $json) "lang" "json" "label" "tools/list result (recorded)") -}}
 {{- else if eq $part "discover" -}}
-<div class="code" data-lang="json"><span class="code-label">server/discover result (recorded)</span>{{ transform.Highlight ($example.discover.result | jsonify (dict "indent" "  ")) "json" "" }}</div>
+{{- partial "code.html" (dict "code" ($example.discover.result | jsonify $json) "lang" "json" "label" "server/discover result (recorded)") -}}
 {{- else if eq $part "call" -}}
 {{- $call := index $example.calls (int (.Get "index" | default 1)) -}}
-<div class="code" data-lang="json"><span class="code-label">tools/call request (recorded)</span>{{ transform.Highlight ($call.request | jsonify (dict "indent" "  ")) "json" "" }}</div>
-<div class="code" data-lang="json"><span class="code-label">tools/call result{{ with $example.callsCapturedAt }}, {{ time.Format "January 2, 2006" . }}{{ end }}</span>{{ transform.Highlight ($call.result | jsonify (dict "indent" "  ")) "json" "" }}</div>
+{{- $when := "" }}{{ with $example.callsCapturedAt }}{{ $when = printf ", %s" (time.Format "January 2, 2006" .) }}{{ end -}}
+{{- partial "code.html" (dict "code" ($call.request | jsonify $json) "lang" "json" "label" "tools/call request (recorded)") -}}
+{{- partial "code.html" (dict "code" ($call.result | jsonify $json) "lang" "json" "label" (printf "tools/call result%s" $when)) -}}
 {{- else -}}{{ errorf "example: unknown part %q" $part }}{{- end -}}

@@ -2,8 +2,14 @@
 {{- $example := hugo.Data.generated.example -}}
 {{- $yaml := resources.Get "repo/examples/spec/kervan.yaml" -}}
 {{- if not $yaml }}{{ errorf "examples/spec/kervan.yaml is not mounted" }}{{ end -}}
+{{- $ts := resources.Get "repo/examples/calculator/src/calculator.ts" -}}
+{{- if not $ts }}{{ errorf "examples/calculator/src/calculator.ts is not mounted" }}{{ end -}}
 {{- /* The spec as the repository has it, minus the editor hint on its first line (a path that only means something in the repository). */ -}}
-{{- $spec := $yaml.Content | replaceRE "\r\n" "\n" | replaceRE "^# yaml-language-server:[^\n]*\n" "" -}}
+{{- $spec := $yaml.Content | replaceRE "\r\n" "\n" | replaceRE "^# yaml-language-server:[^\n]*\n" "" | strings.TrimRight "\n" -}}
+{{- /* Shown first: the spec up to its second tool; the whole file is one click away. */ -}}
+{{- $toolParts := split $spec "\n  - name: " -}}
+{{- $excerpt := printf "%s\n  - name: %s" (index $toolParts 0) (index $toolParts 1) | strings.TrimRight "\n" -}}
+{{- $code := $ts.Content | replaceRE "\r\n" "\n" -}}
 <section class="hero" aria-labelledby="hero-title">
   <div class="wrap">
     <span class="eyebrow">Open source &middot; MIT &middot; pre-release</span>
@@ -16,72 +22,135 @@
     {{- if not site.Params.published }}
     <p class="note">Kervan is not on npm yet: the quickstart builds it from source. Version 0.1 is in preparation.</p>
     {{- end }}
-    <figure class="hero-figure">
-      {{ partial "shot.html" (dict "name" "editor" "alt" "Kervan Studio's editor with the weather spec open: the kervan.yaml on the left and the playground on the right, the server published as version 2." "eager" true "mobile" true) }}
-      <figcaption>The optional Kervan Studio: a <code>kervan.yaml</code> in the editor, published and ready for MCP clients.</figcaption>
-    </figure>
   </div>
 </section>
 
-<section class="band band-alt" aria-labelledby="yaml-title">
+<section class="band band-alt showcase-band" aria-labelledby="showcase-title">
   <div class="wrap">
-    <h2 id="yaml-title">From YAML to a working MCP server</h2>
-    <p class="section-lead">Below is the example spec from the repository, unchanged, and what the server answers when it runs. The answers are recorded from a real run of <code>kervan run</code> (the tool calls reached the public Open-Meteo APIs{{ with $example.callsCapturedAt }} on {{ time.Format "January 2, 2006" . }}{{ end }}).</p>
-    <ol class="steps">
-      <li><h3>Write the spec</h3><p>Tools are HTTP requests with typed input and a <code>select</code> expression that picks what the model sees.</p></li>
-      <li><h3>Run it</h3><p><code>kervan run kervan.yaml</code> serves it over stdio, or over Streamable HTTP with <code>--http</code>.</p></li>
-      <li><h3>Connect any MCP client</h3><p>Claude Code, or any client that speaks MCP, lists the tools and calls them.</p></li>
-    </ol>
+    <h2 id="showcase-title">One server, two ways to write tools</h2>
+    <p class="section-lead">Both examples are files in the repository, shown unchanged, and what they print or answer comes from running them{{ with $example.callsCapturedAt }} (the spec's tool calls reached the public Open-Meteo APIs on {{ time.Format "January 2, 2006" . }}){{ end }}.</p>
+    <div class="showcase">
+      <fieldset class="tabs">
+        <legend class="visually-hidden">Show the example written as</legend>
+        <input class="tab-input" type="radio" name="showcase" id="show-yaml" checked>
+        <label class="tab" for="show-yaml">A YAML spec</label>
+        <input class="tab-input" type="radio" name="showcase" id="show-ts">
+        <label class="tab" for="show-ts">TypeScript</label>
+      </fieldset>
+
+      <div class="tab-panel panel-yaml">
+        <h3 class="visually-hidden">A YAML spec</h3>
+        <div class="split">
+          <div>
+            <p class="panel-title">The spec <span>kervan run kervan.yaml</span></p>
+            {{ partial "code.html" (dict "code" $excerpt "lang" "yaml" "label" "examples/spec/kervan.yaml, the first tool" "wrap" true "attrs" (dict "example" "landing-spec-excerpt")) }}
+            <details class="full-file">
+              <summary>Show the full file ({{ len (split $spec "\n") }} lines, {{ len $example.toolsList.result.tools }} tools)</summary>
+              {{ partial "code.html" (dict "code" $spec "lang" "yaml" "label" "examples/spec/kervan.yaml" "wrap" true "attrs" (dict "example" "landing-spec")) }}
+            </details>
+          </div>
+          <div>
+            <p class="panel-title">The tools clients see <span>tools/list</span></p>
+            <ul class="tool-list">
+              {{- range $example.toolsList.result.tools }}
+              <li><code>{{ .name }}</code>{{ with .annotations }}{{ if .readOnlyHint }} &middot; read-only{{ end }}{{ end }}<p>{{ .description }}</p></li>
+              {{- end }}
+            </ul>
+            {{- with index $example.calls 1 }}
+            <p class="panel-title">A call and its result <span>tools/call</span></p>
+            {{ partial "code.html" (dict "code" (dict "name" .request.params.name "arguments" .request.params.arguments | jsonify (dict "indent" "  ")) "lang" "json" "label" "request") }}
+            {{ partial "code.html" (dict "code" (.result.structuredContent | jsonify (dict "indent" "  ")) "lang" "json" "label" "structuredContent") }}
+            {{- end }}
+            <p class="panel-title">Connect it to Claude Code <span>stdio</span></p>
+            {{ partial "connect-command.html" . }}
+          </div>
+        </div>
+        <p>Next: <a href="/guides/mcp-server-from-yaml/">build an MCP server from a YAML file, step by step</a>, or read the <a href="/docs/framework/spec-reference/">complete kervan.yaml reference</a>.</p>
+      </div>
+
+      <div class="tab-panel panel-ts">
+        <h3 class="visually-hidden">TypeScript</h3>
+        <div class="split">
+          <div>
+            <p class="panel-title">The tool <span>createApp, app.tool</span></p>
+            {{ partial "code.html" (dict "code" $code "lang" "ts" "label" $example.calculator.file "wrap" true "attrs" (dict "example" "landing-ts")) }}
+          </div>
+          <div>
+            <p class="panel-title">Run it <span>Node.js 22.23.3+ or 24.21.0+</span></p>
+            {{ partial "code.html" (dict "code" (printf "node %s" $example.calculator.file) "lang" "sh" "label" "from a clone of the repository" "wrap" true "attrs" (dict "check" "run")) }}
+            {{ partial "code.html" (dict "code" $example.calculator.stdout "lang" "text" "label" "output") }}
+            <p class="panel-title">What it shows</p>
+            <ul class="plain-list">
+              <li>Input and output are Zod schemas; the client gets both as JSON Schema.</li>
+              <li><code>createTestClient</code> connects the official MCP client in memory, the way tests call tools.</li>
+              <li>A <code>ToolError</code> message reaches the model; any other error would be masked.</li>
+              <li>To serve the tool instead, <code>await serve(app)</code> from <code>@kervan/transport/node</code>.</li>
+            </ul>
+          </div>
+        </div>
+        <p>Next: <a href="/docs/framework/code/">tools in TypeScript</a>, and <a href="/docs/framework/yaml-or-typescript/">YAML or TypeScript: the same tool written both ways</a>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="gets-title">
+  <div class="wrap">
+    <h2 id="gets-title">What every tool gets</h2>
+    <p class="section-lead">A spec tool and a TypeScript tool run on the same core. Spec tools, which call HTTP APIs for you, get more.</p>
     <div class="split">
-      <div class="panel">
-        <p class="panel-title">kervan.yaml <span>examples/spec/kervan.yaml</span></p>
-        <div class="code" data-example="landing-spec" data-lang="yaml">{{ transform.Highlight ($spec | strings.TrimRight "\n") "yaml" "" }}</div>
-      </div>
-      <div class="panel">
-        <p class="panel-title">The tools clients see <span>tools/list</span></p>
-        <ul class="tool-list">
-          {{- range $example.toolsList.result.tools }}
-          <li><code>{{ .name }}</code>{{ with .annotations }}{{ if .readOnlyHint }} &middot; read-only{{ end }}{{ end }}<p>{{ .description }}</p></li>
-          {{- end }}
+      <div class="card">
+        <h3>Every tool</h3>
+        <ul class="plain-list">
+          <li>Arguments validated against the input schema before any of your code runs.</li>
+          <li>Errors masked: only a <code>ToolError</code>'s message reaches the client; anything else is logged with a reference.</li>
+          <li>A timeout on every call (30 seconds unless you set another), and the client's cancellation.</li>
+          <li>Results checked against the output schema, when there is one.</li>
         </ul>
-        {{- with index $example.calls 1 }}
-        <p class="panel-title">A call and its result <span>tools/call</span></p>
-        <div class="code" data-lang="json">{{ transform.Highlight (dict "name" .request.params.name "arguments" .request.params.arguments | jsonify (dict "indent" "  ")) "json" "" }}</div>
-        <div class="code" data-lang="json">{{ transform.Highlight (.result.structuredContent | jsonify (dict "indent" "  ")) "json" "" }}</div>
-        {{- end }}
-        <p class="panel-title">Connect it to Claude Code <span>stdio</span></p>
-        {{ partial "connect-command.html" . }}
+      </div>
+      <div class="card">
+        <h3>Spec tools also</h3>
+        <ul class="plain-list">
+          <li>SSRF protection: public addresses only, DNS resolved once and the connection pinned to the checked address.</li>
+          <li>Secret values redacted from results, errors and logs.</li>
+          <li>A rate limit per tool: 60 calls a minute and 10 at once, unless the spec sets others.</li>
+          <li><code>select</code> run in a separate process without network or environment.</li>
+        </ul>
       </div>
     </div>
-    <p>Next: <a href="/guides/mcp-server-from-yaml/">build an MCP server from a YAML file, step by step</a>, or read the <a href="/docs/framework/spec-reference/">complete kervan.yaml reference</a>.</p>
+    <p>The details: <a href="/docs/framework/how-kervan-works/#what-every-tool-gets-and-what-spec-tools-add">what every tool gets, and what spec tools add</a>.</p>
   </div>
 </section>
 
-<section class="band" aria-labelledby="why-title">
+<section class="band band-alt" aria-labelledby="fits-title">
   <div class="wrap">
-    <h2 id="why-title">Why Kervan</h2>
+    <h2 id="fits-title">How it fits together</h2>
+    <p class="section-lead">Three libraries, a command line and a project generator. <code>@kervan/core</code> knows nothing about YAML or transports, so both kinds of tool are the same once registered.</p>
+    {{ partial "diagram.html" "dg-home" }}
+    <p>Read <a href="/docs/framework/how-kervan-works/">how Kervan works: the packages and the path of a tool call</a>.</p>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="run-title">
+  <div class="wrap">
+    <h2 id="run-title">Run it anywhere, connect any client</h2>
     <ul class="grid">
-      <li class="card"><h3>A spec or code</h3><p>HTTP APIs become tools from a YAML file with no code. When you need logic, write the tool in TypeScript with Zod schemas.</p></li>
-      <li class="card"><h3>On the official MCP SDK</h3><p>A thin layer over <code>@modelcontextprotocol/server</code>: the protocol is the SDK's, not a rewrite.</p></li>
-      <li class="card"><h3>MCP 2026-07-28, statelessly</h3><p>Every request carries its own context; <code>server/discover</code> replaces the handshake. Clients of the 2025 revisions are served too.</p></li>
-      <li class="card"><h3>Typed and checked</h3><p>Arguments are validated before your handler runs; only <code>ToolError</code> messages reach the client, other errors are masked with a reference.</p></li>
-      <li class="card"><h3>Safe defaults</h3><p>Timeouts, size limits, rate limits, <code>Host</code> and <code>Origin</code> checks, and for spec tools SSRF protection and secret redaction.</p></li>
-      <li class="card"><h3>Nothing to lock you in</h3><p>MIT licensed. Specs are plain YAML in your repository, and a Studio server exports as the same file.</p></li>
+      <li class="card"><h3>stdio</h3><p>The client starts your server as a process; nothing listens on the network. <code>kervan run kervan.yaml</code>, or <code>serve(app)</code> in code.</p></li>
+      <li class="card"><h3>Stateless Streamable HTTP</h3><p>No sessions: every request carries its own context. <code>Host</code> and <code>Origin</code> are checked against <code>allowedHosts</code> and <code>allowedOrigins</code>.</p></li>
+      <li class="card"><h3>Fetch runtimes</h3><p>The same app as a fetch handler for Cloudflare Workers, Deno and Bun: <code>toFetchHandler(app)</code>.</p></li>
+      <li class="card"><h3>MCP 2026-07-28, and 2025 clients</h3><p>The stateless revision with <code>server/discover</code>, and clients of the 2025 revisions from the same app. Over HTTP, 2025 clients get no change notifications (<a href="/docs/framework/protocol/#list_changed">why</a>).</p></li>
     </ul>
+    <p>Any MCP client can connect. With Claude Code, the example spec over stdio:</p>
+    {{ partial "connect-command.html" . }}
+    <p>More: <a href="/docs/framework/transports/">transports and authentication</a>, and <a href="/guides/connect-claude-code/">connecting a server to Claude Code</a>.</p>
   </div>
 </section>
 
-<section class="band band-alt" aria-labelledby="studio-title">
+<section class="band band-alt" aria-labelledby="start-title">
   <div class="wrap">
-    <h2 id="studio-title">Kervan Studio, if you want a web UI</h2>
-    <p class="section-lead">Studio is an optional, self-hosted web app: people write specs in the browser, keep upstream API keys in an encrypted vault, publish versions and roll them back, and MCP clients connect through one gateway with per-server API keys. Nothing is locked in: every server exports as <code>kervan.yaml</code> and runs with <code>kervan run</code>.</p>
-    <div class="gallery">
-      <figure>{{ partial "shot.html" (dict "name" "playground" "alt" "The playground calling the search_city tool of the weather server: the tool list, the arguments and the result from Open-Meteo.") }}<figcaption>Try a version in the playground before clients see it.</figcaption></figure>
-      <figure>{{ partial "shot.html" (dict "name" "secrets" "alt" "The secrets tab of a server: two secrets with the hosts they may be sent to; values are never shown.") }}<figcaption>Secrets are write-only and bound to the hosts that may receive them.</figcaption></figure>
-      <figure>{{ partial "shot.html" (dict "name" "calls" "alt" "The calls tab: recent tool calls with the caller, status, duration and the logged arguments.") }}<figcaption>Every call through the gateway is logged, payloads only when an admin turns it on.</figcaption></figure>
-      <figure>{{ partial "shot.html" (dict "name" "audit" "alt" "The audit log: who created servers, secrets and API keys, published versions and signed in, with the client address.") }}<figcaption>An append-only audit log of who changed what.</figcaption></figure>
-    </div>
-    <p><a href="/docs/studio/">Read the Kervan Studio documentation</a> or follow <a href="/guides/self-host-mcp-gateway/">the guide to self-hosting a multi-user MCP gateway</a>.</p>
+    <h2 id="start-title">Get started</h2>
+    {{ partial "install.html" . }}
+    <p>Then the <a href="/docs/framework/quickstart/">framework quickstart</a>: run the example spec and call its tools.</p>
   </div>
 </section>
 
@@ -91,25 +160,36 @@
     <p class="section-lead">Each of these is implemented and covered by tests. The checks were also mutation-tested: broken on purpose, one at a time, to see a test fail (<a href="/docs/framework/security/#how-the-checks-are-tested">how</a>).</p>
     <ul class="grid">
       <li class="card"><h3>SSRF protection</h3><p>Spec tools reach public addresses only. DNS is resolved once and the connection pinned to the checked address; redirects are refused unless allowed, then checked again; cloud metadata addresses are always refused.</p></li>
-      <li class="card"><h3>Encrypted secrets</h3><p>Studio encrypts secret values with AES-256-GCM under a master key you keep. Results, errors and logs are redacted of them, in every encoding Kervan knows.</p></li>
-      <li class="card"><h3>Users and roles</h3><p>Admins and members, sessions that end on password or role changes, throttled sign-ins, and the admin's own password for sensitive changes.</p></li>
-      <li class="card"><h3>CSRF and origin checks</h3><p>Every change needs the exact origin, a JSON body and the session's CSRF token; the gateway checks <code>Host</code> and <code>Origin</code>.</p></li>
+      <li class="card"><h3>Secret redaction</h3><p>Secret values are removed from results, errors and logs, in every encoding Kervan knows (raw, URL, form, JSON), before <code>select</code> sees the response.</p></li>
+      <li class="card"><h3>Rate limits</h3><p>Each spec tool has a per-minute and a concurrency limit; <code>serveHttp</code> limits requests per minute.</p></li>
       <li class="card"><h3>Sandboxed select</h3><p><code>select</code> expressions run in a separate process: empty environment, memory limit, the tool's timeout, no network, no file writes, no child processes.</p></li>
-      <li class="card"><h3>Audit trail</h3><p>Studio records sign-ins, publishes, secret and key changes in a log the database refuses to change or delete; never a password, key or secret value.</p></li>
+      <li class="card"><h3>Host and Origin checks</h3><p>HTTP servers accept only <code>allowedHosts</code> and <code>allowedOrigins</code> (localhost by default) and refuse to listen beyond loopback without them.</p></li>
+      <li class="card"><h3>Limits by default</h3><p>Timeouts, response size limits and input size limits are on without configuration.</p></li>
     </ul>
-    <p>The details, including what is out of scope: the <a href="/docs/framework/security/">framework security model</a> and the <a href="/docs/studio/security/">Studio threat model</a>. Report vulnerabilities privately to <a href="mailto:{{ site.Params.security }}">{{ site.Params.security }}</a> (<a href="/.well-known/security.txt">security.txt</a>).</p>
+    <p class="note"><span class="tag">Studio (optional)</span> adds users and roles, an encrypted secret vault, an audit log the database refuses to change, and CSRF and origin checks: see the <a href="/docs/studio/security/">Studio threat model</a>.</p>
+    <p>The details: the <a href="/docs/framework/security/">framework security model</a>. Report vulnerabilities privately to <a href="mailto:{{ site.Params.security }}">{{ site.Params.security }}</a> (<a href="/.well-known/security.txt">security.txt</a>).</p>
   </div>
 </section>
 
-<section class="band band-alt" aria-labelledby="start-title">
+<section class="band band-alt" aria-labelledby="studio-title">
+  <div class="wrap studio-teaser">
+    <div>
+      <h2 id="studio-title">Kervan Studio, optional</h2>
+      <p>An optional self-hosted web UI to manage servers, secrets, users and logs. Nothing is locked in: every server exports as <code>kervan.yaml</code> and runs with <code>kervan run</code>. The framework works without it.</p>
+      <p><a class="button" href="/studio/">See Studio</a></p>
+    </div>
+    <figure>{{ partial "shot.html" (dict "name" "editor" "alt" "Kervan Studio's editor with the weather spec open: the kervan.yaml on the left and the playground on the right, the server published as version 2.") }}</figure>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="docs-title">
   <div class="wrap">
-    <h2 id="start-title">Get started</h2>
-    {{ partial "install.html" . }}
+    <h2 id="docs-title">Documentation</h2>
     <ul class="grid">
-      <li class="card"><a class="card-link" href="/docs/framework/"><h3>Framework documentation</h3><p>Concepts, the spec format, HTTP tools, transports, the programmatic API and the CLI.</p></a></li>
+      <li class="card"><a class="card-link" href="/docs/framework/"><h3>Framework documentation</h3><p>Concepts, YAML and TypeScript tools, transports, the CLI, deployment and the security model.</p></a></li>
       <li class="card"><a class="card-link" href="/docs/framework/spec-reference/"><h3>kervan.yaml reference</h3><p>Every field of the spec, generated from its JSON Schema.</p></a></li>
-      <li class="card"><a class="card-link" href="/docs/studio/"><h3>Studio documentation</h3><p>Install, users and roles, the secret vault, publishing, the gateway and backups.</p></a></li>
       <li class="card"><a class="card-link" href="/guides/"><h3>Guides</h3><p>From what MCP is to exposing a REST API as tools and connecting Claude Code.</p></a></li>
+      <li class="card"><a class="card-link" href="/docs/studio/"><h3>Studio documentation</h3><p>For the optional web UI: install, users and roles, the secret vault, publishing and backups.</p></a></li>
     </ul>
   </div>
 </section>

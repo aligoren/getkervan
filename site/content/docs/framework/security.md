@@ -3,7 +3,14 @@ title: Security model
 seoTitle: 'Kervan security model and SSRF protection'
 description: 'What the Kervan MCP framework protects against: SSRF protection for spec tools, Host and Origin checks, limits, error masking and secret redaction.'
 lead: The defaults are on. This page lists what they protect against, how, and where the protection ends.
-weight: 120
+weight: 90
+group: Run and operate
+fits: 'Run and operate. What Kervan protects against, for every tool and for spec tools.'
+next:
+  - url: /docs/framework/troubleshooting/
+    text: 'Troubleshooting'
+  - url: /docs/framework/deployment/
+    text: 'Deployment'
 ---
 
 ## Defaults for every server

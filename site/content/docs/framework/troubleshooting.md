@@ -3,7 +3,14 @@ title: Troubleshooting
 seoTitle: Troubleshooting Kervan MCP servers, common errors
 description: 'Common Kervan errors and their fixes: Node.js versions, spec load errors, refused addresses, Host checks, secrets, timeouts and missing tools.'
 lead: The messages you are most likely to meet, what they mean, and the fix.
-weight: 140
+weight: 95
+group: Run and operate
+fits: 'Run and operate. Messages you may see, and what to do.'
+next:
+  - url: /docs/framework/versioning/
+    text: 'Versioning and upgrades'
+  - url: /docs/framework/cli/
+    text: 'CLI reference'
 ---
 
 ## "Kervan needs Node.js ..."

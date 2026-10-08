@@ -31,6 +31,13 @@ export default defineConfig({
       {
         test: { name: "example-dynamic", root: "examples/dynamic", include: ["test/**/*.test.ts"] },
       },
+      {
+        test: {
+          name: "example-calculator",
+          root: "examples/calculator",
+          include: ["test/**/*.test.ts"],
+        },
+      },
     ],
   },
 })

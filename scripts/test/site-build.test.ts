@@ -28,6 +28,7 @@ if (problem !== undefined && !required) console.warn(`Skipping the built-site te
 let dir = ""
 const params = siteParams(read("site/hugo.toml"))
 const exampleSpec = read("examples/spec/kervan.yaml")
+const exampleTs = read("examples/calculator/src/calculator.ts")
 
 beforeAll(() => {
   if (problem !== undefined && !required) return
@@ -54,23 +55,19 @@ afterAll(() => {
 })
 
 type Overrides = Record<string, string | null>
-const check = (
-  overrides: Overrides = {},
-  options: { exampleSpec?: string; published?: boolean } = {},
-) =>
+type Options = { exampleSpec?: string; exampleTs?: string; published?: boolean }
+const check = (overrides: Overrides = {}, options: Options = {}) =>
   checkBuild(
     siteView(dir, overrides),
     { ...params, ...(options.published === undefined ? {} : { published: options.published }) },
     {
       exampleSpec: options.exampleSpec ?? exampleSpec,
+      exampleTs: options.exampleTs ?? exampleTs,
     },
   )
 const page = (file: string) => readFileSync(path.join(dir, file), "utf8")
 /** The errors that `change` causes and the unchanged build does not have. */
-const newErrors = (
-  overrides: Overrides,
-  options: { exampleSpec?: string; published?: boolean } = {},
-) => {
+const newErrors = (overrides: Overrides, options: Options = {}) => {
   const before = new Set(check().errors)
   return check(overrides, options).errors.filter((error) => !before.has(error))
 }
@@ -79,7 +76,44 @@ run("the built site", () => {
   it("passes every check:site rule (only the placeholder warnings remain)", () => {
     const result = check()
     expect(result.errors).toEqual([])
-    for (const warning of result.warnings) expect(warning).toMatch(/placeholder/)
+    // Pages not committed yet have no git date; in a clean clone there are none.
+    for (const warning of result.warnings) expect(warning).toMatch(/placeholder|no lastmod/)
+  })
+
+  it("has the framework's concept pages, the TypeScript group and the Studio page", () => {
+    const sitemap = page("sitemap.xml")
+    for (const url of [
+      "/docs/framework/how-kervan-works/",
+      "/docs/framework/yaml-or-typescript/",
+      "/docs/framework/errors/",
+      "/docs/framework/middleware/",
+      "/docs/framework/registry/",
+      "/docs/framework/testing/",
+      "/studio/",
+    ]) {
+      expect(sitemap).toContain(`<loc>https://getkervan.dev${url}</loc>`)
+    }
+    // The framework menu, in its groups, in this order.
+    const nav =
+      /<nav class="?docs-nav"?[\s\S]*?<\/nav>/.exec(page("docs/framework/api/index.html"))?.[0] ??
+      ""
+    const groups = [...nav.matchAll(/<h3>([^<]+)<\/h3>/g)].map((match) => match[1])
+    expect(groups).toEqual([
+      "Start",
+      "Concepts",
+      "Build with YAML",
+      "Build with TypeScript",
+      "Run and operate",
+    ])
+    const typescript = nav.slice(
+      nav.indexOf("<h3>Build with TypeScript</h3>"),
+      nav.indexOf("<h3>Run and operate</h3>"),
+    )
+    const names = [...typescript.matchAll(/<a [^>]*>([^<]+)<\/a>/g)].map((match) => match[1])
+    expect(names.at(-1)).toBe("Programmatic API")
+    expect(names).toEqual(
+      expect.arrayContaining(["Tools in TypeScript", "Errors", "Middleware", "Testing"]),
+    )
   })
 
   it("uses Studio's design tokens unchanged, for light, system dark and chosen dark", () => {
@@ -420,9 +454,76 @@ run("each check:site rule catches its problem", () => {
       /bytes of JavaScript, over/,
     ],
     [
-      "a lazy LCP image",
-      () => ({ "index.html": home().replace(/fetchpriority="?high"?/, 'loading="lazy"') }),
+      "a Studio screenshot in the first screen",
+      () => ({
+        "index.html": home().replace(
+          "</section>",
+          '<img src="/screenshots/editor-light.webp" alt="x" width="1" height="1"></section>',
+        ),
+      }),
+      /a Studio screenshot in the first screen/,
+    ],
+    [
+      "a lazy image in the hero",
+      () => ({
+        "index.html": home().replace(
+          "</section>",
+          '<img src="/favicon.svg" alt="" width="1" height="1" loading="lazy"></section>',
+        ),
+      }),
       /lazy-loaded/,
+    ],
+    [
+      "more than two Studio screenshots",
+      () => ({
+        "index.html": inMain(
+          home(),
+          '<img src="/screenshots/calls-light.webp" alt="x" width="1" height="1" loading="lazy"><img src="/screenshots/audit-dark.webp" alt="x" width="1" height="1" loading="lazy">',
+        ),
+      }),
+      /Studio screenshots .*; at most 2/,
+    ],
+    [
+      "a code block the keyboard cannot scroll",
+      () => ({
+        "docs/framework/quickstart/index.html": docs().replace(
+          /(<pre[^>]*?) aria-label=("[^"]*"|[^\s>]+)/,
+          "$1",
+        ),
+      }),
+      /a <pre> without tabindex="0", a role and an aria-label/,
+    ],
+    [
+      "navigation in On this page",
+      () => ({
+        "docs/framework/quickstart/index.html": docs().replace(
+          /(<nav id="?TableOfContents"?><ul>)/,
+          '$1<li><a href="#next">Next</a></li>',
+        ),
+      }),
+      /"On this page" lists "Next", a navigation item/,
+    ],
+    [
+      "a framework page without its Where this fits line",
+      () => ({
+        "docs/framework/quickstart/index.html": docs().replace(/<p class="?fits"?>/, "<p>"),
+      }),
+      /no "Where this fits" line/,
+    ],
+    [
+      "a real drive-letter path",
+      () => ({ "index.html": inMain(home(), "<p>D:\\Projects\\demo\\examples</p>") }),
+      /index\.html: shows a drive-letter path/,
+    ],
+    [
+      "a home folder in a JSON file",
+      () => ({ "search/extra.json": JSON.stringify({ text: "see /home/sam/kervan/examples" }) }),
+      /search\/extra\.json: shows a home folder path/,
+    ],
+    [
+      "a landing spec excerpt that is not the file's beginning",
+      () => ({ "index.html": home().replace("specVersion", "specVersions") }),
+      /the spec excerpt is not the beginning/,
     ],
     [
       "a Studio mention in the framework docs",
@@ -452,16 +553,38 @@ run("each check:site rule catches its problem", () => {
     )
   })
 
+  it("a landing page TypeScript example that differs from the repository's file", () => {
+    expect(newErrors({}, { exampleTs: exampleTs.replace("calculator", "calc") })).toEqual([
+      "/: the TypeScript shown differs from examples/calculator/src/calculator.ts.",
+    ])
+  })
+
+  it("accepts the placeholder paths the docs use, and JSON escapes that only look like paths", () => {
+    const placeholder = inMain(
+      page("index.html"),
+      "<p>node C:\\path\\to\\kervan\\packages\\cli\\bin\\kervan.js and /absolute/path/to/kervan/x</p>",
+    )
+    expect(
+      newErrors({
+        "index.html": placeholder,
+        // As raw JSON text this reads "x:\nfoo\nbar", a drive path to a naive scan.
+        "extra.json": JSON.stringify({ help: "Options x:\nfoo\nbar" }),
+      }),
+    ).toEqual([])
+  })
+
   it("a landing page spec that differs from examples/spec/kervan.yaml", () => {
+    // The excerpt shown above the full file is checked against the file too.
     expect(newErrors({}, { exampleSpec: exampleSpec.replace("open-meteo", "other") })).toEqual([
       "/: the spec shown differs from examples/spec/kervan.yaml.",
+      "/: the spec excerpt is not the beginning of examples/spec/kervan.yaml.",
     ])
   })
 
   it("an npm command while the packages are not published", () => {
     const withNpm = inMain(
       page("changelog/index.html"),
-      "<pre><code>npm create kervan@latest my-server</code></pre>",
+      '<pre tabindex="0" role="group" aria-label="sh code"><code>npm create kervan@latest my-server</code></pre>',
     )
     expect(newErrors({ "changelog/index.html": withNpm }, { published: false })).toEqual([
       expect.stringContaining("shows an npm command (npm create kervan"),

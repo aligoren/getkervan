@@ -1,12 +1,26 @@
 ---
 title: Kervan framework documentation
 navTitle: Framework
+menuTitle: Introduction
+groups: [Start, Concepts, Build with YAML, Build with TypeScript, Run and operate]
 seoTitle: Kervan framework docs, a TypeScript MCP framework
 description: Concepts of the Kervan MCP framework, a TypeScript layer over the official MCP SDK; tools from a kervan.yaml spec or code, transports, the CLI.
 lead: Kervan is a TypeScript framework for Model Context Protocol (MCP) servers, built on the official MCP SDK. Tools come from a `kervan.yaml` spec or from code, on the same validated, timed core.
 weight: 1
 cascade:
   ogSection: Framework documentation
+group: Start
+fits: 'The start of the framework book. Every other page goes deeper into one part; the [quickstart](/docs/framework/quickstart/) runs a server first.'
+next:
+  - url: /docs/framework/quickstart/
+    text: 'Quickstart'
+    note: 'run the example spec and call its tools'
+  - url: /docs/framework/how-kervan-works/
+    text: 'How Kervan works'
+    note: 'the packages and the path of a tool call'
+  - url: /docs/framework/yaml-or-typescript/
+    text: 'YAML or TypeScript?'
+    note: 'which way to write your tools'
 ---
 
 ## What Kervan is
@@ -21,15 +35,29 @@ layer between your tools and the official SDK (`@modelcontextprotocol/server` v2
   limits, change notifications, and the stdio and Streamable HTTP transports.
 - **The protocol is the SDK's.** Kervan does not reimplement MCP.
 
-## The packages
+## How it is organized
 
-| Package | What it does |
-| --- | --- |
-| `@kervan/core` | `createApp`, tools, the tool context, middleware, the tool registry. No transport or I/O. |
-| `@kervan/transport` | stdio and Streamable HTTP on Node, a fetch handler for Workers, Deno and Bun, multi-tenant `resolveServer`, and `createTestClient`. |
-| `@kervan/spec-runtime` | `kervan.yaml` specs: HTTP tools with templates, JMESPath output selection, SSRF protection, secret redaction. |
-| `kervan` | The CLI: `kervan create`, `kervan dev` (hot reload, REPL), `kervan run`. |
-| `create-kervan` | `npm create kervan`, once the packages are published. |
+Three libraries (`@kervan/core`, `@kervan/transport`, `@kervan/spec-runtime`), the `kervan`
+command line and `create-kervan`. [How Kervan works](/docs/framework/how-kervan-works/) shows
+which does what and the path a tool call takes; [YAML or TypeScript?](/docs/framework/yaml-or-typescript/)
+helps you choose how to write your tools.
+
+This book follows the same order:
+
+- **Start:** this page and the [quickstart](/docs/framework/quickstart/).
+- **Concepts:** [how Kervan works](/docs/framework/how-kervan-works/) and
+  [YAML or TypeScript?](/docs/framework/yaml-or-typescript/)
+- **Build with YAML:** the [kervan.yaml reference](/docs/framework/spec-reference/),
+  [HTTP tools](/docs/framework/http-tools/), [input and output](/docs/framework/input-output/),
+  [select](/docs/framework/select/) and [secrets](/docs/framework/secrets/).
+- **Build with TypeScript:** [tools in TypeScript](/docs/framework/code/),
+  [errors](/docs/framework/errors/), [middleware](/docs/framework/middleware/), the
+  [registry](/docs/framework/registry/), [testing](/docs/framework/testing/) and the
+  [programmatic API](/docs/framework/api/).
+- **Run and operate:** [transports and authentication](/docs/framework/transports/),
+  [MCP 2026-07-28 notes](/docs/framework/protocol/), the [CLI](/docs/framework/cli/),
+  [deployment](/docs/framework/deployment/), the [security model](/docs/framework/security/),
+  [troubleshooting](/docs/framework/troubleshooting/) and [versioning](/docs/framework/versioning/).
 
 ## Concepts
 
@@ -45,12 +73,5 @@ layer between your tools and the official SDK (`@modelcontextprotocol/server` v2
 - **Registry:** the set of tools an app serves. It can change while the server runs; connected
   clients are told with `list_changed`.
 
-## Where to go next
-
-1. [Quickstart](/docs/framework/quickstart/): run the example spec and call its tools.
-2. [HTTP tools](/docs/framework/http-tools/) and [input and output](/docs/framework/input-output/):
-   how a spec turns arguments into a request and a response into a result.
-3. [Tools in TypeScript](/docs/framework/code/): the code API.
-4. [Security model](/docs/framework/security/): what Kervan protects against and how.
 
 Looking for the optional web UI? See [Studio docs](/docs/studio/).

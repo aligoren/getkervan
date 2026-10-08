@@ -8,6 +8,7 @@
       {{ partial "breadcrumb.html" . }}
       <h1>{{ .Title }}</h1>
       {{- with .Params.lead }}<p class="page-lead">{{ . | markdownify }}</p>{{ end }}
+      {{- with .Params.fits }}<p class="fits"><span class="fits-label">Where this fits:</span> {{ . | markdownify }}</p>{{ end }}
       {{- if $hasToc }}
       <details class="toc-inline">
         <summary>On this page</summary>
@@ -21,6 +22,17 @@
         <li class="card"><a class="card-link" href="{{ .RelPermalink }}"><h2 class="card-title">{{ .Title }}</h2><p>{{ .Description }}</p></a></li>
         {{- end }}
       </ul>
+      {{- end }}
+      {{- /* "Next" is navigation, not a section: a list after the content, outside "On this page". */}}
+      {{- with .Params.next }}
+      <nav class="next-steps" aria-labelledby="next-steps-title">
+        <p class="next-steps-title" id="next-steps-title">Next</p>
+        <ul>
+          {{- range . }}
+          <li><a href="{{ .url }}">{{ .text | markdownify }}</a>{{ with .note }}: {{ . | markdownify }}{{ end }}</li>
+          {{- end }}
+        </ul>
+      </nav>
       {{- end }}
       {{ partial "pager.html" . }}
     </article>

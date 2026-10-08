@@ -11,11 +11,20 @@
       {{- with site.GetPage . }}
       {{- $book := partial "book.html" . }}
       <h2>{{ .Params.navTitle | default .Title }}</h2>
+      {{- /* A book with groups (the framework) lists each group under its own name. */}}
+      {{- $groups := .Params.groups | default (slice "") }}
+      {{- if .Params.groups }}{{ range $book.pages }}{{ if not (in $groups .Params.group) }}{{ errorf "%s: group %q is not one of the book's groups" .RelPermalink .Params.group }}{{ end }}{{ end }}{{ end }}
+      {{- range $groups }}
+      {{- $group := . }}
+      {{- with $group }}<h3>{{ . }}</h3>{{ end }}
       <ul>
         {{- range $book.pages }}
-        <li><a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $current.RelPermalink }} aria-current="page"{{ end }}>{{ .Params.navTitle | default .LinkTitle }}</a></li>
+        {{- if or (eq $group "") (eq .Params.group $group) }}
+        <li><a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $current.RelPermalink }} aria-current="page"{{ end }}>{{ .Params.menuTitle | default (.Params.navTitle | default .LinkTitle) }}</a></li>
+        {{- end }}
         {{- end }}
       </ul>
+      {{- end }}
       {{- end }}
       {{- end }}
       <h2>More</h2>

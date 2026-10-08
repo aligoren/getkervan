@@ -122,6 +122,33 @@ async function browserChecks(origin, pages, shotsDir) {
           () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
         )
         if (overflow > 1) problems.push(`scrolls sideways by ${overflow}px`)
+        // One vertical scroll bar, the page's: no box (a code block, the menu) scrolls on its own.
+        // And no copy button over code: it sits in the block's head.
+        const layout = await page.evaluate(() => {
+          const scrollers = [...document.querySelectorAll("body *")]
+            .filter((element) => {
+              const overflowY = getComputedStyle(element).overflowY
+              return (
+                /auto|scroll/.test(overflowY) && element.scrollHeight > element.clientHeight + 1
+              )
+            })
+            .map((element) => element.className || element.tagName.toLowerCase())
+          const covered = [...document.querySelectorAll(".code")].filter((block) => {
+            const button = block.querySelector(".copy")?.getBoundingClientRect()
+            const pre = block.querySelector("pre")?.getBoundingClientRect()
+            if (!button || !pre || button.width === 0) return false
+            return (
+              button.bottom > pre.top + 1 &&
+              button.top < pre.bottom &&
+              button.right > pre.left &&
+              button.left < pre.right
+            )
+          }).length
+          return { scrollers, covered }
+        })
+        for (const scroller of layout.scrollers)
+          problems.push(`"${scroller}" scrolls vertically on its own`)
+        if (layout.covered > 0) problems.push(`${layout.covered} copy button(s) over code`)
         for (const problem of problems) fail(where, problem)
         if (shotsDir && SHOT_PAGES.includes(urlPath)) {
           // Lazy images load only once scrolled to: scroll through, then wait for every image.
@@ -192,7 +219,7 @@ async function browserChecks(origin, pages, shotsDir) {
     })
     {
       const { page } = await open(scripted, origin, "/docs/framework/quickstart/")
-      if ((await page.locator(".code.has-copy button").count()) === 0)
+      if ((await page.locator(".code .copy").count()) === 0)
         fail("copy buttons", "none on the quickstart")
       await page.close()
       const search = await open(scripted, origin, "/search/")

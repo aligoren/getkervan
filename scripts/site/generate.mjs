@@ -3,6 +3,7 @@
 // - example.json: what `kervan run examples/spec/kervan.yaml --http` answers to real MCP requests
 //   (server/discover, tools/list, two tool calls). The calls reach the public Open-Meteo APIs, so
 //   this needs the network; `--offline` keeps the recorded calls and refreshes the rest.
+//   It also records what examples/calculator/src/calculator.ts prints (no network).
 // - cli-help.json: the `--help` output of `kervan` and `kervan-studio`.
 //
 // The output is committed; `pnpm test` (scripts/test/site-data.test.ts) checks that it still
@@ -18,12 +19,20 @@ import { fileURLToPath } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 const SPEC = "examples/spec/kervan.yaml"
+const CALCULATOR = "examples/calculator/src/calculator.ts"
 const OUT = path.join(root, "site", "data", "generated")
 const MODERN = "2026-07-28"
 
 /** The spec as the site shows it (and its hash, to notice when it changes). */
 export function specFingerprint(text) {
   return createHash("sha256").update(text.replace(/\r\n/g, "\n")).digest("hex")
+}
+
+/** What the TypeScript example prints (it calls its tool in memory: no network). */
+export function runCalculator() {
+  const result = spawnSync(process.execPath, [CALCULATOR], { cwd: root, encoding: "utf8" })
+  if (result.status !== 0) throw new Error(`${CALCULATOR} failed: ${result.stderr}`)
+  return result.stdout.replace(/\r\n/g, "\n")
 }
 
 /** `--help` output of a command (run with this Node.js, from the repository root). */
@@ -171,6 +180,7 @@ async function main() {
       ...answers,
       calls,
       callsCapturedAt: capturedAt,
+      calculator: { file: CALCULATOR, stdout: runCalculator() },
     }
     writeFileSync(path.join(OUT, "example.json"), `${JSON.stringify(example, null, 2)}\n`)
   } finally {

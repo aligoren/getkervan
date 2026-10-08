@@ -4,6 +4,13 @@ seoTitle: 'What is MCP, and what does Kervan add?'
 description: The Model Context Protocol explained in plain terms; servers, tools, clients and transports, and what the Kervan framework adds on top of the official MCP SDK.
 lead: The Model Context Protocol (MCP) is an open protocol that lets AI applications use tools and data from other programs. Kervan is a framework for writing the server side.
 weight: 10
+next:
+  - url: /guides/mcp-server-from-yaml/
+    text: 'Build an MCP server from a YAML file'
+  - url: /guides/connect-claude-code/
+    text: 'Connect a Kervan server to Claude Code'
+  - url: /docs/framework/
+    text: 'The framework documentation'
 ---
 
 ## MCP in one paragraph
@@ -41,9 +48,3 @@ The official MCP SDK implements the protocol. Kervan is a thin layer over it
   checks, and for spec tools SSRF protection and secret redaction.
 - **Both protocol eras** from one app: the stateless 2026-07-28 revision and the 2025 revisions.
 - **A development loop:** `kervan dev` reloads on save without dropping the client, with a REPL.
-
-## Next
-
-- [Build an MCP server from a YAML file](/guides/mcp-server-from-yaml/)
-- [Connect a Kervan server to Claude Code](/guides/connect-claude-code/)
-- [The framework documentation](/docs/framework/)

@@ -53,7 +53,6 @@
         button.textContent = "Copy"
       }, 1600)
     })
-    block.classList.add("has-copy")
-    block.appendChild(button)
+    ;(block.querySelector(".code-head") ?? block).appendChild(button)
   }
 })()

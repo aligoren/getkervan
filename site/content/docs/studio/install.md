@@ -4,6 +4,12 @@ seoTitle: 'Install Kervan Studio and the first admin'
 description: Run Kervan Studio from a clone, set the master key, create the first admin with the one-time setup token or the create-admin command, and sign in.
 lead: Studio runs from a clone of the repository. Until the first admin exists, it listens on 127.0.0.1 only.
 weight: 10
+next:
+  - url: /docs/studio/configuration/
+    text: 'Configuration and reverse proxies'
+    note: 'for a server on the network'
+  - url: /docs/studio/servers/
+    text: 'Create your first server'
 ---
 
 ## Requirements
@@ -60,8 +66,3 @@ Once the admin exists, Studio also listens on `KERVAN_STUDIO_HOST`.
 ## Locked out
 
 {{% include file="apps/studio/README.md" section="Recovering admin access" %}}
-
-## Next
-
-[Configuration and reverse proxies](/docs/studio/configuration/) for a server on the network, then
-[create your first server](/docs/studio/servers/).

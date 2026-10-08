@@ -94,15 +94,19 @@ export function toProcess(line, tree = root) {
     const [name, ...value] = parts.shift().split("=")
     env[name] = value.join("=")
   }
+  // The published docs show placeholders for a clone's location (POSIX and Windows forms); the
+  // check runs with the real one.
   const absolute = (word) =>
     word
       .replace(/^\/absolute\/path\/to\/kervan\//, `${tree}/`)
+      .replace(/^C:\\path\\to\\kervan\\/i, `${tree}/`)
+      .replaceAll("\\", "/")
       .replace(/^(packages|apps|examples)\//, `${tree}/$1/`)
       .replaceAll("/", path.sep)
   let argv = parts.map((word, index) =>
     index === 0
       ? word
-      : /^(\/absolute|packages\/|apps\/|examples\/)/.test(word)
+      : /^(\/absolute|C:\\path\\to\\|packages\/|apps\/|examples\/)/i.test(word)
         ? absolute(word)
         : word,
   )

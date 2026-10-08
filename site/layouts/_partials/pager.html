@@ -6,10 +6,10 @@
 {{- if ge $index 0 -}}
 <nav class="pager" aria-label="Previous and next page">
   {{- if gt $index 0 }}{{ with index $pages (sub $index 1) }}
-  <a class="prev" href="{{ .RelPermalink }}" rel="prev"><span>Previous</span>{{ .Params.navTitle | default .LinkTitle }}</a>
+  <a class="prev" href="{{ .RelPermalink }}" rel="prev"><span>Previous</span>{{ .Params.menuTitle | default (.Params.navTitle | default .LinkTitle) }}</a>
   {{- end }}{{ end }}
   {{- if lt $index (sub (len $pages) 1) }}{{ with index $pages (add $index 1) }}
-  <a class="next" href="{{ .RelPermalink }}" rel="next"><span>Next</span>{{ .Params.navTitle | default .LinkTitle }}</a>
+  <a class="next" href="{{ .RelPermalink }}" rel="next"><span>Next</span>{{ .Params.menuTitle | default (.Params.navTitle | default .LinkTitle) }}</a>
   {{- end }}{{ end }}
 </nav>
 {{- end -}}

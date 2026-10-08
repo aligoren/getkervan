@@ -1,2 +1,2 @@
 {{- /* Clone and build the repository (params.repoURL: one place to set the address). */ -}}
-<div class="code" data-check="clone" data-lang="sh">{{ transform.Highlight (printf "git clone %s.git\ncd kervan\ncorepack enable\npnpm install\npnpm build" site.Params.repoURL) "sh" "" }}</div>
+{{- partial "code.html" (dict "code" (printf "git clone %s.git\ncd kervan\ncorepack enable\npnpm install\npnpm build" site.Params.repoURL) "lang" "sh" "attrs" (dict "check" "clone")) -}}

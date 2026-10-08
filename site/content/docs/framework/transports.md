@@ -3,7 +3,14 @@ title: Transports and authentication
 seoTitle: 'MCP over stdio and Streamable HTTP with Kervan'
 description: 'Serve a Kervan MCP server over stdio or stateless Streamable HTTP, on Node or fetch runtimes, with Host and Origin checks and authentication.'
 lead: The same app serves stdio and Streamable HTTP, on Node or on fetch runtimes (Workers, Deno, Bun), for clients of both protocol eras.
-weight: 80
+weight: 70
+group: Run and operate
+fits: 'Run and operate. How clients reach the tools you built in [YAML](/docs/framework/spec-reference/) or [TypeScript](/docs/framework/code/).'
+next:
+  - url: /docs/framework/protocol/
+    text: 'MCP 2026-07-28 notes'
+  - url: /docs/framework/deployment/
+    text: 'Deployment'
 ---
 
 ## Which transport
@@ -49,7 +56,3 @@ header the client chose, and return the same registry object for the same tenant
 Kervan does not implement OAuth 2.1 with protected resource metadata, which the MCP authorization
 specification describes for remote servers; put an authenticating proxy or your own
 `authenticate` in front.
-
-## Testing
-
-{{% include file="packages/transport/README.md" section="Testing: `@kervan/transport/testing`" %}}

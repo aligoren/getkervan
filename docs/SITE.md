@@ -31,7 +31,9 @@ Nothing that exists elsewhere in the repository is copied into `site/` by hand. 
 
 | Shown on the site | Comes from |
 | --- | --- |
-| The landing page's `kervan.yaml` | `examples/spec/kervan.yaml` (mounted; a test compares the page with the file) |
+| The landing page's `kervan.yaml` | `examples/spec/kervan.yaml` (mounted; check:site compares the page with the file, the excerpt with its beginning) |
+| The landing page's TypeScript and "Tools in TypeScript" | `examples/calculator/src/calculator.ts`, a workspace example with its own test (mounted; the `code-file` shortcode shows it; check:site compares) |
+| The package diagram (landing page and "How Kervan works") | `site/layouts/_partials/diagram.html`, one inline SVG colored by the tokens |
 | `tools/list`, `server/discover` and the two tool calls | `site/data/generated/example.json`, written by `pnpm site:generate` from a real `kervan run --http` |
 | The `kervan.yaml` reference | `packages/spec-runtime/schema/kervan.schema.json`, rendered at build time |
 | CLI reference | `site/data/generated/cli-help.json` (the real `--help` output) and `packages/cli/README.md` |
@@ -44,6 +46,21 @@ Nothing that exists elsewhere in the repository is copied into `site/` by hand. 
 The `include` shortcode leaves out "Not published yet" notes (the site says that itself), points
 relative links at the source repository, and while `params.published` is false shows
 `node /path/to/kervan/packages/cli/bin/kervan.js` where a README says `npx kervan`.
+
+### The landing page and the framework book
+
+The landing page is about the framework; Studio is one short section. In order: the hero (no
+picture), "One server, two ways to write tools" (a YAML and a TypeScript tab, radio buttons read
+by `:has()`, so no JavaScript), "What every tool gets", "How it fits together" (the diagram),
+"Run it anywhere, connect any client", "Get started", "Security by design" (framework checks
+first, Studio's in one line), "Kervan Studio, optional" (one picture, a link to `/studio/`) and
+the documentation links. `/studio/` is Studio's own page, with the gallery.
+
+The framework book's menu has five groups (`groups` in `content/docs/framework/_index.md`; each
+page names its `group`): Start, Concepts, Build with YAML, Build with TypeScript, Run and operate.
+Each page has a "Where this fits" line (`fits`) and ends with "Next" links (`next`): a list after
+the content, not a heading, so "On this page" lists only sections. Export names on the
+programmatic API page link to their pages through `data/api-links.yaml`.
 
 ### Design tokens
 
@@ -130,7 +147,9 @@ Slow, `pnpm site:verify`:
   nothing; no request leaves the local server; nothing logs an error; nothing scrolls sideways;
 - without JavaScript: the theme switch works, the skip link is the first Tab stop, the search page
   lists every page; with it: copy buttons and search work;
-- the home page's first load measured in the browser stays within the budget;
+- one vertical scroll bar, the page's: no code block or menu scrolls on its own; no copy button
+  covers code;
+- the home page, with the images Chromium loads, stays within the budget;
 - `--examples` runs the documentation's code blocks against this working tree (below); `--shots
   <dir>` saves pictures of four pages in each variant for a visual check.
 
@@ -140,7 +159,8 @@ Every shell, PowerShell, Dockerfile, Caddyfile, TypeScript and YAML block says h
 with an attribute on the fence, for example ```` ```sh {check="run"} ````. The kinds are listed
 at the top of `scripts/site/docs-examples.mjs`: `run`, `starts` (with the text that shows it is
 ready), `repl` (a `kervan dev` transcript, replayed), `ts`/`ts-run` (type-checked against the
-packages; `ts-run` also runs), `spec`, `fragment`, `ts-syntax`, `studio-key` (writes the master
+packages; `ts-run` also runs; with `network="true"` only with `--network`), `spec`, `fragment`,
+`ts-syntax`, `studio-key` (writes the master
 key file the next Studio commands use), `studio-starts`,
 `studio-create-admin`, `claude`, `docker`/`docker-run`, `source`/`clone`/`published` (install
 steps), and `manual` with a `reason` when a block cannot run here (a public DNS name, a real API
@@ -165,14 +185,20 @@ block with `WebSite` and `Organization` (`SoftwareApplication` on the home page,
 and `TechArticle` elsewhere) and no ratings, reviews, prices or awards; nothing loaded from
 another site; no iframe, inline script, inline style or event handler attribute; external links
 with `rel="noopener noreferrer"`; internal links and fragments that exist; images with `alt`,
-`width` and `height`; no page without a link to it.
+`width` and `height`; no page without a link to it; every `<pre>` focusable (`tabindex="0"`) with a
+role and an accessible name, so a long line can be scrolled from the keyboard; "On this page" lists
+sections only (no "Next" or other navigation); no real local path (a drive-letter path other than
+the `C:\path\to\` placeholder, a `/home/<name>` or `/Users/<name>` folder) in any HTML, JSON, XML,
+CSS or script file.
 
 For the site: `sitemap.xml` lists exactly the canonical pages, with `lastmod` from git (a warning when one is missing);
 `robots.txt` allows everything and names the sitemap; `_headers` has the CSP and the other
 headers, HSTS of at least a year, and `noindex` for the `*.pages.dev` preview hosts and only for them;
 no canonical link on the 404 page; the performance budget; the framework
-book never mentions Studio except the one line pointing to its docs; the landing page shows
-`examples/spec/kervan.yaml` unchanged.
+book never mentions Studio except the one line pointing to its docs, and each of its pages has a
+"Where this fits" line; the landing page shows `examples/spec/kervan.yaml` and
+`examples/calculator/src/calculator.ts` unchanged, no Studio screenshot in its first screen (the
+hero) and at most two Studio screenshots in all.
 
 An npm install command in a code block while `params.published` is false is an error.
 
@@ -184,7 +210,7 @@ placeholder; a page has no `lastmod` (not committed yet); `security.txt` expires
 
 | What | Budget |
 | --- | --- |
-| Home page first load (HTML, CSS, preloaded font, scripts, LCP image) | 200 KiB |
+| Home page first load (HTML, CSS, preloaded font, scripts, and an LCP image if the hero has one) | 200 KiB |
 | LCP image | 100 KiB |
 | Home page with every image (one variant each) | 600 KiB |
 | CSS | 30 KiB |
@@ -193,9 +219,11 @@ placeholder; a page has no `lastmod` (not committed yet); `security.txt` expires
 | One screenshot | 120 KiB |
 | One HTML page | 150 KiB |
 
-On this build the home page's first load is about 157 KiB (counted by check:site: HTML, CSS, font,
-scripts and the largest variant of the hero picture). In the browser, with the gallery images
-Chromium fetches ahead of scrolling, it is about 415 KiB (`site:verify`, against the 600 KiB budget).
+On this build (after the framework-first landing page) the home page's first load is about 115 KiB:
+HTML 47 KiB, CSS 20 KiB, the font 47 KiB and 1.3 KiB of scripts; the hero has no image. The only
+Studio picture on the page is lazy-loaded below the fold (about 65 KiB for the variant a visitor
+gets). In the browser `site:verify` measures about 115 KiB at load (before: 157 KiB counted, 415 KiB
+in the browser with the old gallery).
 
 ## Before the release, and on release day
 
@@ -221,7 +249,12 @@ Every claim on the landing page, and what backs it. When a claim changes, change
 | Pre-release, not on npm | `params.published = false`; the packages' "Not published yet" notes; `guard-publish.mjs` |
 | On the official MCP SDK, not a rewrite | `@modelcontextprotocol/server`, `/client`, `/hono` dependencies (`packages/*/package.json`) |
 | MCP 2026-07-28, stateless; `server/discover`; 2025 clients served too | `packages/transport`; both eras in `packages/transport/test` (`http`, `stdio`, `testing`); the landing page's `server/discover` output is a real answer |
-| Both kinds of tool: arguments validated before the handler, masked errors (only `ToolError` messages reach the client), a timeout on every call | `packages/core/src/tool.ts`, `errors.ts`; core's error-masking tests |
+| Both kinds of tool: arguments validated before the handler, masked errors (only `ToolError` messages reach the client), a timeout on every call (30 s by default) and the client's cancellation, results checked against the output schema | `packages/core/src/tool.ts` (`invokeTool`), `app.ts` (`DEFAULT_TOOL_TIMEOUT_MS`), `errors.ts`; core's tests; the errors and testing pages' examples run in `site:verify --examples` |
+| Spec tools also: SSRF protection, secret redaction, a rate limit per tool (60 a minute, 10 at once by default), `select` in a separate process without network or environment | `packages/spec-runtime/src/network.ts`, `secrets.ts`, `compile.ts` (`CallLimiter`), `select.ts`; their tests |
+| `serveHttp` limits requests per minute (300 by default) | `packages/transport/src/node.ts`, `rate-limit.ts` (`DEFAULT_RATE_LIMIT`) |
+| The package diagram: spec-runtime and transport build on core; the CLI uses both; create-kervan runs `kervan create` | `packages/*/package.json` dependencies; `packages/cli/src/run.ts`; `packages/create-kervan/bin/create-kervan.js` |
+| `list_changed` once per batch, only on a real change; none for 2025-era HTTP clients | `packages/transport/test/dynamic.test.ts`; the registry page's example runs in `site:verify --examples` |
+| Fetch runtimes (Workers, Deno, Bun) via `toFetchHandler`; `allowedHosts`/`allowedOrigins` | `packages/transport/src/index.ts`; transport tests |
 | Timeouts, size limits, rate limits (spec tools), Host and Origin checks by default | `limits.toolTimeoutMs` (core, 30 s), `HTTP_DEFAULTS`, `SPEC_LIMITS` and the per-tool rate limit (spec-runtime), `allowedHosts` (transport); their tests |
 | SSRF: public addresses only, DNS resolved once and pinned, redirects refused unless allowed then rechecked, metadata always refused | `packages/spec-runtime/src/network.ts`; network tests with mutation runs (CLAUDE.md, Aşama 3) |
 | Secret redaction in every encoding Kervan knows | `SecretVault` (raw, URL, form, JSON, number forms) and its tests |
@@ -255,13 +288,20 @@ a search intent:
 | `/docs/framework/code/` | Write MCP tools in TypeScript with Zod |
 | `/docs/framework/transports/` | stdio vs Streamable HTTP, Host checks, fetch runtimes |
 | `/docs/framework/protocol/` | What MCP 2026-07-28 changes for a server |
-| `/docs/framework/api/` | Which exports are stable |
+| `/docs/framework/how-kervan-works/` | How an MCP framework is put together; what happens to a tool call |
+| `/docs/framework/yaml-or-typescript/` | "MCP tool in YAML or code": which to choose, the same tool both ways |
+| `/docs/framework/errors/` | How MCP tool errors reach the model; masking |
+| `/docs/framework/middleware/` | Run code around MCP tool calls (logging, permission checks) |
+| `/docs/framework/registry/` | Add or remove MCP tools at runtime; `list_changed` |
+| `/docs/framework/testing/` | Test MCP tools without a server |
+| `/docs/framework/api/` | Which exports are stable; each links to its explanation |
 | `/docs/framework/cli/` | `kervan create`, `dev`, `run` options |
 | `/docs/framework/security/` | Kervan's security model, SSRF protection |
 | `/docs/framework/deployment/` | Run an MCP server in Docker and behind a proxy |
 | `/docs/framework/troubleshooting/` | Fix a specific error message |
 | `/docs/framework/versioning/` | Versions, `specVersion`, upgrades |
-| `/docs/studio/` | What Kervan Studio is: a self-hosted MCP gateway |
+| `/studio/` | Kervan Studio as a product: what it is, when it helps, pictures |
+| `/docs/studio/` | Kervan Studio documentation: where to start |
 | `/docs/studio/install/` | Install Studio and create the first admin |
 | `/docs/studio/data-and-master-key/` | Where Studio keeps data; the master key |
 | `/docs/studio/users/` | Roles and user management |

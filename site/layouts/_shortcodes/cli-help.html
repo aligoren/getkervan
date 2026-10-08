@@ -9,4 +9,4 @@
 {{- with .Get "without" -}}
   {{- $text = replaceRE (printf `(?m)^  %s [^\n]*\n(    [^\n]*\n)*` .) "" $text -}}
 {{- end -}}
-<div class="code" data-lang="text"><span class="code-label">{{ .Get "command" }} --help</span>{{ transform.Highlight $text "text" "" }}</div>
+{{- partial "code.html" (dict "code" $text "lang" "text" "label" (printf "%s --help" (.Get "command"))) -}}

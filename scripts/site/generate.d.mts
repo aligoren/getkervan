@@ -20,3 +20,4 @@ export declare function startSpec(
 export declare function offlineAnswers(
   url: string,
 ): Promise<{ discover: Answer; toolsList: Answer }>
+export declare function runCalculator(): string

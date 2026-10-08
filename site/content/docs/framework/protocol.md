@@ -3,7 +3,14 @@ title: MCP 2026-07-28 notes
 seoTitle: 'MCP 2026-07-28: _meta, discover, list_changed'
 description: What the stateless MCP 2026-07-28 revision changes and how Kervan serves it next to 2025-era clients; _meta on every request, server/discover, list_changed.
 lead: Kervan serves the 2026-07-28 revision of MCP and the 2025 revisions (up to 2025-11-25) from the same app. This page explains what differs.
-weight: 90
+weight: 75
+group: Run and operate
+fits: 'Run and operate. The protocol details behind the [transports](/docs/framework/transports/).'
+next:
+  - url: /docs/framework/cli/
+    text: 'CLI reference'
+  - url: /docs/framework/troubleshooting/
+    text: 'Troubleshooting'
 ---
 
 ## Stateless requests

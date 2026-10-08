@@ -3,7 +3,15 @@ title: HTTP tools
 seoTitle: 'HTTP tools in kervan.yaml: URL, query, body'
 description: How a kervan.yaml tool turns its arguments into an HTTP request; methods, URL paths, query strings, headers, JSON bodies, timeouts, redirects and limits.
 lead: Each spec tool makes one HTTP request. This page covers how the request is built and what limits apply to it.
-weight: 30
+weight: 25
+group: Build with YAML
+fits: 'Build with YAML. How a spec entry becomes an HTTP request; the [reference](/docs/framework/spec-reference/) lists every field.'
+next:
+  - url: /docs/framework/input-output/
+    text: 'Input and output'
+    note: 'arguments in, results out'
+  - url: /docs/framework/secrets/
+    text: 'Secrets'
 ---
 
 ## The request

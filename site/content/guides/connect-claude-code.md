@@ -18,7 +18,7 @@ network.
 {{< connect-command >}}
 
 On Windows the same command works in PowerShell with Windows paths, for example
-`node D:\src\kervan\packages\cli\bin\kervan.js run D:\src\kervan\examples\spec\kervan.yaml`.
+`node C:\path\to\kervan\packages\cli\bin\kervan.js run C:\path\to\kervan\examples\spec\kervan.yaml`.
 
 Check it:
 

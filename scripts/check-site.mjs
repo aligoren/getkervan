@@ -124,6 +124,44 @@ export function decodeEntities(text) {
   })
 }
 
+/** The placeholders docs may use for a clone's location; any other absolute path is someone's. */
+const PATH_PLACEHOLDERS = [/^[A-Za-z]:\\path\\to\\/i]
+
+/**
+ * Real-looking local paths in `text` (already decoded: no HTML entities, no JSON escapes): a
+ * drive-letter path with at least one folder (`D:\Projects\...`), or a home folder
+ * (`/home/<name>`, `/Users/<name>`). Returns the matches' kinds, never the paths themselves.
+ */
+export function pathLeaks(text) {
+  const found = []
+  for (const match of text.matchAll(/(?<![\w\\])[A-Za-z]:\\(?:[^\\\s"'<>|*?]+\\)+/g)) {
+    if (!PATH_PLACEHOLDERS.some((placeholder) => placeholder.test(match[0]))) {
+      found.push("a drive-letter path")
+    }
+  }
+  if (/(?<![\w.-])\/(?:home|Users)\/[A-Za-z0-9._-]+/.test(text)) found.push("a home folder path")
+  return [...new Set(found)]
+}
+
+/** The text a file shows or carries: HTML decoded, JSON strings parsed, other text as it is. */
+function textForScan(name, content) {
+  if (name.endsWith(".json")) {
+    const strings = []
+    const walk = (value) => {
+      if (typeof value === "string") strings.push(value)
+      else if (value && typeof value === "object")
+        for (const each of Object.values(value)) walk(each)
+    }
+    try {
+      walk(JSON.parse(content))
+    } catch {
+      return content
+    }
+    return strings.join("\n")
+  }
+  return name.endsWith(".html") || name.endsWith(".xml") ? decodeEntities(content) : content
+}
+
 /** Every start tag of `name` (or all tags) with its attributes (quoted or not, as minified HTML has them). */
 export function tags(html, name) {
   const found = []
@@ -240,7 +278,10 @@ const NPM_COMMANDS =
   /\b(?:npm (?:create|init|install|i|exec)\s+(?:-[\w-]+\s+)*(?:@?kervan|create-kervan)|npx\s+(?:-[\w-]+\s+)*(?:kervan|create-kervan)|pnpm (?:add|dlx|create) (?:@?kervan|create-kervan)|yarn (?:add|create|dlx) (?:@?kervan|create-kervan))/i
 export const STUDIO_LINE = "Looking for the optional web UI? See Studio docs."
 
-/** Checks the built site. `params` from hugo.toml; `exampleSpec` is examples/spec/kervan.yaml. */
+/**
+ * Checks the built site. `params` from hugo.toml; `exampleSpec` is examples/spec/kervan.yaml,
+ * `exampleTs` examples/calculator/src/calculator.ts.
+ */
 export function checkBuild(view, params, options = {}) {
   const errors = []
   const warnings = []
@@ -482,6 +523,23 @@ export function checkBuild(view, params, options = {}) {
         errors.push(
           `${where}: the framework docs mention "Studio" (only the one line "${STUDIO_LINE}" may).`,
         )
+      // Each page says where it sits in the book.
+      if (!/<p class="?fits"?>/.test(article)) errors.push(`${where}: no "Where this fits" line.`)
+    }
+
+    // Code blocks scroll sideways when a line is long: each <pre> is focusable and named.
+    for (const pre of tags(main, "pre")) {
+      if (pre.attrs.tabindex !== "0" || !pre.attrs.role || !(pre.attrs["aria-label"] ?? "").trim())
+        errors.push(`${where}: a <pre> without tabindex="0", a role and an aria-label.`)
+    }
+
+    // "On this page" lists the page's sections, not navigation ("Next" is a list after the content).
+    for (const toc of main.matchAll(/<nav id="?TableOfContents"?>([\s\S]*?)<\/nav>/g)) {
+      for (const link of toc[1].matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)) {
+        const text = textOf(link[1]).trim()
+        if (/^(next|next steps|previous|where to go next|see also)$/i.test(text))
+          errors.push(`${where}: "On this page" lists "${text}", a navigation item.`)
+      }
     }
   }
 
@@ -603,6 +661,14 @@ export function checkBuild(view, params, options = {}) {
     }
   }
 
+  // No real local path in anything the site serves (docs use C:\path\to\kervan\...).
+  for (const file of [...view.files].sort()) {
+    if (!/\.(html|json|xml|txt|css|js|svg)$/.test(file) && file !== "_headers") continue
+    for (const kind of pathLeaks(textForScan(file, view.text(file)))) {
+      errors.push(`${file}: shows ${kind}; use a placeholder such as C:\\path\\to\\kervan\\.`)
+    }
+  }
+
   // CSS and the performance budget.
   for (const file of view.files) {
     if (file.endsWith(".css")) {
@@ -638,17 +704,37 @@ export function checkBuild(view, params, options = {}) {
       .filter((tag) => tag.attrs.rel === "preload")
       .map((tag) => local(tag.attrs.href))
     const scripts = tags(html, "script").map((tag) => local(tag.attrs.src))
-    const images = tags(html, "img")
-    const lcp = images[0]
-    if (!lcp) errors.push("/: no image for the largest contentful paint.")
-    else {
+    // The first screen (the hero) is about the framework: no Studio screenshot there. An image in
+    // it would be the largest contentful paint: loaded eagerly, with fetchpriority="high".
+    const hero = /<section class="?hero"?[\s\S]*?<\/section>/.exec(html)?.[0] ?? ""
+    if (!hero) errors.push("/: no hero section.")
+    const heroImages = tags(hero, "img")
+    if (heroImages.some((tag) => (tag.attrs.src ?? "").includes("/screenshots/")))
+      errors.push("/: a Studio screenshot in the first screen; the hero shows the framework.")
+    const lcp = heroImages[0]
+    if (lcp) {
       if (lcp.attrs.loading === "lazy")
         errors.push("/: the first image (the LCP candidate) is lazy-loaded.")
       if (lcp.attrs.fetchpriority !== "high")
         errors.push('/: the first image has no fetchpriority="high".')
     }
-    // The LCP image: the largest of the first picture's sources.
-    const firstPicture = /<picture[\s\S]*?<\/picture>/.exec(html)?.[0] ?? ""
+    // Studio is a secondary product: at most two of its screenshots on the landing page.
+    const screenshots = new Set(
+      tags(html, "img")
+        .map((tag) => tag.attrs.src ?? "")
+        .filter((src) => src.includes("/screenshots/"))
+        .map((src) =>
+          src
+            .replace(/^.*\/(?:mobile-)?/, "")
+            .replace(/-(?:light|dark)(?:\.[0-9a-f]+)?\.webp$/, ""),
+        ),
+    )
+    if (screenshots.size > 2)
+      errors.push(
+        `/: ${screenshots.size} Studio screenshots (${[...screenshots].join(", ")}); at most 2.`,
+      )
+    // The LCP image: the largest of the hero picture's sources.
+    const firstPicture = /<picture[\s\S]*?<\/picture>/.exec(hero)?.[0] ?? ""
     const lcpFiles = [
       ...tags(firstPicture, "source").map((tag) => local(tag.attrs.srcset)),
       local(lcp?.attrs.src),
@@ -687,19 +773,32 @@ export function checkBuild(view, params, options = {}) {
       )
   }
 
-  // The landing page shows the repository's example spec, unchanged.
+  // The landing page shows the repository's examples unchanged: the whole spec (and, above it, its
+  // beginning) and the TypeScript example. Only the look may change (wrapping), never the text.
   if (options.exampleSpec !== undefined && view.files.has("index.html")) {
-    const block = /data-example="?landing-spec"?[^>]*>([\s\S]*?)<\/div>/.exec(
-      view.text("index.html"),
-    )?.[1]
-    const shown = block === undefined ? undefined : decodeEntities(block.replace(/<[^>]+>/g, ""))
+    const html = view.text("index.html")
+    const shownCode = (id) => {
+      const opening = new RegExp(`data-example="?${id}"?[\\s>]`).exec(html)
+      const pre = opening && /<pre[\s\S]*?<\/pre>/.exec(html.slice(opening.index))?.[0]
+      return pre ? decodeEntities(pre.replace(/<[^>]+>/g, "")).trimEnd() : undefined
+    }
     const expectedSpec = options.exampleSpec
       .replace(/\r\n/g, "\n")
       .replace(/^# yaml-language-server:[^\n]*\n/, "")
       .trimEnd()
-    if (shown === undefined) errors.push("/: the example spec block is missing.")
-    else if (shown.trimEnd() !== expectedSpec)
+    const spec = shownCode("landing-spec")
+    if (spec === undefined) errors.push("/: the example spec block is missing.")
+    else if (spec !== expectedSpec)
       errors.push("/: the spec shown differs from examples/spec/kervan.yaml.")
+    const excerpt = shownCode("landing-spec-excerpt")
+    if (excerpt === undefined || excerpt.length === 0 || !expectedSpec.startsWith(excerpt))
+      errors.push("/: the spec excerpt is not the beginning of examples/spec/kervan.yaml.")
+    if (options.exampleTs !== undefined) {
+      const ts = shownCode("landing-ts")
+      if (ts === undefined) errors.push("/: the TypeScript example block is missing.")
+      else if (ts !== options.exampleTs.replace(/\r\n/g, "\n").trimEnd())
+        errors.push("/: the TypeScript shown differs from examples/calculator/src/calculator.ts.")
+    }
   }
 
   return { errors, warnings }
@@ -728,6 +827,7 @@ function main() {
   if (existsSync(path.join(dir, "index.html"))) {
     const built = checkBuild(siteView(dir), params, {
       exampleSpec: read("examples/spec/kervan.yaml"),
+      exampleTs: read("examples/calculator/src/calculator.ts"),
     })
     errors.push(...built.errors)
     warnings.push(...built.warnings)

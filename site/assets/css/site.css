@@ -506,10 +506,6 @@ hr {
   color: var(--k-fg-subtle);
 }
 
-.panel pre {
-  max-height: 34rem;
-}
-
 .tool-list {
   list-style: none;
   padding: 0;
@@ -635,13 +631,6 @@ figcaption {
 
   .docs-nav details > .nav-inner {
     display: block;
-  }
-
-  .docs-nav .nav-inner {
-    position: sticky;
-    top: 1rem;
-    max-height: calc(100vh - 2rem);
-    overflow-y: auto;
   }
 }
 
@@ -859,44 +848,196 @@ figcaption {
   margin-bottom: 0.25rem;
 }
 
-/* Code blocks: plain text without JavaScript; site.js adds a copy button. */
+/* Code blocks: a head (label, and the copy button site.js adds) above the code, so the button
+   never covers it. Long lines scroll sideways inside the block, which is focusable; a shadow at
+   the edge shows there is more. In .code-wrap blocks long lines wrap instead (copying gives the
+   original lines). A block never scrolls vertically: it is as tall as its code. */
 .code {
-  position: relative;
   margin: 0 0 1rem;
+  border: 1px solid var(--k-border);
+  border-radius: var(--radius);
+  background: var(--k-surface);
+  overflow: hidden;
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.1rem;
+  padding: 0.2rem 0.45rem 0.2rem 0.9rem;
+  border-bottom: 1px solid var(--k-border);
+  background: var(--k-subtle);
+}
+
+.code .code-label {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--k-fg-muted);
+  overflow-wrap: anywhere;
 }
 
 .code pre {
   margin: 0;
+  border: 0;
+  border-radius: 0;
+  max-height: none;
+  overflow-y: visible;
+  background:
+    linear-gradient(to right, var(--k-surface) 30%, transparent) left / 2rem 100% no-repeat local,
+    linear-gradient(to left, var(--k-surface) 30%, transparent) right / 2rem 100% no-repeat local,
+    linear-gradient(to right, color-mix(in srgb, var(--k-fg) 35%, transparent), transparent) left /
+    1.5rem 100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in srgb, var(--k-fg) 35%, transparent), transparent) right /
+    1.5rem 100% no-repeat scroll,
+    var(--k-surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--k-border-input) transparent;
 }
 
-.code .code-label {
+.code-wrap pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A wrapped line continues two characters in from its own indentation (classes i1 to i24 come
+   from partial code.html). */
+.code-wrap pre .line {
   display: block;
-  font-size: 0.75rem;
-  font-family: var(--font-mono);
-  color: var(--k-fg-subtle);
-  margin-bottom: 0.25rem;
+  padding-left: 2ch;
+  text-indent: -2ch;
+}
+
+.code-wrap pre .line.i1 {
+  padding-left: 3ch;
+  text-indent: -3ch;
+}
+
+.code-wrap pre .line.i2 {
+  padding-left: 4ch;
+  text-indent: -4ch;
+}
+
+.code-wrap pre .line.i3 {
+  padding-left: 5ch;
+  text-indent: -5ch;
+}
+
+.code-wrap pre .line.i4 {
+  padding-left: 6ch;
+  text-indent: -6ch;
+}
+
+.code-wrap pre .line.i5 {
+  padding-left: 7ch;
+  text-indent: -7ch;
+}
+
+.code-wrap pre .line.i6 {
+  padding-left: 8ch;
+  text-indent: -8ch;
+}
+
+.code-wrap pre .line.i7 {
+  padding-left: 9ch;
+  text-indent: -9ch;
+}
+
+.code-wrap pre .line.i8 {
+  padding-left: 10ch;
+  text-indent: -10ch;
+}
+
+.code-wrap pre .line.i9 {
+  padding-left: 11ch;
+  text-indent: -11ch;
+}
+
+.code-wrap pre .line.i10 {
+  padding-left: 12ch;
+  text-indent: -12ch;
+}
+
+.code-wrap pre .line.i11 {
+  padding-left: 13ch;
+  text-indent: -13ch;
+}
+
+.code-wrap pre .line.i12 {
+  padding-left: 14ch;
+  text-indent: -14ch;
+}
+
+.code-wrap pre .line.i13 {
+  padding-left: 15ch;
+  text-indent: -15ch;
+}
+
+.code-wrap pre .line.i14 {
+  padding-left: 16ch;
+  text-indent: -16ch;
+}
+
+.code-wrap pre .line.i15 {
+  padding-left: 17ch;
+  text-indent: -17ch;
+}
+
+.code-wrap pre .line.i16 {
+  padding-left: 18ch;
+  text-indent: -18ch;
+}
+
+.code-wrap pre .line.i17 {
+  padding-left: 19ch;
+  text-indent: -19ch;
+}
+
+.code-wrap pre .line.i18 {
+  padding-left: 20ch;
+  text-indent: -20ch;
+}
+
+.code-wrap pre .line.i19 {
+  padding-left: 21ch;
+  text-indent: -21ch;
+}
+
+.code-wrap pre .line.i20 {
+  padding-left: 22ch;
+  text-indent: -22ch;
+}
+
+.code-wrap pre .line.i21 {
+  padding-left: 23ch;
+  text-indent: -23ch;
+}
+
+.code-wrap pre .line.i22 {
+  padding-left: 24ch;
+  text-indent: -24ch;
+}
+
+.code-wrap pre .line.i23 {
+  padding-left: 25ch;
+  text-indent: -25ch;
+}
+
+.code-wrap pre .line.i24 {
+  padding-left: 26ch;
+  text-indent: -26ch;
 }
 
 .copy {
-  position: absolute;
-  top: 0.45rem;
-  right: 0.45rem;
+  flex: none;
   font: 500 0.75rem var(--font-sans);
-  padding: 0.25rem 0.55rem;
+  padding: 0.2rem 0.55rem;
   border-radius: 6px;
   border: 1px solid var(--k-border-input);
   background: var(--k-control);
   color: var(--k-fg-muted);
   cursor: pointer;
-}
-
-/* With a copy button, the code starts below it. */
-.code.has-copy pre {
-  padding-top: 2.4rem;
-}
-
-.code:has(.code-label) .copy {
-  top: 1.7rem;
 }
 
 .copy:hover {
@@ -1067,4 +1208,218 @@ figcaption {
 .card h2.card-title {
   margin: 0 0 0.35rem;
   font-size: 1.02rem;
+}
+
+/* The package diagram (partial diagram.html): colors from the tokens, readable in both themes. */
+.diagram {
+  margin: 1.5rem 0;
+}
+
+.diagram svg {
+  display: block;
+  width: 100%;
+  max-width: 860px;
+  height: auto;
+}
+
+.dg-box rect {
+  fill: var(--k-surface);
+  stroke: var(--k-border-strong);
+  stroke-width: 1.5;
+}
+
+.dg-accent rect {
+  fill: var(--k-accent-subtle);
+  stroke: var(--k-accent);
+}
+
+.dg-quiet rect {
+  fill: var(--k-subtle);
+}
+
+.dg-title {
+  fill: var(--k-fg);
+  font: 600 15px var(--font-sans);
+}
+
+.dg-sub {
+  fill: var(--k-fg-muted);
+  font: 400 12.5px var(--font-sans);
+}
+
+.dg-lines path {
+  fill: none;
+  stroke: var(--k-fg-subtle);
+  stroke-width: 1.6;
+}
+
+.dg-head {
+  fill: var(--k-fg-subtle);
+}
+
+/* "Where this fits" at the top of a framework page, and the "Next" links at its end. */
+.fits {
+  font-size: 0.92rem;
+  color: var(--k-fg-muted);
+  border-left: 3px solid var(--k-accent);
+  padding: 0.15rem 0 0.15rem 0.75rem;
+  margin: -0.25rem 0 1.5rem;
+}
+
+.fits-label {
+  font-weight: 600;
+  color: var(--k-fg);
+}
+
+.next-steps {
+  margin: 2.5rem 0 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--k-border);
+  border-radius: var(--radius);
+  background: var(--k-surface);
+}
+
+.next-steps-title {
+  font-weight: 700;
+  margin: 0 0 0.4rem;
+}
+
+.next-steps ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.docs-nav h3 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--k-fg-muted);
+  margin: 0.9rem 0 0.25rem 0.6rem;
+}
+
+/* The landing page's showcase: two tabs made of radio buttons, without JavaScript (:has reads the
+   checked one). Without CSS both panels show, one after the other. */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border: 0;
+  border-bottom: 1px solid var(--k-border);
+  padding: 0;
+  margin: 0 0 1.25rem;
+}
+
+.tab-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.tab {
+  padding: 0.55rem 1rem;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-weight: 600;
+  color: var(--k-fg-muted);
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--k-fg);
+}
+
+.tab-input:checked + .tab {
+  color: var(--k-fg);
+  background: var(--k-surface);
+  border-color: var(--k-border);
+  box-shadow: inset 0 3px 0 var(--k-accent);
+}
+
+.tab-input:focus-visible + .tab {
+  outline: 2px solid var(--k-ring);
+  outline-offset: 2px;
+}
+
+.showcase .panel-ts {
+  display: none;
+}
+
+.showcase:has(#show-ts:checked) .panel-ts {
+  display: block;
+}
+
+.showcase:has(#show-ts:checked) .panel-yaml {
+  display: none;
+}
+
+.full-file {
+  margin: 0 0 1rem;
+}
+
+.full-file > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.92rem;
+  margin-bottom: 0.75rem;
+}
+
+.plain-list {
+  margin: 0 0 1rem;
+  padding-left: 1.1rem;
+}
+
+.plain-list li + li {
+  margin-top: 0.35rem;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.05rem 0.5rem;
+  margin-right: 0.35rem;
+  border-radius: 999px;
+  background: var(--k-subtle);
+  border: 1px solid var(--k-border);
+  color: var(--k-fg);
+}
+
+/* The landing page's short Studio section: text beside one picture. */
+.studio-teaser {
+  display: grid;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+@media (min-width: 60rem) {
+  .studio-teaser {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+}
+
+.studio-teaser figure {
+  margin: 0;
+}
+
+/* The Studio product page: prose, then a wide gallery. */
+.product {
+  padding-bottom: 1rem;
+}
+
+.gallery-wide {
+  margin: 0 0 1rem;
+}
+
+/* Names in a table's first column stay whole where there is room (on phones they may break). */
+@media (min-width: 48rem) {
+  td:first-child > code,
+  td:first-child > a > code {
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+}
+
+.gallery-wide {
+  grid-template-columns: repeat(auto-fit, minmax(min(26rem, 100%), 1fr));
 }

@@ -1,0 +1,60 @@
+{{ define "main" }}
+{{- /* The Studio product page: what it is, when it helps, pictures, what it does, how to start. */ -}}
+<div class="wrap">
+  <div class="prose page-pad product">
+    {{ partial "breadcrumb.html" . }}
+    <h1>{{ .Title }}</h1>
+    <p class="page-lead">{{ .Params.lead | markdownify }}</p>
+    <div class="callout">
+      <strong>Not required: the framework works without it.</strong>
+      Studio is a separate app in the same repository. It uses only the framework's public API, and
+      nothing in the framework depends on it. Every server exports as <code>kervan.yaml</code> and runs
+      with <code>kervan run</code>.
+    </div>
+
+    <h2 id="when">When it helps</h2>
+    <ul>
+      <li>Several people write and change tools, and you want roles (admins and members) instead of shared files.</li>
+      <li>Upstream API keys should live in one encrypted place, bound to the hosts that may receive them, and never be shown again.</li>
+      <li>MCP clients should connect through one gateway with an API key per server, and you want to see the calls.</li>
+      <li>You want versions you can publish and roll back, with a record of who did what.</li>
+    </ul>
+    <p>If you write specs in a repository and run <code>kervan run</code>, you do not need Studio.</p>
+  </div>
+
+  <div class="gallery gallery-wide">
+    <figure>{{ partial "shot.html" (dict "name" "editor" "alt" "The weather server's editor with its kervan.yaml, published as version 2, and the playground beside it.") }}<figcaption>Edit a spec with completion and validation from the editor schema.</figcaption></figure>
+    <figure>{{ partial "shot.html" (dict "name" "playground" "alt" "The playground calling the search_city tool of the weather server: the tool list, the arguments and the result from Open-Meteo.") }}<figcaption>Try any version in the playground before clients see it.</figcaption></figure>
+    <figure>{{ partial "shot.html" (dict "name" "versions" "alt" "The versions tab: saved versions with their validation state, the published one marked.") }}<figcaption>Every save is a version; publish one, roll back to an older one.</figcaption></figure>
+    <figure>{{ partial "shot.html" (dict "name" "secrets" "alt" "The secrets tab of a server: two secrets with the hosts they may be sent to; values are never shown.") }}<figcaption>Secrets are write-only and bound to the hosts that may receive them.</figcaption></figure>
+    <figure>{{ partial "shot.html" (dict "name" "calls" "alt" "The calls tab: recent tool calls with the caller, status, duration and the logged arguments.") }}<figcaption>Calls through the gateway are logged; payloads only when an admin turns it on.</figcaption></figure>
+    <figure>{{ partial "shot.html" (dict "name" "audit" "alt" "The audit log: who created servers, secrets and API keys, published versions and signed in, with the client address.") }}<figcaption>An audit log of who changed what.</figcaption></figure>
+  </div>
+
+  <div class="prose page-pad product">
+    <h2 id="features">What it does</h2>
+    <ul>
+      <li><strong>Servers and versions:</strong> a <code>kervan.yaml</code> per server, edited in the browser; saving makes an unchangeable version; publishing validates it strictly and updates the gateway in place; rolling back publishes an older version.</li>
+      <li><strong>Gateway:</strong> each published server at <code>/s/&lt;server id&gt;/mcp</code>, for any MCP client, with an API key per server (only its hash is stored).</li>
+      <li><strong>Secret vault:</strong> AES-256-GCM under a master key you keep outside the database; each secret bound to hosts; values never shown again.</li>
+      <li><strong>Playground:</strong> a real MCP client for any version, drafts included, with a 15-minute token.</li>
+      <li><strong>Users and roles:</strong> admins and members, deactivation, password resets, sessions you can see and end.</li>
+      <li><strong>Call logs and audit log:</strong> metadata for every call, arguments and results only when turned on; a log of changes the database refuses to edit or delete.</li>
+      <li><strong>Export:</strong> any version as <code>kervan.yaml</code>, to run with <code>kervan run</code>.</li>
+    </ul>
+
+    <h2 id="start">Getting started</h2>
+    <p>Studio runs from a clone of the repository, with Node.js 22.23.3 or a later 22.x, or 24.21.0 or later, and pnpm. It keeps its data in one SQLite file and needs a master key you create once and keep safe. <a href="/docs/studio/install/">Install Studio and create the first admin</a>, then read <a href="/docs/studio/data-and-master-key/">the data directory and the master key</a>.</p>
+
+    <h2 id="security">Security</h2>
+    <p>Studio adds to the framework's protections: sign-in throttling, sessions in HttpOnly cookies, CSRF tokens and exact origin checks on every change, the admin's own password for sensitive changes, and Host and Origin checks on the gateway. Spec tools served through it get the same SSRF protection and secret redaction as anywhere else. The <a href="/docs/studio/security/">Studio threat model</a> lists what it protects against and what it does not.</p>
+
+    <h2 id="docs">Documentation</h2>
+    <ul>
+      <li><a href="/docs/studio/">Kervan Studio documentation</a>: every page, from install to backups.</li>
+      <li><a href="/guides/self-host-mcp-gateway/">Self-host a multi-user MCP gateway</a>: a guide from clone to connected client.</li>
+      <li><a href="/docs/studio/export/">Leaving Studio</a>: export a server and run it without Studio.</li>
+    </ul>
+  </div>
+</div>
+{{ end }}

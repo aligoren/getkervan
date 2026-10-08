@@ -84,6 +84,10 @@ disableHugoGeneratorInject = true
     target = "assets/repo/examples/spec"
     files = ["kervan.yaml"]
   [[module.mounts]]
+    source = "../examples/calculator/src"
+    target = "assets/repo/examples/calculator/src"
+    files = ["calculator.ts"]
+  [[module.mounts]]
     source = "../packages/spec-runtime/schema"
     target = "assets/repo/schema"
     files = ["kervan.schema.json"]

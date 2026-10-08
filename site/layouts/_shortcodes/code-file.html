@@ -1,0 +1,11 @@
+{{- /*
+  A repository file shown as a code block, unchanged (mounted under assets/repo, see hugo.toml).
+  file: path under the repository root. lang, label, wrap: as for partial "code.html". Other
+  named parameters (check, expect, id, ...) become data-* attributes for the example checks.
+*/ -}}
+{{- $file := .Get "file" -}}
+{{- $res := resources.Get (printf "repo/%s" $file) -}}
+{{- if not $res }}{{ errorf "code-file: %s is not mounted (see hugo.toml)" $file }}{{ end -}}
+{{- $attrs := dict -}}
+{{- range $key, $value := .Params }}{{ if not (in (slice "file" "lang" "label" "wrap") $key) }}{{ $attrs = merge $attrs (dict $key $value) }}{{ end }}{{ end -}}
+{{- partial "code.html" (dict "code" ($res.Content | replaceRE "\r\n" "\n") "lang" (.Get "lang") "label" (.Get "label" | default $file) "attrs" $attrs "wrap" (eq (.Get "wrap") "true")) -}}

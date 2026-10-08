@@ -203,5 +203,9 @@
       }
     }
   ],
-  "callsCapturedAt": "2026-10-08T10:52:50.747Z"
+  "callsCapturedAt": "2026-10-08T10:52:50.747Z",
+  "calculator": {
+    "file": "examples/calculator/src/calculator.ts",
+    "stdout": "sum: 5\n"
+  }
 }

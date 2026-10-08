@@ -21,6 +21,9 @@
     },
     {
       "path": "examples/dynamic"
+    },
+    {
+      "path": "examples/calculator"
     }
   ]
 }

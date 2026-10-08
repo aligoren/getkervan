@@ -4,6 +4,17 @@ seoTitle: Kervan quickstart, run an MCP server in minutes
 description: Build Kervan from source, serve the example kervan.yaml spec as an MCP server, call its tools from a REPL, and create a TypeScript project of your own.
 lead: Run the example spec, call its tools, then start a project of your own. About ten minutes.
 weight: 10
+group: Start
+fits: 'Start. The first run, before any concept; [how Kervan works](/docs/framework/how-kervan-works/) explains what you just ran.'
+next:
+  - url: /docs/framework/how-kervan-works/
+    text: 'How Kervan works'
+  - url: /guides/mcp-server-from-yaml/
+    text: 'Build an MCP server from a YAML file'
+    note: 'a guide to your own spec'
+  - url: /docs/framework/code/
+    text: 'Tools in TypeScript'
+    note: 'tools in code'
 ---
 
 ## Before you start
@@ -82,8 +93,3 @@ npm run dev
 npm test
 ```
 
-## Next
-
-- Write your own spec: the [guide to an MCP server from a YAML file](/guides/mcp-server-from-yaml/)
-  and the [kervan.yaml reference](/docs/framework/spec-reference/).
-- Write tools in code: [tools in TypeScript](/docs/framework/code/).

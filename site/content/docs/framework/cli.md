@@ -3,7 +3,14 @@ title: CLI reference
 seoTitle: kervan CLI reference, create, dev and run
 description: The kervan command line, generated from its --help output; kervan create for new projects, kervan dev with hot reload and a REPL, kervan run to serve a spec.
 lead: '`kervan create`, `kervan dev` and `kervan run`. The summary below is the real `--help` output, minus one line about the optional web UI.'
-weight: 110
+weight: 80
+group: Run and operate
+fits: 'Run and operate. The command line that creates projects and serves specs and code.'
+next:
+  - url: /docs/framework/deployment/
+    text: 'Deployment'
+  - url: /docs/framework/troubleshooting/
+    text: 'Troubleshooting'
 ---
 
 Until the packages are published, run the CLI from a clone as

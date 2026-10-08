@@ -1,0 +1,24 @@
+{{- /*
+  One code block, highlighted at build time (no JavaScript): a head with its label (the copy
+  button goes there, so it never covers code) and the code. The <pre> scrolls sideways when a line
+  is too long; it is focusable (tabindex) and named, so keyboard users can scroll it.
+
+  code: the text. lang: the language (default "text"). label: shown in the head (default: lang).
+  attrs: data-* attributes (the docs' example checks read them). wrap: wrap long lines instead of
+  scrolling (the text is unchanged; copying gives the original lines).
+*/ -}}
+{{- $lang := .lang | default "text" -}}
+{{- $label := .label | default $lang -}}
+{{- $name := cond (ne (.label | default "") "") $label (printf "%s code" $lang) -}}
+<div class="code{{ if .wrap }} code-wrap{{ end }}" data-lang="{{ $lang }}"{{ range $key, $value := .attrs }} data-{{ $key }}="{{ $value }}"{{ end }}>
+<div class="code-head"><span class="code-label">{{ $label }}</span></div>
+{{- $html := transform.Highlight (.code | strings.TrimRight "\n") $lang "" -}}
+{{- /* Wrapped blocks: each line gets its indentation as a class (i1 to i24), so a wrapped line
+       continues under its own indentation, not at the left edge (site.css, .code-wrap). */ -}}
+{{- if .wrap -}}
+  {{- range seq 24 -}}
+    {{- $html = replaceRE (printf `<span class="line"><span class="cl">(<span class="w">)?( {%d})([^ ])` .) (printf `<span class="line i%d"><span class="cl">${1}${2}${3}` .) $html -}}
+  {{- end -}}
+{{- end -}}
+{{- replaceRE `<pre tabindex="?0"?` (printf `<pre tabindex="0" role="group" aria-label="%s"` (htmlEscape $name)) $html | safeHTML -}}
+</div>

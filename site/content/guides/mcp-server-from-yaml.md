@@ -4,6 +4,13 @@ seoTitle: 'Build an MCP server from a YAML file'
 description: Step by step, write a kervan.yaml that turns the public Hacker News API into two MCP tools, check it, try it in a REPL, and serve it over stdio or HTTP.
 lead: A complete MCP server without code. The file below turns two calls of the public Hacker News API into tools; each step was run as written.
 weight: 20
+next:
+  - url: /guides/rest-api-as-mcp-tools/
+    text: 'Expose a REST API as MCP tools'
+    note: 'APIs that need keys, POST bodies and query strings'
+  - url: /docs/framework/spec-reference/
+    text: 'The kervan.yaml reference'
+    note: 'every field'
 ---
 
 You need Kervan built from a clone ([quickstart](/docs/framework/quickstart/)); the commands run
@@ -94,9 +101,3 @@ node packages/cli/bin/kervan.js run hn.yaml --http
 ```
 
 Then [connect it to Claude Code](/guides/connect-claude-code/) or any MCP client.
-
-## Next
-
-- APIs that need keys, POST bodies and query strings:
-  [expose a REST API as MCP tools](/guides/rest-api-as-mcp-tools/).
-- Every field: the [kervan.yaml reference](/docs/framework/spec-reference/).

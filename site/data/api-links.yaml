@@ -1,0 +1,25 @@
+# Programmatic API: export names in docs/API.md that link to the page explaining them (the include
+# shortcode's `links` parameter). Only pages that exist; check:site verifies every link and anchor.
+- { name: createApp, url: /docs/framework/code/ }
+- { name: ToolDefinition, url: "/docs/framework/code/#defining-a-tool" }
+- { name: ToolContext, url: "/docs/framework/code/#the-tool-context" }
+- { name: ToolMiddleware, url: /docs/framework/middleware/ }
+- { name: ToolRegistry, url: /docs/framework/registry/ }
+- { name: MutableToolRegistry, url: /docs/framework/registry/ }
+- { name: InMemoryToolRegistry, url: /docs/framework/registry/ }
+- { name: ServerResolver, url: "/docs/framework/transports/#authentication" }
+- { name: ToolError, url: /docs/framework/errors/ }
+- { name: KervanDefinitionError, url: /docs/framework/errors/ }
+- { name: jsonSchema, url: "/docs/framework/code/#json-schema-and-raw-results-experimental" }
+- { name: rawResult, url: "/docs/framework/code/#json-schema-and-raw-results-experimental" }
+- { name: toFetchHandler, url: "/docs/framework/transports/#fetch-runtimes" }
+- { name: serve, url: /docs/framework/transports/ }
+- { name: serveStdio, url: /docs/framework/transports/ }
+- { name: serveHttp, url: /docs/framework/transports/ }
+- { name: createTestClient, url: /docs/framework/testing/ }
+- { name: loadSpec, url: "/docs/framework/code/#a-spec-tool-in-code" }
+- { name: applySpec, url: "/docs/framework/code/#a-spec-tool-in-code" }
+- { name: SecretSource, url: /docs/framework/secrets/ }
+- { name: envSecrets, url: /docs/framework/secrets/ }
+- { name: specJsonSchema, url: /docs/framework/spec-reference/ }
+- { name: METADATA_RANGES, url: /docs/framework/security/ }

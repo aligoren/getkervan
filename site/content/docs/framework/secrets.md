@@ -3,7 +3,15 @@ title: Secrets and environment variables
 seoTitle: 'Secrets in kervan.yaml: API keys and env files'
 description: How a kervan.yaml spec uses API keys and other secrets from environment variables, binds them to hosts, and keeps them out of results, errors and logs.
 lead: A spec names the secrets it needs; the values come from the environment and never appear in what the server returns or logs.
-weight: 60
+weight: 40
+group: Build with YAML
+fits: 'Build with YAML. The last page of the group; then [run it](/docs/framework/transports/).'
+next:
+  - url: /docs/framework/transports/
+    text: 'Transports and authentication'
+    note: 'serve the spec'
+  - url: /docs/framework/security/
+    text: 'Security model'
 ---
 
 ## Declaring and using a secret

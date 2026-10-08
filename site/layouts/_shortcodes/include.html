@@ -10,6 +10,7 @@
            this text (to split one section between two pages without repeating it)
   shift:   how many levels to move headings down (default: so the section's subheadings become h2)
 
+  links:   a data file (site/data) of { name, url }: each export name in backticks links to its page
   Relative links to repository files become links to the source repository; "Not published yet"
   notes are left out (the site says that itself, from params.published).
 */ -}}
@@ -82,6 +83,12 @@
     {{- $resolved := path.Join $dir $target -}}
     {{- $url := printf "%s/blob/main/%s%s" site.Params.repoURL $resolved (index . 2) -}}
     {{- $md = replace $md (index . 0) (printf "](%s)" $url) -}}
+  {{- end -}}
+{{- end -}}
+{{- /* links: a data file of { name, url }: each `name` in backticks becomes a link to url. */ -}}
+{{- with .Get "links" -}}
+  {{- range index hugo.Data . -}}
+    {{- $md = replace $md (printf "`%s`" .name) (printf "[`%s`](%s)" .name .url) -}}
   {{- end -}}
 {{- end -}}
 {{ $md | safeHTML }}

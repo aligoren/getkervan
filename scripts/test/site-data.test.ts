@@ -3,7 +3,13 @@
 // recorded tool calls are checked against the output schema the server lists now.
 import { readFileSync } from "node:fs"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { cliHelp, offlineAnswers, specFingerprint, startSpec } from "../site/generate.mjs"
+import {
+  cliHelp,
+  offlineAnswers,
+  runCalculator,
+  specFingerprint,
+  startSpec,
+} from "../site/generate.mjs"
 
 const read = (file: string) => readFileSync(new URL(`../../${file}`, import.meta.url), "utf8")
 const example = JSON.parse(read("site/data/generated/example.json"))
@@ -76,6 +82,14 @@ describe("the website's generated data", () => {
       else expect(call.result.content.length).toBeGreaterThan(0)
     }
     expect(Date.parse(example.callsCapturedAt)).toBeLessThanOrEqual(Date.now())
+  })
+
+  it("shows what the TypeScript example prints today", () => {
+    expect(example.calculator).toEqual({
+      file: "examples/calculator/src/calculator.ts",
+      stdout: runCalculator(),
+    })
+    expect(example.calculator.stdout).toBe("sum: 5\n")
   })
 
   it("has the current --help of kervan and kervan-studio", () => {

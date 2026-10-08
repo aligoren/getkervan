@@ -3,7 +3,15 @@ title: Versioning and upgrades
 seoTitle: 'Kervan versioning, specVersion and upgrades'
 description: How Kervan versions its packages and the kervan.yaml format; semver for stable exports from 0.1, specVersion and schema versions, and how to upgrade a project.
 lead: What may change between releases, and how to upgrade.
-weight: 150
+weight: 99
+group: Run and operate
+fits: 'Run and operate. The last page of the book.'
+next:
+  - url: /docs/framework/api/
+    text: 'Programmatic API'
+    note: 'what is stable'
+  - url: /changelog/
+    text: 'Changelog'
 ---
 
 ## The packages

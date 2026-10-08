@@ -1,0 +1,15 @@
+{
+  "name": "kervan-example-calculator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The smallest Kervan server in TypeScript: one tool, called in memory.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node src/calculator.ts"
+  },
+  "dependencies": {
+    "@kervan/core": "workspace:^",
+    "@kervan/transport": "workspace:^"
+  }
+}

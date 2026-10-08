@@ -1,6 +1,6 @@
 {{- /* Adds the example server to Claude Code over stdio: from source until published, then npx. */ -}}
 {{- if site.Params.published }}
-<div class="code" data-check="published" data-lang="sh">{{ transform.Highlight "claude mcp add open-meteo -- npx kervan run /absolute/path/to/kervan.yaml" "sh" "" }}</div>
+{{ partial "code.html" (dict "code" "claude mcp add open-meteo -- npx kervan run /absolute/path/to/kervan.yaml" "lang" "sh" "label" "claude mcp add" "wrap" true "attrs" (dict "check" "published")) }}
 {{- else }}
-<div class="code" data-check="source" data-lang="sh">{{ transform.Highlight "claude mcp add open-meteo -- node /absolute/path/to/kervan/packages/cli/bin/kervan.js run /absolute/path/to/kervan/examples/spec/kervan.yaml" "sh" "" }}</div>
+{{ partial "code.html" (dict "code" "claude mcp add open-meteo -- node /absolute/path/to/kervan/packages/cli/bin/kervan.js run /absolute/path/to/kervan/examples/spec/kervan.yaml" "lang" "sh" "label" "claude mcp add" "wrap" true "attrs" (dict "check" "source")) }}
 {{- end }}

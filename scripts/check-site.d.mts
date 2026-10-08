@@ -24,7 +24,7 @@ export declare function siteView(dir: string, overrides?: Record<string, string 
 export declare function checkBuild(
   view: SiteView,
   params: SiteParams,
-  options?: { exampleSpec?: string; now?: number },
+  options?: { exampleSpec?: string; exampleTs?: string; now?: number },
 ): { errors: string[]; warnings: string[] }
 export declare function decodeEntities(text: string): string
 export declare const BUDGET: Record<string, number>

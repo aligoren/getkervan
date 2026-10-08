@@ -7,7 +7,7 @@
         {{- range slice
           (dict "url" "/docs/framework/" "name" "Docs")
           (dict "url" "/guides/" "name" "Guides")
-          (dict "url" "/docs/studio/" "name" "Studio")
+          (dict "url" "/studio/" "name" "Studio")
           (dict "url" "/changelog/" "name" "Changelog")
         }}
         <li><a href="{{ .url }}"{{ if eq $here .url }} aria-current="page"{{ else if hasPrefix $here .url }} aria-current="true"{{ end }}>{{ .name }}</a></li>

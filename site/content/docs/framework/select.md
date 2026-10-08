@@ -3,7 +3,15 @@ title: select and its limits
 seoTitle: 'JMESPath select in kervan.yaml: limits'
 description: 'Use JMESPath select expressions in kervan.yaml to pick and reshape API responses, with examples, limits and the sandboxed process they run in.'
 lead: '`select` is a JMESPath expression over the JSON response. It decides exactly which fields reach the model.'
-weight: 50
+weight: 35
+group: Build with YAML
+fits: 'Build with YAML. The last step of a spec tool''s call: it picks what the model sees from the [response](/docs/framework/input-output/).'
+next:
+  - url: /docs/framework/secrets/
+    text: 'Secrets'
+  - url: /docs/framework/security/
+    text: 'Security model'
+    note: 'why select runs in a separate process'
 ---
 
 ## Examples

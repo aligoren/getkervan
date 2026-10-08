@@ -4,6 +4,13 @@ seoTitle: 'kervan.yaml reference: every field'
 description: Every field of a kervan.yaml spec with its type, default and limits, generated from the editor JSON Schema, plus how templates and errors work.
 lead: A `kervan.yaml` file declares an MCP server whose tools are HTTP requests. This page lists every field, generated from the spec's JSON Schema.
 weight: 20
+group: Build with YAML
+fits: 'Build with YAML. The reference for every field; [HTTP tools](/docs/framework/http-tools/) and the pages after it explain how the fields work together.'
+next:
+  - url: /docs/framework/http-tools/
+    text: 'HTTP tools'
+  - url: /docs/framework/input-output/
+    text: 'Input and output'
 ---
 
 ## A complete example

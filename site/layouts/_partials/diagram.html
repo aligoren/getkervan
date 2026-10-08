@@ -1,0 +1,58 @@
+{{- /*
+  How the packages fit together: one inline SVG for the landing page and "How Kervan works".
+  Colors come from the theme tokens through classes (site.css, .dg-*): no style attributes, which
+  the CSP forbids, and readable in both themes. `id` keeps the title and description ids unique.
+*/ -}}
+{{- $id := . | default "dg" -}}
+<figure class="diagram">
+<svg viewBox="0 0 860 330" role="img" aria-labelledby="{{ $id }}-title {{ $id }}-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="{{ $id }}-title">How Kervan's packages fit together</title>
+  <desc id="{{ $id }}-desc">Tools come from a kervan.yaml spec or from TypeScript. @kervan/spec-runtime turns a spec into ordinary tool definitions; @kervan/core holds every tool and validates, times and masks each call; @kervan/transport serves the app over stdio, Streamable HTTP or a fetch handler to MCP clients such as Claude Code. The kervan command line loads specs and code and serves them; create-kervan runs kervan create.</desc>
+  <defs>
+    <marker id="{{ $id }}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="dg-head" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+  <g class="dg-lines" marker-end="url(#{{ $id }}-arrow)">
+    <path d="M180 52 H219"/>
+    <path d="M422 52 C447 52 442 92 462 92"/>
+    <path d="M180 156 C330 156 340 132 462 132"/>
+    <path d="M655 112 C670 112 665 72 677 72"/>
+    <path d="M765 104 V147"/>
+    <path d="M425 272 H408"/>
+  </g>
+  <g class="dg-box"><rect x="10" y="20" width="170" height="64" rx="10"/></g>
+  <text class="dg-title" x="95" y="47" text-anchor="middle">kervan.yaml</text>
+  <text class="dg-sub" x="95" y="67" text-anchor="middle">HTTP tools, no code</text>
+
+  <g class="dg-box"><rect x="10" y="124" width="170" height="64" rx="10"/></g>
+  <text class="dg-title" x="95" y="151" text-anchor="middle">TypeScript</text>
+  <text class="dg-sub" x="95" y="171" text-anchor="middle">app.tool() with Zod</text>
+
+  <g class="dg-box"><rect x="222" y="20" width="200" height="64" rx="10"/></g>
+  <text class="dg-title" x="322" y="47" text-anchor="middle">@kervan/spec-runtime</text>
+  <text class="dg-sub" x="322" y="67" text-anchor="middle">spec → tool definitions</text>
+
+  <g class="dg-box dg-accent"><rect x="465" y="60" width="190" height="104" rx="10"/></g>
+  <text class="dg-title" x="560" y="86" text-anchor="middle">@kervan/core</text>
+  <text class="dg-sub" x="560" y="108" text-anchor="middle">validation · timeouts</text>
+  <text class="dg-sub" x="560" y="126" text-anchor="middle">masked errors · middleware</text>
+  <text class="dg-sub" x="560" y="144" text-anchor="middle">registry · list_changed</text>
+
+  <g class="dg-box"><rect x="680" y="40" width="170" height="64" rx="10"/></g>
+  <text class="dg-title" x="765" y="67" text-anchor="middle">@kervan/transport</text>
+  <text class="dg-sub" x="765" y="87" text-anchor="middle">stdio · HTTP · fetch</text>
+
+  <g class="dg-box dg-quiet"><rect x="680" y="150" width="170" height="64" rx="10"/></g>
+  <text class="dg-title" x="765" y="177" text-anchor="middle">MCP clients</text>
+  <text class="dg-sub" x="765" y="197" text-anchor="middle">Claude Code, any client</text>
+
+  <g class="dg-box dg-quiet"><rect x="10" y="240" width="395" height="64" rx="10"/></g>
+  <text class="dg-title" x="207" y="267" text-anchor="middle">kervan (CLI): create · dev · run</text>
+  <text class="dg-sub" x="207" y="287" text-anchor="middle">loads specs and code and serves them</text>
+
+  <g class="dg-box dg-quiet"><rect x="428" y="240" width="227" height="64" rx="10"/></g>
+  <text class="dg-title" x="541" y="267" text-anchor="middle">create-kervan</text>
+  <text class="dg-sub" x="541" y="287" text-anchor="middle">npm create kervan</text>
+</svg>
+</figure>

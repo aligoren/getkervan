@@ -3,7 +3,14 @@ title: Input and output
 seoTitle: 'Map MCP tool arguments and API responses'
 description: How a spec tool's input schema becomes the arguments a model sends, and how select, output schemas and raw output turn an API response into the tool result.
 lead: The input schema is what the model must send; the output section is what it gets back. Both are deliberate in Kervan.
-weight: 40
+weight: 30
+group: Build with YAML
+fits: 'Build with YAML. Between the [HTTP request](/docs/framework/http-tools/) and the [select expression](/docs/framework/select/).'
+next:
+  - url: /docs/framework/select/
+    text: 'select'
+  - url: /docs/framework/secrets/
+    text: 'Secrets'
 ---
 
 ## Input: the arguments

@@ -3,7 +3,14 @@ title: Deployment
 seoTitle: 'Deploy a Kervan MCP server: Docker and proxies'
 description: Run a Kervan MCP server in production; supported Node.js versions, a Dockerfile draft for a spec server, binding and allowed hosts, a TLS reverse proxy.
 lead: A spec server or a TypeScript server is one Node.js process. This page covers the runtime, a container and a proxy in front.
-weight: 130
+weight: 85
+group: Run and operate
+fits: 'Run and operate. From a working server to one others can reach; [security](/docs/framework/security/) covers what to check.'
+next:
+  - url: /docs/framework/security/
+    text: 'Security model'
+  - url: /docs/framework/troubleshooting/
+    text: 'Troubleshooting'
 ---
 
 ## Node.js
