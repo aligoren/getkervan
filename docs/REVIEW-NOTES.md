@@ -162,6 +162,52 @@ Accepted, with the reason:
   checks (6 of 6) were done by hand, like the earlier security mutation runs.
 - **macOS** is not tested for the site scripts or the docs examples (nor anywhere else).
 
+## Release preparation (0.1.0-rc.1): accepted and unverified
+
+- **ESM only.** The packages have no CommonJS build; `attw` runs with `--profile esm-only`, and a
+  `require()` of them works only where Node.js loads ES modules synchronously. Accepted: Node.js
+  22.12 and later can `require()` ES modules, and the tools need newer Node.js anyway.
+- **No source maps in the packages.** The tarballs carry no sources, so the five published
+  packages build without `.map` files (`sourceMap`/`declarationMap` off in their `tsconfig.json`);
+  a map pointing at missing sources would make bundlers warn on every file. Stack traces show the
+  compiled JavaScript, which `tsc` leaves readable. `test:pack` fails if a script names a map that
+  is not in its tarball.
+- **`test:pack` needs the registry.** It installs the third-party dependencies with npm
+  (`--prefer-offline`, so npm's cache is enough after the first run). No smoke test calls an
+  external API.
+- **Not verifiable before a real publish** (marked "Verify on release day" in RELEASING.md): what
+  `latest` points to after the first publish under `next`, `npm stage publish` for a new name,
+  the trusted publisher's expiry and dist-tag opt-in, and npm's unpublish limits.
+- **A rerun of `release.yml` skips versions already on npm** by asking `npm view`. If that
+  request fails for another reason (the network), the workflow tries to publish and npm refuses
+  the existing version: the run fails, nothing is published twice.
+
+### Independent review of the release preparation
+
+A reviewer with a fresh context packed and unpacked every package, read the workflow and checked
+RELEASING.md against npm's and GitHub's documentation (and npm 11.19's own source). The tarballs
+were clean. Fixed:
+
+- **High:** trusted publisher configurations created after 2026-09-03 allow only
+  `npm stage publish` by default; RELEASING.md now says to tick `npm publish`, and to add the
+  configuration just before the next workflow release (it expires after two days unused).
+- **High:** the first-publish plan said `npm stage publish` creates a package; npm's
+  documentation lists an existing package as a prerequisite. `0.1.0-rc.1` is now published by
+  hand, without provenance, and the next version through `release.yml`.
+- **Medium:** `npm publish <tarball>` runs no `prepublishOnly`, so the hand publish skipped the
+  guard. The documented commands run the guard for every package, from a fresh clone, after
+  `pnpm test:pack`; `test:pack` now also flags build output whose source is gone (an old
+  checkout's `dist`).
+- **Medium:** unpublishing a package's only version needs `--force`; documented.
+- **Low:** the website is now a gate before publishing (every package links to it, and a
+  published README cannot change); `KERVAN_ALLOW_PUBLISH` must be an environment variable, not a
+  repository or organization variable (`vars.` reads all three); the transport's description no
+  longer names runtimes no test runs on (Workers, Deno, Bun).
+
+Accepted: `pack-check.mjs` quotes arguments for cmd.exe and rejects `"` and `%`, but not `!`,
+which matters only with delayed expansion turned on in the registry; its inputs are temporary
+folder paths, not user input.
+
 ## Still open at the feature freeze
 
 Nothing below blocks a release candidate on its own; each needs a decision in

@@ -1,81 +1,172 @@
 # Releasing Kervan
 
-Nothing is published yet: no repository, no npm packages, no image. This page is the checklist for
-the first release, how a release runs, how to undo a bad one, and the decisions still open.
+Nothing is published yet: no public repository, no npm packages, no image. The first release is
+**`0.1.0-rc.1` under the npm dist-tag `next`**; `0.1.0` under `latest` follows a week or two later
+(decision a below). This page is the order of that first release, how a release runs, how to undo
+a bad one, and the decisions still open.
 
-The workflows in `.github/workflows/` are written but have not run: CI (`ci.yml`) starts once the
-repository exists; the weekly site check (`site-check.yml`) on its schedule; publishing
-(`release.yml`) only by hand, after an approval, and only when the guard allows it.
+Lines marked **Verify on release day** come from npm's and GitHub's documentation as read on
+2026-10-08 and were not tried (nothing can be, before a real publish). Check them again then.
 
-## First release: what the maintainer does
+## Ready in the repository
 
-These need an account, a payment method, a legal decision or a person's approval.
+- **Package metadata.** The five published packages (`@kervan/core`, `@kervan/transport`,
+  `@kervan/spec-runtime`, `kervan`, `create-kervan`) share the version `0.1.0-rc.1`, and each has
+  `repository` (this repository, with its `directory`), `bugs`, `homepage`
+  (`https://getkervan.dev`), `author` ("Kervan contributors", no email), `license` (MIT),
+  `publishConfig` (`access: public`, `tag: next`) and a `files` allow list without sources, tests
+  or source maps. The repository address is written once in the root `package.json`;
+  `scripts/test/repository.test.ts` checks the packages, the site's `params.repoURL`, CODEOWNERS,
+  the issue template, SECURITY.md, CONTRIBUTING.md and README.md against it.
+- **`pnpm test:pack`** (`scripts/pack-check.mjs`): packs each package with `pnpm pack` (which
+  writes real versions in place of `workspace:`), checks every tarball against its allow list, a
+  deny list (environment files, databases, keys, tests, sources, source maps, local tool files,
+  screenshots), a size budget, source-map references and build output whose source is gone, then installs the tarballs with npm in a temporary folder outside
+  the repository and runs smoke tests: `kervan --help`, `kervan run --help`, a tool call through
+  `createApp` and `createTestClient`, `kervan run` on the example spec answering `tools/list`, and a
+  project made by `create-kervan` passing its own tests. CI and `release.yml` run it.
+- **`release.yml`** runs only by hand, only from `main`, one run at a time, behind the `release`
+  environment; it runs the whole chain and `test:pack`, refuses a pre-release under `latest`, runs
+  the guard for every package, and skips a version already on npm (so a run that stopped halfway
+  can be run again).
 
-**GitHub**
+## The first release, in order
 
-- [ ] Create the GitHub organization and the repository (public). Push `main`.
-- [ ] Enable **private vulnerability reporting** (Settings, Security). SECURITY.md sends reporters
-      there.
-- [ ] Protect `main`: pull requests required, the CI checks required (each `test (...)` job and
-      `e2e`), no force pushes, no deletion. Optionally signed commits.
-- [ ] Create the **`release` environment** with required reviewers (at least one person approves
-      every publish). Restrict it to `main`.
-- [ ] Enable **Dependabot alerts** and **Dependabot security updates**; version updates come from
-      `.github/dependabot.yml`. Check that Dependabot reads the pnpm lockfile: if it does not
-      support this pnpm version yet, version updates for npm stay quiet (security alerts still
-      work).
-- [ ] Enable **secret scanning** and **push protection**.
-- [ ] Fill in the owners in `.github/CODEOWNERS` and the repository path in
-      `.github/ISSUE_TEMPLATE/config.yml` (both marked TODO).
-- [ ] Settings, Actions: allow only actions pinned to a full commit SHA (the workflows already
-      are), and set the default workflow permissions to read-only.
+**Why this order.** npm attaches provenance only to packages published from a **public**
+repository ([npm: trusted publishing](https://docs.npmjs.com/trusted-publishers)). And on GitHub
+Free, a **private** repository has no branch protection or rulesets and no environment protection
+rules (required reviewers), so the `release` environment's approval does not exist until the
+repository is public. So: push while private, make it public, then publish.
 
-**npm**
+### 1. GitHub, while the repository is private (the maintainer; Claude Code does none of this)
 
-- [ ] Create the **`@kervan` organization** on npm. The unscoped names `kervan` and
-      `create-kervan` must be free and registered by the same account.
-- [ ] **Two-factor authentication** for every maintainer, and "Require two-factor authentication"
-      on the organization.
-- [ ] For each package (`@kervan/core`, `@kervan/transport`, `@kervan/spec-runtime`, `kervan`,
-      `create-kervan`), add a **trusted publisher**: this repository and the workflow
-      `release.yml`, environment `release`. Then no npm token exists anywhere; provenance is
-      attached automatically. (The first publish of a new name may need a token once, if npm does
-      not allow a trusted publisher on a name that does not exist yet: create a granular token
-      limited to these packages, use it once, and revoke it.)
-- [ ] After the first release: in each package's npm settings, "Require two-factor authentication
-      and disallow tokens".
+- [ ] Create an **empty private repository** `aligoren/getkervan`: no README, no license, no
+      `.gitignore` (the repository has its own; GitHub's would make the first push conflict).
+- [ ] The first push, from the maintainer's own machine (the local `pre-push` hook runs):
+      `git remote add origin https://github.com/aligoren/getkervan.git`, then
+      `git push -u origin main`.
+- [ ] Check that CI runs green. Private repositories on GitHub Free have a monthly quota of
+      Actions minutes, and Windows runners use them faster than Linux (check the current
+      rates on GitHub's billing page): CI runs a Linux and Windows matrix on
+      every push, so watch the usage (Settings, Billing) while private.
+- [ ] What GitHub Free does **not** offer a private repository (from GitHub's plan pages,
+      **Verify on release day**): branch protection and rulesets, environment protection rules
+      (required reviewers, wait timers), environment secrets and environment variables (so
+      `KERVAN_ALLOW_PUBLISH` cannot even be set), enforced code owners, secret scanning and push
+      protection, private vulnerability reporting. Dependabot alerts do work. None of these block
+      the private phase; they are set up in step 2.
 
-**The repository's content**
+### 2. Make it public, then set it up
 
-- [ ] Add `repository`, `bugs` and `homepage` to every `package.json` (provenance needs
-      `repository` to match the GitHub repository).
-- [ ] Remove the "**Not published yet.**" notes from the five package READMEs (`packages/*/README.md`)
-      and the "before the packages are published" parts of the root README (`pnpm try:new`).
-      `guard-publish` refuses to publish while a note is there.
-- [ ] The website: set `params.repoURL` in `site/hugo.toml`, set up Cloudflare Pages and deploy
-      it ([The website](#the-website) below). On the day the packages are on npm, follow its
-      release-day list.
-- [ ] Once the site is live, add `# yaml-language-server: $schema=https://getkervan.dev/schema/v1.json`
-      to the generated project, the examples and Studio's starter spec.
-- [ ] Mailboxes: `security@`, `hello@` and `conduct@getkervan.dev` must reach a person.
-- [ ] Decide the version (see Open decisions) and set it in every `package.json`.
-- [ ] Read [`docs/REVIEW-NOTES.md`](REVIEW-NOTES.md): the security reviews' unproven suspicions
-      and the accepted risks. Decide for each **open** item whether it waits or blocks the release.
-- [ ] Set the variable `KERVAN_ALLOW_PUBLISH` to `1` on the `release` environment, only when
-      ready to publish (and back to empty afterwards, if you like the extra step).
+- [ ] Settings, General, Danger Zone, **Change visibility** to public.
+- [ ] Security: enable **private vulnerability reporting** (SECURITY.md and the issue template
+      link to its form, `.../security/advisories/new`), **secret scanning** and **push
+      protection**, **Dependabot alerts** and **security updates**. Version updates come from
+      `.github/dependabot.yml`; check that Dependabot reads this pnpm version's lockfile.
+- [ ] A **ruleset** (or branch protection) for `main`: pull requests required, the CI checks
+      required (each `test (...)` job, `site` and `e2e`), no force pushes, no deletion, review from
+      code owners (`.github/CODEOWNERS` names `@aligoren`).
+- [ ] Settings, Actions, General: default workflow permissions **read-only**; require actions
+      pinned to a full commit SHA (every workflow already is, `scripts/test/workflows.test.ts`).
+- [ ] Settings, Environments: create **`release`** with a **required reviewer** and deployment
+      branches limited to `main`. Do not set `KERVAN_ALLOW_PUBLISH` yet. When it is set, it
+      is set **on this environment only**: `vars.KERVAN_ALLOW_PUBLISH` in `release.yml` would also
+      read a repository or organization variable of that name, so make sure none exists.
 
-## What can be prepared without those accounts
+### 3. npm
 
-- The content changes above, as a pull request: the `repository`/`bugs`/`homepage` fields,
-  removing the "Not published yet" notes, the site link and `yaml-language-server` lines, the
-  version bump, CODEOWNERS and the issue template link once the names are known.
-- The whole check chain locally, clean clones on Node 22 and 24 and on Linux in Docker, and
-  `pnpm try:new` against locally packed tarballs.
-- Dry runs: `pnpm -r --filter "./packages/*" pack` and the tarballs inspected; publishing to a local
-  registry (Verdaccio) and installing from it, as before 0.1.
-- Release notes from the git history.
-- Not without the maintainer: creating accounts, changing repository or npm settings, approving the
-  `release` environment, publishing.
+- [ ] The `@kervan` organization exists. Check that the unscoped names are still free
+      (`npm view kervan`, `npm view create-kervan`: E404) and register them with the same account.
+- [ ] Two-factor authentication for every maintainer, and required on the organization.
+
+### 4. The release pull request (content)
+
+- [ ] Remove the "**Not published yet.**" notes from the five package READMEs
+      (`packages/*/README.md`) and the "before the packages are published" parts of the root
+      README (`pnpm try:new`). `guard-publish` refuses while a note is there, and the README in a
+      tarball is part of that version forever.
+- [ ] During the release candidate, install commands name the tag: `npm create kervan@next
+      my-server`, `npm install @kervan/core@next`. Plain `npm install @kervan/core` installs
+      `latest`, and `npm create kervan@latest` asks for `latest` by name. The README files and the
+      site say `@latest` today: change them in this pull request, or after checking what `latest`
+      points to (step 7).
+- [ ] The website's release-day list ([The website](#the-website)): `params.published`, the
+      install steps, the changelog.
+- [ ] Read [`docs/REVIEW-NOTES.md`](REVIEW-NOTES.md): decide for each **open** item whether it
+      waits or blocks the release.
+- [ ] CI green on the pull request; `pnpm test:pack` passes locally on Windows and Linux; merge.
+
+### 5. Before anything is published: the website is live
+
+Every package's `homepage` and its README's documentation links point at `https://getkervan.dev`,
+and a published README cannot be changed. Deploy the site first ([The website](#the-website)) and
+open a few of the linked pages (`/docs/framework/`, `/docs/framework/quickstart/`,
+`/docs/framework/spec-reference/`).
+
+### 6. The first publish: `0.1.0-rc.1`, by hand, without provenance
+
+A trusted publisher is configured in a package's settings on npmjs.com, so the package must exist
+first. `npm stage publish` needs an existing package too (npm 11.19's documentation lists it under
+prerequisites), so it cannot create one. The first version of each name is therefore published once
+from the maintainer's machine, with a short-lived **granular access token** limited to these five
+packages (or an interactive `npm login` with two-factor authentication). That version has **no
+provenance**; the next one (`rc.2` or `0.1.0`) goes through `release.yml` with provenance.
+
+`npm publish <tarball>` does not run `prepublishOnly`, so the guard runs by hand. Work from a fresh
+clone of `main`: an old checkout's `dist` may hold files whose sources were deleted. In bash (Git
+Bash on Windows):
+
+```sh
+git clone https://github.com/aligoren/getkervan.git kervan-release && cd kervan-release
+corepack enable && pnpm install --frozen-lockfile
+pnpm test:pack                          # builds, checks the tarballs, installs them, smoke tests
+for dir in packages/*/; do (cd "$dir" && KERVAN_ALLOW_PUBLISH=1 node ../../scripts/guard-publish.mjs) || exit 1; done
+out="$(cd .. && pwd)/kervan-tarballs" && mkdir "$out"
+pnpm -r --filter "./packages/*" pack --pack-destination "$out"
+cd "$out"
+for name in kervan-core kervan-transport kervan-spec-runtime kervan create-kervan; do
+  npm publish "./$(ls "$name"-[0-9]*.tgz)" --access public --tag next || break
+done
+```
+
+Dependencies go first; if one fails, fix the cause and publish the rest (a version already on npm
+cannot be published again). Revoke the token right after.
+
+Then, for each of the five packages, add the **trusted publisher** (package settings on npmjs.com):
+GitHub Actions, repository `aligoren/getkervan`, workflow `release.yml`, environment `release`.
+**Verify on release day** (npm's documentation as read on 2026-10-08):
+
+- a configuration created after 2026-09-03 allows only `npm stage publish` by default: tick
+  **`npm publish`** under its allowed actions, or `release.yml` (which runs `npm publish`) is
+  refused;
+- a configuration expires if no publish succeeds through it within **two days**: add it only when
+  the next workflow release is about to run;
+- letting a trusted publisher change dist-tags is a separate opt-in (announced 2026-09-30);
+- trusted publishing needs at least npm 11.5.1 and Node.js 22.14 (`release.yml` runs Node.js 24
+  and stops if its npm is older).
+
+Do not run `release.yml` for `0.1.0-rc.1` after this: it would skip all five packages (they are on
+npm already) and publish nothing.
+
+### 7. Check
+
+- [ ] `npm dist-tag ls @kervan/core` (and the other four): `next: 0.1.0-rc.1`. **Verify on
+      release day** what `latest` shows: the npm documentation read on 2026-10-08 does not say
+      whether the first version of a package published with `--tag next` also becomes `latest`.
+      If it did, it stays there until `0.1.0` is published under `latest`; nothing needs fixing.
+      If no `latest` exists, plain `npm install @kervan/core` fails until `0.1.0`: the install
+      commands must say `@next` (step 4).
+- [ ] On a clean machine: `npm create kervan@next my-server`, `npm test` and `npm start` in it.
+      A project made from the release candidate depends on `^0.1.0-rc.1`, which also matches
+      `0.1.0` later; a plain `^0.1.0` range never matches a pre-release.
+- [ ] Tag the commit `v0.1.0-rc.1` and publish a GitHub **pre-release** with the notes.
+- [ ] From the first version published by `release.yml` on: the provenance badge on each
+      package's npm page. Then, in each package's npm settings, "Require two-factor
+      authentication and disallow tokens".
+
+**Published metadata cannot change.** The `package.json` and the README of a published version
+are fixed: a wrong description, link or note needs a new version. Only the dist-tags, the
+deprecation message and the package's settings on npmjs.com can change afterwards.
 
 ## The website
 
@@ -90,9 +181,9 @@ steps need the Cloudflare account and the domain.
       `(git fetch --unshallow || true) && node scripts/site/build.mjs && node scripts/check-site.mjs --strict`,
       build output directory
       `site/public`, root directory empty (the build needs `examples/`, `packages/`, `apps/` and
-      `docs/`, which Hugo mounts). The strict check fails the deploy while `params.repoURL` is the
-      placeholder or a page shows an npm command before `params.published` is true, so nothing
-      half-ready goes live.
+      `docs/`, which Hugo mounts). The strict check fails the deploy if `params.repoURL` is a
+      placeholder (it is set to the repository now) or a page shows an npm command before
+      `params.published` is true, so nothing half-ready goes live.
       Cloudflare clones shallowly; without the unshallow step every page's `lastmod` in the
       sitemap would be the latest commit's date.
 - [ ] Environment variables (production and preview): `HUGO_VERSION` = the content of
@@ -140,13 +231,14 @@ curl -s https://getkervan.dev/robots.txt                         # Sitemap: http
 
 **Release day (the packages are on npm)**
 
-- [ ] `site/hugo.toml`: `params.published = true`; `params.repoURL` set (if not yet).
+- [ ] `site/hugo.toml`: `params.published = true` (`params.repoURL` is already set).
 - [ ] Search `site/content` for `check="source"` and `check="clone"` blocks: the install steps
-      now read `npm create kervan@latest`; turn the from-source steps that remain useful into a
+      now read `npm create kervan@next` during the release candidate (`@latest` from 0.1.0);
+      turn the from-source steps that remain useful into a
       "from source" section, and mark the npm ones `published`.
 - [ ] Changelog: replace "0.1 in preparation" with the release notes and date.
 - [ ] `pnpm site:verify --examples --network` and `pnpm check:site --strict` pass (strict fails
-      while the repository URL is a placeholder or an npm command is shown unpublished).
+      while an npm command is shown unpublished).
 - [ ] Add `# yaml-language-server: $schema=https://getkervan.dev/schema/v1.json` where noted above.
 - [ ] Deploy (merge to `main`), then check a page's `og:image` and canonical URL in the HTML and
       with a link preview (a chat app or the social networks' preview tools).
@@ -158,30 +250,50 @@ days ahead; `site-check.yml` fails then).
 
 ## How a release runs
 
-1. Before every release, check [`docs/REVIEW-NOTES.md`](REVIEW-NOTES.md) for open items that
-   should be done first, and update it with anything new.
-2. A pull request bumps the versions and updates the release notes; CI is green; it is merged.
-3. Actions, **Release**, Run workflow on `main`, choose the dist-tag (`next` for a pre-release,
-   `latest` for a release).
-4. A reviewer approves the `release` environment.
-5. The workflow runs the whole chain again, packs the packages, runs the guard for each of them,
-   and publishes them in dependency order with provenance.
-6. Check: `npm view @kervan/core dist-tags`, the provenance badge on npmjs.com, and a fresh
-   `npm create kervan@<version> my-server` on a clean machine.
-7. Tag the commit (`v0.1.0`) and publish the GitHub release with the notes.
+After the first release (above), every release:
+
+1. Check [`docs/REVIEW-NOTES.md`](REVIEW-NOTES.md) for open items that should be done first, and
+   update it with anything new.
+2. A pull request sets the new version in all five `package.json` files (one version for all;
+   `scripts/test/repository.test.ts` fails otherwise) and updates the release notes. A
+   pre-release keeps `publishConfig.tag: next`; for a release under `latest` the workflow's
+   dist-tag input decides (the command line's `--tag` wins over `publishConfig`). CI is green,
+   `pnpm test:pack` passes; it is merged.
+3. On the `release` environment (never as a repository or organization variable),
+   `KERVAN_ALLOW_PUBLISH` = `1`.
+4. Actions, **Release**, Run workflow on `main`, the dist-tag: `next` for a pre-release, `latest`
+   for a release (the workflow refuses a pre-release under `latest`).
+5. A reviewer approves the `release` environment.
+6. The workflow runs the whole chain and `test:pack`, packs the packages, runs the guard for each,
+   and publishes them in dependency order with provenance. If it stops halfway, run it again: the
+   versions already on npm are skipped.
+7. `KERVAN_ALLOW_PUBLISH` back to empty. Check `npm dist-tag ls @kervan/core`, the provenance
+   badge, and a fresh `npm create kervan@<version> my-server` on a clean machine.
+8. Tag the commit (`v0.1.0`) and publish the GitHub release with the notes.
 
 ## When a release goes wrong
 
-- **A broken release** (it installs but misbehaves): publish a fixed patch version. Mark the bad
-  one: `npm deprecate @kervan/core@0.1.1 "Broken: use 0.1.2"` (for each affected package). Move
-  `latest` back if needed: `npm dist-tag add @kervan/core@0.1.0 latest`.
-- **Published by mistake** (wrong content, or before it was meant to be): within 72 hours, and
-  while nothing depends on it, `npm unpublish @kervan/core@0.1.1` is possible; that version
-  number can never be used again. After that, deprecate it and publish a corrected version.
+npm's rules as read on 2026-10-08 ([unpublish policy](https://docs.npmjs.com/policies/unpublish),
+[deprecate](https://docs.npmjs.com/cli/commands/npm-deprecate)); **Verify on release day**.
+
+- **A broken release** (it installs but misbehaves): publish a fixed version. Mark the bad one,
+  for each affected package: `npm deprecate @kervan/core@0.1.1 "Broken: use 0.1.2"` (an empty
+  message, `""`, undoes it). Move a tag back if needed: `npm dist-tag add @kervan/core@0.1.0 latest`
+  (or `next` for a release candidate).
+- **Published by mistake** (wrong content, or before it was meant to be): a version can be
+  unpublished within 72 hours if no other package on the registry depends on it; after 72 hours
+  only if nothing depends on it, it had fewer than 300 downloads in the last week and it has a
+  single owner. The Kervan packages depend on each other, so unpublish in reverse order:
+  `create-kervan`, `kervan`, `@kervan/spec-runtime`, `@kervan/transport`, `@kervan/core`
+  (`npm unpublish <name>@<version>`; when it is a package's only version, npm refuses without
+  `--force`, which removes the whole package). An unpublished version number can never be used
+  again; after unpublishing every version of a package, its name cannot be published again for
+  24 hours. Otherwise deprecate it and publish
+  a corrected version.
 - **A secret or private file in a tarball:** treat the secret as leaked whatever you do next:
   revoke and rotate it first. Then unpublish if npm still allows it (and contact npm support),
-  otherwise deprecate, and publish a clean version. Find out why `check:pack` did not catch it and
-  add a check.
+  otherwise deprecate, and publish a clean version. Find out why `test:pack` did not catch it and
+  add a rule to `scripts/pack-check.mjs`.
 - **A security fix:** follow SECURITY.md: a private GitHub security advisory, a fixed release,
   then publish the advisory (with a CVE) so `npm audit` warns users. Deprecate the affected
   versions with a pointer to the advisory.
@@ -191,7 +303,10 @@ days ahead; `site-check.yml` fails then).
 
 ## Open decisions
 
-### a) The first version: 0.1.0, or a pre-release first?
+### a) The first version: 0.1.0, or a pre-release first? (decided: `0.1.0-rc.1`)
+
+The packages are set to `0.1.0-rc.1` with `publishConfig.tag: next`. The reasoning, for the
+record:
 
 - **0.1.0 directly** under `latest`. Simple; 0.x already says the API may change.
 - **A pre-release first** (`0.1.0-rc.1` under `next`), then `0.1.0` under `latest` a week or two
