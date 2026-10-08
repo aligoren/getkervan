@@ -135,6 +135,7 @@ export async function startStudio(
 
     const host = bindHost(config, hasAdmin)
     let adminSeen = hasAdmin
+    let adminWatch: ReturnType<typeof setInterval> | undefined
     // Until now Studio listened on loopback only; with an admin it may serve its real host.
     const adminCreated = () => {
       if (adminSeen) return
@@ -163,23 +164,24 @@ export async function startStudio(
         )
       }, 0)
     }
-    // An admin made by `kervan-studio create-admin`, in another process, counts too.
-    const adminWatch = setInterval(() => {
-      try {
-        if (!anyAdminExists(database.db)) return
-      } catch {
-        return
-      }
-      if (!adminSeen) print("An admin was created from the command line.")
-      adminCreated()
-    }, ADMIN_WATCH_MS)
-    adminWatch.unref()
-    if (hasAdmin) clearInterval(adminWatch)
     const http = createStudioHttp(studio, config, {
       ...(options.webRoot ? { webRoot: options.webRoot } : {}),
       onAdminCreated: adminCreated,
     })
     const server = await listen(host)
+    if (!adminSeen) {
+      // An admin made by `kervan-studio create-admin`, in another process, counts too.
+      adminWatch = setInterval(() => {
+        try {
+          if (!anyAdminExists(database.db)) return
+        } catch {
+          return
+        }
+        if (!adminSeen) print("An admin was created from the command line.")
+        adminCreated()
+      }, ADMIN_WATCH_MS)
+      adminWatch.unref()
+    }
     const address = server.address() as AddressInfo
     const url = new URL(
       `http://${address.family === "IPv6" ? `[${address.address}]` : address.address}:${address.port}`,
