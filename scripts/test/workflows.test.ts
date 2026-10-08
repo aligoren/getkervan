@@ -44,6 +44,24 @@ describe("workflows", () => {
     expect(release.indexOf("guard-publish.mjs")).toBeLessThan(release.indexOf("npm publish"))
   })
 
+  it("publishes from main only, one run at a time, after test:pack, never a pre-release as latest", () => {
+    const release = workflows.find((w) => w.name === "release.yml")?.text ?? ""
+    expect(release).toMatch(/^\s+if: github\.ref == 'refs\/heads\/main'$/m)
+    expect(release).toMatch(/^concurrency:\n\s+group: release\n\s+cancel-in-progress: false$/m)
+    const publish = release.indexOf("npm publish")
+    for (const step of ["pnpm test:pack", "is a pre-release: publish it under next"]) {
+      expect(release.indexOf(step), step).toBeGreaterThan(0)
+      expect(release.indexOf(step), step).toBeLessThan(publish)
+    }
+    // A rerun skips what the first run published instead of failing on it.
+    expect(release).toMatch(/npm view "\$name@\$version" version[^\n]*\n[^\n]*\n\s+continue/)
+  })
+
+  it("CI installs the packed packages too", () => {
+    const ci = workflows.find((w) => w.name === "ci.yml")?.text ?? ""
+    expect(ci).toMatch(/^\s+- run: pnpm test:pack$/m)
+  })
+
   it("never publish or deploy outside release.yml", () => {
     for (const w of workflows.filter((each) => each.name !== "release.yml")) {
       expect(w.text, w.name).not.toMatch(/npm publish|pnpm publish|id-token/)

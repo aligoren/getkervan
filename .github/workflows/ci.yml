@@ -43,6 +43,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm check:pack
+      # Packs the packages, checks the tarballs and installs them outside the workspace.
+      - run: pnpm test:pack
       - run: pnpm check:site
 
   # The website: Hugo at the pinned version (checksum-checked), the built-site tests that need

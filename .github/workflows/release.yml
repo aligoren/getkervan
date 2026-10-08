@@ -23,11 +23,18 @@ on:
 permissions:
   contents: read
 
+# One release at a time; a second run waits instead of publishing alongside the first.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
 
 jobs:
   publish:
+    # Only from main: a run started on another branch is skipped before the environment is asked.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Configure required reviewers on this environment: a person approves every run.
@@ -53,6 +60,21 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm check:pack
+      # The tarballs' contents, then installed from them outside the workspace (scripts/pack-check.mjs).
+      - run: pnpm test:pack
+
+      # A pre-release (0.1.0-rc.1) never becomes `latest`: that is what `npm install` gives everyone.
+      - name: Check the version against the dist-tag
+        env:
+          DIST_TAG: ${{ inputs.dist-tag }}
+        run: |
+          version=$(node -p 'require("./packages/core/package.json").version')
+          case "$version" in
+            *-*) if [ "$DIST_TAG" = latest ]; then
+                   echo "$version is a pre-release: publish it under next, not latest." >&2
+                   exit 1
+                 fi ;;
+          esac
 
       - name: Check npm (trusted publishing needs npm 11.5.1 or later)
         run: |
@@ -76,13 +98,21 @@ jobs:
             (cd "$dir" && node ../../scripts/guard-publish.mjs)
           done
 
-      # Dependencies first, so a client never finds a package whose dependency is missing.
+      # Dependencies first, so a client never finds a package whose dependency is missing. A
+      # version already on npm is skipped, so a run that stopped halfway can be run again.
       - name: Publish with provenance
         env:
           DIST_TAG: ${{ inputs.dist-tag }}
         run: |
+          version=$(node -p 'require("./packages/core/package.json").version')
           cd "$RUNNER_TEMP/release"
-          for name in kervan-core kervan-transport kervan-spec-runtime kervan create-kervan; do
-            file=$(ls "$name"-[0-9]*.tgz)
+          for entry in kervan-core:@kervan/core kervan-transport:@kervan/transport \
+                       kervan-spec-runtime:@kervan/spec-runtime kervan:kervan create-kervan:create-kervan; do
+            file=$(ls "${entry%%:*}"-[0-9]*.tgz)
+            name=${entry#*:}
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already on npm: skipped."
+              continue
+            fi
             npm publish "./$file" --provenance --access public --tag "$DIST_TAG"
           done
