@@ -14,6 +14,7 @@ import type { User } from "../api.js"
 import { Button } from "../ui/Button.js"
 import { cn } from "../ui/cn.js"
 import { type ThemeChoice, ThemeToggle } from "../ui/ThemeToggle.js"
+import { initials } from "./initials.js"
 
 export type Section = "servers" | "users" | "audit" | "settings" | "profile"
 
@@ -46,12 +47,6 @@ function Brand() {
       <span className="text-sm font-semibold tracking-tight">Kervan Studio</span>
     </a>
   )
-}
-
-function initials(user: User): string {
-  const source = user.displayName?.trim() || user.email
-  const parts = source.split(/[\s@._-]+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?"
 }
 
 /** The navigation, the theme switch and the signed-in user: the same in the sidebar and drawer. */
