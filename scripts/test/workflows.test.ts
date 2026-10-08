@@ -62,6 +62,14 @@ describe("workflows", () => {
     expect(ci).toMatch(/^\s+- run: pnpm test:pack$/m)
   })
 
+  it("CI runs the shell quoting tests: zsh installed on Linux, every shell required", () => {
+    const ci = workflows.find((w) => w.name === "ci.yml")?.text ?? ""
+    expect(ci).toMatch(/if: runner\.os == 'Linux'\n\s+run: .*apt-get install .*\bzsh\b/)
+    expect(ci).toMatch(
+      /- run: pnpm test\n\s+env:\n\s+KERVAN_REQUIRE_SHELLS: \$\{\{ runner\.os == 'Linux' && 'bash,zsh' \|\| 'bash,powershell' \}\}/,
+    )
+  })
+
   it("never publish or deploy outside release.yml", () => {
     for (const w of workflows.filter((each) => each.name !== "release.yml")) {
       expect(w.text, w.name).not.toMatch(/npm publish|pnpm publish|id-token/)

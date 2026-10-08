@@ -42,6 +42,25 @@ const hasZsh = process.platform !== "win32" && available("zsh", ["-c", "true"])
 const POWERSHELL = process.platform === "win32" ? "powershell.exe" : "pwsh"
 const hasPowerShell = available(POWERSHELL, ["-NoProfile", "-Command", "exit 0"])
 
+// CI names the shells it provides (KERVAN_REQUIRE_SHELLS=bash,zsh on Linux, bash,powershell on
+// Windows): a missing one fails here instead of skipping its tests without a word.
+const REQUIRED = (process.env.KERVAN_REQUIRE_SHELLS ?? "")
+  .split(",")
+  .map((name) => name.trim())
+  .filter(Boolean)
+
+describe("the shells this run requires (KERVAN_REQUIRE_SHELLS)", () => {
+  it("are installed", () => {
+    const installed: Record<string, boolean> = {
+      bash: hasBash,
+      zsh: hasZsh,
+      powershell: hasPowerShell,
+    }
+    // An unknown name counts as missing, so a typo cannot turn the requirement off.
+    expect(REQUIRED.filter((name) => installed[name] !== true)).toEqual([])
+  })
+})
+
 const lines = (text: string) => text.split(/\r?\n/).filter((line) => line !== "")
 
 function posix(shell: string, script: string, stdin = "") {

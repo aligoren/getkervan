@@ -35,6 +35,11 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           package-manager-cache: false
+      # zsh for the connect-command tests (apps/studio/web/test/connect-shells.test.tsx): the
+      # first CI run skipped them on Ubuntu. KERVAN_REQUIRE_SHELLS below makes a missing shell fail.
+      - name: Install zsh
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends zsh
       - name: Enable pnpm
         run: corepack enable
       - run: pnpm install --frozen-lockfile
@@ -42,6 +47,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+        env:
+          KERVAN_REQUIRE_SHELLS: ${{ runner.os == 'Linux' && 'bash,zsh' || 'bash,powershell' }}
       - run: pnpm check:pack
       # Packs the packages, checks the tarballs and installs them outside the workspace.
       - run: pnpm test:pack
