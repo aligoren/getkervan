@@ -19,20 +19,18 @@ test suite has passed on. It refuses to start on anything older (see "Node.js ve
 
 ```sh
 pnpm build
-# Once: create a master key and keep it somewhere safe (a password manager, a secret store).
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-KERVAN_STUDIO_MASTER_KEY=<that key> node apps/studio/bin/kervan-studio.js start
+# Once: a new master key in .env.studio (written by Node: never on screen or in shell history;
+# it refuses to overwrite an existing file). Copy the key to a password manager or secret store.
+node -e "require('fs').writeFileSync('.env.studio', 'KERVAN_STUDIO_MASTER_KEY=' + require('crypto').randomBytes(32).toString('base64') + '\n', { mode: 0o600, flag: 'wx' })"
+node --env-file=.env.studio apps/studio/bin/kervan-studio.js start
 ```
 
-In Windows PowerShell, set the variable first:
-
-```powershell
-$env:KERVAN_STUDIO_MASTER_KEY = "<that key>"
-node apps/studio/bin/kervan-studio.js start
-```
+The same commands work in PowerShell and cmd. The repository's `.gitignore` keeps `.env.*`
+files out of Git; on Windows, where the file mode does not apply, keep the folder private.
 
 Studio encrypts secrets with the master key and does not start without it. A lost master key
-means the stored secrets are lost; set them again in the UI.
+means the stored secrets are lost, and Studio refuses to start while they are in the database:
+see "Losing the master key" below.
 
 The database goes into `.kervan-studio/` in the current directory (`KERVAN_STUDIO_DATA_DIR`
 changes it). A data directory Studio creates gets a `.gitignore` that keeps it out of git, the
@@ -55,7 +53,7 @@ Where the browser cannot reach Studio's loopback address (a container, a remote 
 a tunnel), create the first admin with a command on the host instead:
 
 ```sh {check="studio-create-admin"}
-node apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
+node --env-file=.env.studio apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
 ```
 
 - It asks for the password twice and does not show it (type it after the prompt appears: what
@@ -257,8 +255,7 @@ studio.example.com {
 KERVAN_STUDIO_PUBLIC_URL=https://studio.example.com \
 KERVAN_STUDIO_TRUST_PROXY=1 \
 KERVAN_STUDIO_HOST=127.0.0.1 \
-KERVAN_STUDIO_MASTER_KEY=... \
-node apps/studio/bin/kervan-studio.js start
+node --env-file=.env.studio apps/studio/bin/kervan-studio.js start
 ```
 
 With Studio on `127.0.0.1`, only processes on the same machine (Caddy) reach it. The browser
@@ -334,6 +331,21 @@ and `studio.db-shm` next to it.
 To restore, stop Studio, put the backup in place as `studio.db` (with no stale `-wal` or `-shm`
 files next to it), and start Studio with the master key that was current when the backup was
 made, or a newer one that lists it in `KERVAN_STUDIO_PREVIOUS_MASTER_KEYS`.
+
+## Losing the master key
+
+Nothing can decrypt the stored secrets without their key, and Studio does not start while a stored
+secret fails to decrypt. To start over with a new key, stop Studio, back up the database, delete
+the secrets, start with the new key and set each secret again (each server's Secrets tab lists the
+names its published versions use):
+
+```sh {check="manual" reason="needs the sqlite3 command-line tool; the same steps were run against a Studio whose key was replaced"}
+sqlite3 .kervan-studio/studio.db ".backup 'studio-before-new-key.db'"
+sqlite3 .kervan-studio/studio.db "DELETE FROM secrets"
+```
+
+Servers, versions, keys and the audit log stay. Until a secret is set again, calls to a tool that
+uses it fail with "Secret NAME is not configured for host:port".
 
 ## Rotating the master key
 

@@ -182,6 +182,17 @@ export function siteView(dir, overrides = {}) {
   }
 }
 
+/** `_headers` as rules: each pattern line with its indented header lines (trimmed). */
+function parseHeaderRules(text) {
+  const rules = []
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trim() === "" || line.trimStart().startsWith("#")) continue
+    if (!/^\s/.test(line)) rules.push({ pattern: line.trim(), lines: [] })
+    else rules.at(-1)?.lines.push(line.trim())
+  }
+  return rules
+}
+
 /** The URL path a page file is served at: "docs/x/index.html" -> "/docs/x/". */
 function urlOf(file) {
   return `/${file.replace(/index\.html$/, "")}`
@@ -311,10 +322,13 @@ export function checkBuild(view, params, options = {}) {
       .filter((tag) => tag.attrs.rel === "canonical")
       .map((tag) => tag.attrs.href)
     const expected = `${base}${where}`
-    if (canonical.length !== 1) errors.push(`${where}: ${canonical.length} canonical links.`)
-    else if (!is404 && canonical[0] !== expected)
+    // The 404 page is served for every missing path: it names no canonical URL of its own.
+    if (is404) {
+      if (canonical.length > 0) errors.push(`${where}: the 404 page has a canonical link.`)
+    } else if (canonical.length !== 1) errors.push(`${where}: ${canonical.length} canonical links.`)
+    else if (canonical[0] !== expected)
       errors.push(`${where}: canonical is ${canonical[0]}, expected ${expected}.`)
-    else if (!is404) canonicals.add(canonical[0])
+    else canonicals.add(canonical[0])
 
     // Open Graph and Twitter.
     for (const property of ["og:title", "og:description", "og:url", "og:image", "og:type"]) {
@@ -451,7 +465,7 @@ export function checkBuild(view, params, options = {}) {
       .map((block) => textOf(block[0]))
       .join(" ")
     if (params.published === false && NPM_COMMANDS.test(code)) {
-      warnings.push(
+      errors.push(
         `${where}: shows an npm command (${NPM_COMMANDS.exec(code)?.[0]}) while params.published is false.`,
       )
     }
@@ -512,6 +526,9 @@ export function checkBuild(view, params, options = {}) {
     for (const canonical of canonicals)
       if (!locs.has(canonical)) errors.push(`sitemap.xml leaves out ${canonical}.`)
     const now = options.now ?? Date.now()
+    const undated = urls.filter((url) => url.lastmod === undefined).length
+    if (undated > 0)
+      warnings.push(`sitemap.xml: ${undated} page(s) have no lastmod (not committed yet?).`)
     for (const url of urls) {
       if (url.lastmod === undefined) continue
       const time = Date.parse(url.lastmod)
@@ -547,6 +564,23 @@ export function checkBuild(view, params, options = {}) {
       }
     }
     const headers = view.text("_headers")
+    const rules = parseHeaderRules(headers)
+    for (const preview of [
+      "https://:project.pages.dev/*",
+      "https://:version.:project.pages.dev/*",
+    ]) {
+      const rule = rules.find((each) => each.pattern === preview)
+      if (!rule?.lines.some((line) => /^x-robots-tag\s*:.*noindex/i.test(line)))
+        errors.push(`_headers: no X-Robots-Tag noindex for ${preview} (previews would be indexed).`)
+    }
+    const all = rules.find((each) => each.pattern === "/*")
+    const maxAge = Number(
+      all?.lines
+        .map((line) => /^strict-transport-security\s*:\s*max-age=(\d+)/i.exec(line)?.[1])
+        .find(Boolean) ?? 0,
+    )
+    if (maxAge < 31_536_000)
+      errors.push("_headers: no Strict-Transport-Security of at least a year for /*.")
     const csp =
       /^\/\*\s*\n(?:\s+.*\n)*?\s+Content-Security-Policy:\s*(.+)$/m.exec(headers)?.[1] ?? ""
     for (const directive of [

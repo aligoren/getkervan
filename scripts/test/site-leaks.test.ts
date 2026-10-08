@@ -32,6 +32,8 @@ describe("the screenshot leak scanner", () => {
     ["a real email address", "someone@gmail.com", "an email address"],
     ["a private network address", "http://10.0.0.5:4310/", "an IP address"],
     ["a public address", "seen from 8.8.8.8", "an IP address"],
+    ["an IPv6 address", "client 2a00:1450:4001:80b::200e", "an IPv6 address"],
+    ["a link-local IPv6 address", "fe80::1ff:fe23:4567:890a", "an IPv6 address"],
     ["a Windows home folder", "C:\\Users\\someone\\kervan", "a home folder path"],
     ["a POSIX home folder", "/home/someone/kervan", "a home folder path"],
     ["a macOS home folder", "/Users/someone/kervan", "a home folder path"],
@@ -46,13 +48,19 @@ describe("the screenshot leak scanner", () => {
     expect(findLeaks("nothing here", secrets)).toEqual([])
   })
 
+  it("finds a short user name only as a whole word, documentation addresses not at all", () => {
+    expect(findLeaks("signed in as Ali", ["ali"])).toHaveLength(1)
+    expect(findLeaks("a valid alias", ["ali"])).toEqual([])
+    expect(findLeaks("2001:db8::7, ::1 and 12:30:45", [])).toEqual([])
+  })
+
   it("knows this machine's name, home and temporary folders", () => {
-    const secrets = machineSecrets(["abc", "run-value-1234"])
+    const secrets = machineSecrets(["x", "abc", "run-value-1234"])
     expect(secrets).toEqual(
       expect.arrayContaining([os.hostname(), os.homedir(), os.tmpdir(), "run-value-1234"]),
     )
-    // Short values would match ordinary words: they are left out.
-    expect(secrets).not.toContain("abc")
+    // A single character would match everything: left out.
+    expect(secrets).not.toContain("x")
     expect(findLeaks(`saved to ${os.tmpdir()}`, secrets).length).toBeGreaterThan(0)
   })
 

@@ -21,6 +21,17 @@
   }
 
   if (!navigator.clipboard) return
+  // One polite live region says what a copy button did; the buttons keep a fixed name.
+  const status = document.createElement("p")
+  status.className = "visually-hidden"
+  status.setAttribute("role", "status")
+  document.body.appendChild(status)
+  const announce = (text) => {
+    status.textContent = ""
+    setTimeout(() => {
+      status.textContent = text
+    }, 50)
+  }
   for (const block of document.querySelectorAll(".code")) {
     const code = block.querySelector("pre code")
     if (!code) continue
@@ -33,8 +44,10 @@
       try {
         await navigator.clipboard.writeText(code.innerText.replace(/\n$/, ""))
         button.textContent = "Copied"
+        announce("Copied to the clipboard.")
       } catch {
         button.textContent = "Select and copy"
+        announce("Could not copy: select the code and copy it.")
       }
       setTimeout(() => {
         button.textContent = "Copy"

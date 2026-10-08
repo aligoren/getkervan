@@ -140,7 +140,8 @@ Every shell, PowerShell, Dockerfile, Caddyfile, TypeScript and YAML block says h
 with an attribute on the fence, for example ```` ```sh {check="run"} ````. The kinds are listed
 at the top of `scripts/site/docs-examples.mjs`: `run`, `starts` (with the text that shows it is
 ready), `repl` (a `kervan dev` transcript, replayed), `ts`/`ts-run` (type-checked against the
-packages; `ts-run` also runs), `spec`, `fragment`, `ts-syntax`, `studio-starts`,
+packages; `ts-run` also runs), `spec`, `fragment`, `ts-syntax`, `studio-key` (writes the master
+key file the next Studio commands use), `studio-starts`,
 `studio-create-admin`, `claude`, `docker`/`docker-run`, `source`/`clone`/`published` (install
 steps), and `manual` with a `reason` when a block cannot run here (a public DNS name, a real API
 key, a running Studio with a published server).
@@ -166,15 +167,18 @@ another site; no iframe, inline script, inline style or event handler attribute;
 with `rel="noopener noreferrer"`; internal links and fragments that exist; images with `alt`,
 `width` and `height`; no page without a link to it.
 
-For the site: `sitemap.xml` lists exactly the canonical pages, with `lastmod` from git;
+For the site: `sitemap.xml` lists exactly the canonical pages, with `lastmod` from git (a warning when one is missing);
 `robots.txt` allows everything and names the sitemap; `_headers` has the CSP and the other
-headers, and `noindex` only for `*.pages.dev` preview hosts; the performance budget; the framework
+headers, HSTS of at least a year, and `noindex` for the `*.pages.dev` preview hosts and only for them;
+no canonical link on the 404 page; the performance budget; the framework
 book never mentions Studio except the one line pointing to its docs; the landing page shows
 `examples/spec/kervan.yaml` unchanged.
 
-Warnings (fail with `--strict`, as CI and release day run it): `params.repoURL` is still the
-placeholder; an npm install command in a code block while `params.published` is false;
-`security.txt` expires within 30 days.
+An npm install command in a code block while `params.published` is false is an error.
+
+Warnings (they fail with `--strict`, which the Cloudflare Pages build and release day use; CI runs
+without it, so the repository can be pushed before its URL is set): `params.repoURL` is still the
+placeholder; a page has no `lastmod` (not committed yet); `security.txt` expires within 30 days.
 
 ### Performance budget
 
@@ -189,7 +193,9 @@ placeholder; an npm install command in a code block while `params.published` is 
 | One screenshot | 120 KiB |
 | One HTML page | 150 KiB |
 
-Measured on this build: the home page's first load is about 166 KiB in the browser.
+On this build the home page's first load is about 157 KiB (counted by check:site: HTML, CSS, font,
+scripts and the largest variant of the hero picture). In the browser, with the gallery images
+Chromium fetches ahead of scrolling, it is about 415 KiB (`site:verify`, against the 600 KiB budget).
 
 ## Before the release, and on release day
 
@@ -215,8 +221,8 @@ Every claim on the landing page, and what backs it. When a claim changes, change
 | Pre-release, not on npm | `params.published = false`; the packages' "Not published yet" notes; `guard-publish.mjs` |
 | On the official MCP SDK, not a rewrite | `@modelcontextprotocol/server`, `/client`, `/hono` dependencies (`packages/*/package.json`) |
 | MCP 2026-07-28, stateless; `server/discover`; 2025 clients served too | `packages/transport`; both eras in `packages/transport/test` (`http`, `stdio`, `testing`); the landing page's `server/discover` output is a real answer |
-| Arguments validated before the handler; only `ToolError` messages reach the client | `packages/core/src/tool.ts`, `errors.ts`; core's error-masking tests |
-| Timeouts, size limits, rate limits, Host and Origin checks by default | `HTTP_DEFAULTS`, `SPEC_LIMITS` (spec-runtime), transport rate limit and `allowedHosts`; their tests |
+| Both kinds of tool: arguments validated before the handler, masked errors (only `ToolError` messages reach the client), a timeout on every call | `packages/core/src/tool.ts`, `errors.ts`; core's error-masking tests |
+| Timeouts, size limits, rate limits (spec tools), Host and Origin checks by default | `limits.toolTimeoutMs` (core, 30 s), `HTTP_DEFAULTS`, `SPEC_LIMITS` and the per-tool rate limit (spec-runtime), `allowedHosts` (transport); their tests |
 | SSRF: public addresses only, DNS resolved once and pinned, redirects refused unless allowed then rechecked, metadata always refused | `packages/spec-runtime/src/network.ts`; network tests with mutation runs (CLAUDE.md, Aşama 3) |
 | Secret redaction in every encoding Kervan knows | `SecretVault` (raw, URL, form, JSON, number forms) and its tests |
 | Studio: AES-256-GCM under a master key you keep | `apps/studio/src/vault.ts`; vault tests |
@@ -225,7 +231,7 @@ Every claim on the landing page, and what backs it. When a claim changes, change
 | `select` in a separate process: empty environment, memory limit, timeout, no network, no file writes, no child processes | `packages/spec-runtime/src/select-child.ts` and `selectProcess()` in `select.ts` (Node permission model, network closed in the child); its tests |
 | Audit log the database refuses to change or delete; never a password, key or secret value | database triggers refusing UPDATE and DELETE (`apps/studio/drizzle/0001_immutable.sql`, `0002_integrity.sql`); `test/audit-catalogue.test.ts` |
 | Every server exports as `kervan.yaml` and runs with `kervan run` | `apps/studio/src/export.ts`; `apps/studio/test/export.test.ts` |
-| "Implemented and covered by tests, including tests that break the check on purpose" | the mutation runs recorded in CLAUDE.md for SSRF, redaction, origin checks and this site's rules |
+| "Implemented and covered by tests"; "mutation-tested" | the tests named above; the mutation runs (each check broken on purpose, a test had to fail) were done by hand and are recorded in CLAUDE.md, for SSRF, redaction, origin checks and this site's rules |
 | The `tools/list` and call output shown | `site/data/generated/example.json` from a real run; `site-data.test.ts` checks it against today's server |
 
 There are no customer names, testimonials, download counts, benchmarks or competitor comparisons

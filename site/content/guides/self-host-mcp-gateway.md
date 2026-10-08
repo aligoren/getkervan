@@ -6,8 +6,9 @@ lead: One Studio process gives a team a shared set of MCP servers behind one gat
 weight: 50
 ---
 
-Kervan Studio is the optional web app of the Kervan project. Everything below ran on a fresh data
-directory; the screenshots come from that run.
+Kervan Studio is the optional web app of the Kervan project. The commands below are checked
+against a fresh data directory, except the HTTPS steps, which need a public DNS name; the
+screenshots come from a Studio filled with demo data.
 
 ## 1. Build and start
 
@@ -16,12 +17,15 @@ directory; the screenshots come from that run.
 Create a master key and keep it outside the data directory. Without it, stored secrets cannot be
 recovered ([why](/docs/studio/data-and-master-key/)).
 
-```sh {check="run"}
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+The first command writes a new key into `.env.studio` (not on screen, not in shell history;
+copy it to your password manager), the second starts Studio with it:
+
+```sh {check="studio-key"}
+node -e "require('fs').writeFileSync('.env.studio', 'KERVAN_STUDIO_MASTER_KEY=' + require('crypto').randomBytes(32).toString('base64') + '\n', { mode: 0o600, flag: 'wx' })"
 ```
 
 ```sh {check="studio-starts"}
-KERVAN_STUDIO_MASTER_KEY=<that key> node apps/studio/bin/kervan-studio.js start
+node --env-file=.env.studio apps/studio/bin/kervan-studio.js start
 ```
 
 ## 2. The first admin
@@ -31,7 +35,7 @@ Studio prints a one-time setup token and listens on `127.0.0.1:4310` only. Open
 a container):
 
 ```sh {check="studio-create-admin"}
-node apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
+node --env-file=.env.studio apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
 ```
 
 It asks for the password twice without showing it. Studio then listens on `KERVAN_STUDIO_HOST`.
@@ -47,7 +51,7 @@ studio.example.com {
 ```
 
 ```sh {check="manual" reason="needs the proxy above"}
-KERVAN_STUDIO_PUBLIC_URL=https://studio.example.com KERVAN_STUDIO_TRUST_PROXY=1 KERVAN_STUDIO_MASTER_KEY=<that key> node apps/studio/bin/kervan-studio.js start
+KERVAN_STUDIO_PUBLIC_URL=https://studio.example.com KERVAN_STUDIO_TRUST_PROXY=1 node --env-file=.env.studio apps/studio/bin/kervan-studio.js start
 ```
 
 Details and the other settings: [configuration](/docs/studio/configuration/).

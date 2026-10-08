@@ -1,17 +1,22 @@
 // Runs the documentation's code blocks (`pnpm site:verify --examples`), each as its `check` says
 // (scripts/site/docs-examples.mjs lists the kinds). Commands run against this working tree: paths
-// such as `packages/cli/bin/kervan.js` are made absolute, and anything a command writes goes to a
-// temporary folder that is removed afterwards. A "clone" is a copy of the working tree's files
-// (tracked and untracked, without ignored ones), so uncommitted docs are checked as they are.
+// such as `packages/cli/bin/kervan.js` are made absolute. `run` blocks run in the tree itself (the
+// quickstart's `pnpm build` builds it); everything else runs in a temporary folder that is removed
+// afterwards, also on Ctrl+C. A "clone" is a copy of the working tree's files (tracked and
+// untracked, without ignored ones), so uncommitted docs are checked as they are.
 //
-// Without flags only what needs no network and changes nothing outside the temporary folders runs.
+// Without flags only what needs no network and changes nothing outside the tree's build output and
+// the temporary folders runs.
 //   --network  also blocks that reach the internet (REPL calls, clone and install steps)
-//   --claude   also Claude Code commands (they add and then remove servers in a temporary project)
+//   --claude   also Claude Code commands. They add servers in a temporary project folder (local
+//              scope) and remove them again; Claude Code keeps an empty entry for that folder in
+//              its configuration.
 //   --docker   also the Dockerfile draft (builds and runs an image, then removes it)
 import { spawn, spawnSync } from "node:child_process"
 import { randomBytes } from "node:crypto"
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -128,6 +133,42 @@ function portFree(port) {
   })
 }
 
+// What a run leaves behind until it finishes: removed on the way, and on Ctrl+C.
+const temps = new Set()
+const children = new Set()
+const claudeServers = new Map() // name -> project folder
+
+/** A new temporary folder, removed by removeTemp() or when the run is interrupted. */
+function tempDir(prefix) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), prefix))
+  temps.add(dir)
+  return dir
+}
+
+function removeTemp(dir) {
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
+  temps.delete(dir)
+}
+
+function killTree(child) {
+  if (child.exitCode !== null) return
+  if (isWindows) spawnSync("taskkill", ["/T", "/F", "/PID", String(child.pid)], { stdio: "ignore" })
+  else {
+    try {
+      process.kill(-child.pid, "SIGKILL")
+    } catch {}
+  }
+}
+
+process.once("SIGINT", () => {
+  for (const child of children) killTree(child)
+  for (const [name, cwd] of claudeServers) {
+    spawnSync("claude", ["mcp", "remove", name], { cwd, shell: isWindows, stdio: "ignore" })
+  }
+  for (const dir of temps) rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
+  process.exit(130)
+})
+
 /** A long-running process: its output so far, a wait for a text, and a stop that ends its tree. */
 function launch(argv, { cwd, env = {} }) {
   const child = spawn(argv[0], argv.slice(1), {
@@ -137,6 +178,8 @@ function launch(argv, { cwd, env = {} }) {
     detached: !isWindows,
     windowsHide: true,
   })
+  children.add(child)
+  child.once("exit", () => children.delete(child))
   let output = ""
   child.stdout.on("data", (chunk) => (output += chunk))
   child.stderr.on("data", (chunk) => (output += chunk))
@@ -160,13 +203,7 @@ function launch(argv, { cwd, env = {} }) {
       child.stdin.end()
       const done = await Promise.race([exited.then(() => true), sleep(5000).then(() => false)])
       if (done) return
-      if (isWindows)
-        spawnSync("taskkill", ["/T", "/F", "/PID", String(child.pid)], { stdio: "ignore" })
-      else {
-        try {
-          process.kill(-child.pid, "SIGKILL")
-        } catch {}
-      }
+      killTree(child)
       await exited
     },
   }
@@ -235,7 +272,7 @@ function specFor(blocks, block) {
 
 /** A temporary folder with the block's spec (if any) under the name the command uses. */
 function workdir(blocks, block, line = "") {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "kervan-docs-"))
+  const dir = tempDir("kervan-docs-")
   const spec = block.attrs["data-spec"] ? specFor(blocks, block) : undefined
   if (spec) {
     const name =
@@ -244,8 +281,6 @@ function workdir(blocks, block, line = "") {
   }
   return dir
 }
-
-const masterKey = () => randomBytes(32).toString("base64")
 
 const runners = {
   async run(block) {
@@ -258,13 +293,11 @@ const runners = {
   async starts(block, blocks) {
     const lines = commandLines(codeOf(block))
     if (block.attrs["data-each"] === "true") {
-      const cwd = path.join(root, block.attrs["data-cwd"] ?? "")
-      const created = []
+      // A temporary copy of the folder they run in, with the empty files they expect.
+      const cwd = tempDir("kervan-docs-each-")
+      cpSync(path.join(root, block.attrs["data-cwd"] ?? ""), cwd, { recursive: true })
       for (const file of (block.attrs["data-files"] ?? "").split(",").filter(Boolean)) {
-        if (!existsSync(path.join(cwd, file))) {
-          writeFileSync(path.join(cwd, file), "")
-          created.push(path.join(cwd, file))
-        }
+        if (!existsSync(path.join(cwd, file))) writeFileSync(path.join(cwd, file), "")
       }
       try {
         for (const line of lines) {
@@ -276,7 +309,7 @@ const runners = {
           if (!alive) throw new Error(`\`${line}\` exited:\n${proc.output()}`)
         }
       } finally {
-        for (const file of created) rmSync(file, { force: true })
+        removeTemp(cwd)
       }
       return
     }
@@ -288,7 +321,7 @@ const runners = {
       await proc.waitFor(block.attrs["data-ready"])
     } finally {
       await proc.stop()
-      rmSync(dir, { recursive: true, force: true })
+      removeTemp(dir)
     }
   },
 
@@ -331,12 +364,12 @@ const runners = {
       }
     } finally {
       await proc.stop()
-      rmSync(dir, { recursive: true, force: true })
+      removeTemp(dir)
     }
   },
 
   async ts(block) {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "kervan-docs-ts-"))
+    const dir = tempDir("kervan-docs-ts-")
     try {
       // Resolves @kervan/* from the CLI package, like a project that depends on them.
       symlinkSync(
@@ -373,44 +406,61 @@ const runners = {
           throw new Error(`printed:\n${output}\nnot "${block.attrs["data-expect"]}"`)
       }
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      removeTemp(dir)
     }
   },
 
-  async "studio-starts"(block) {
+  async "studio-starts"(block, blocks) {
     if (!(await portFree(4310))) throw new Error("port 4310 is in use (Studio's default)")
     const [line] = commandLines(codeOf(block))
-    const dir = mkdtempSync(path.join(os.tmpdir(), "kervan-docs-studio-"))
-    const { env, argv } = toProcess(line.replace("<that key>", masterKey()))
+    const dir = studioDir(block, blocks)
+    const { env, argv } = toProcess(line)
     const proc = launch(argv, { cwd: dir, env })
     try {
       await proc.waitFor("Kervan Studio listening")
     } finally {
       await proc.stop()
-      rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
+      removeTemp(dir)
     }
   },
 
-  async "studio-create-admin"(block) {
+  async "studio-create-admin"(block, blocks) {
     const [line] = commandLines(codeOf(block))
-    const dir = mkdtempSync(path.join(os.tmpdir(), "kervan-docs-studio-"))
+    const dir = studioDir(block, blocks)
     try {
       const { env, argv } = toProcess(line)
       // The documented command asks for the password at a terminal; here it comes from stdin.
       runToEnd([...argv, "--password-stdin"], {
         cwd: dir,
-        env: { ...env, KERVAN_STUDIO_MASTER_KEY: masterKey() },
+        env,
         input: `${randomBytes(18).toString("base64url")}\n`,
       })
     } finally {
-      rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
+      removeTemp(dir)
     }
   },
 }
 
+/**
+ * A fresh folder for a Studio command, with the master key file the page's `studio-key` block
+ * writes there (by running that block's command in it).
+ */
+function studioDir(block, blocks) {
+  const dir = tempDir("kervan-docs-studio-")
+  const key = blocks.find((other) => other.page === block.page && other.check === "studio-key")
+  if (!key) throw new Error(`no studio-key block on ${block.page}`)
+  for (const line of commandLines(codeOf(key))) {
+    const { env, argv } = toProcess(line)
+    runToEnd(argv, { cwd: dir, env })
+  }
+  if (!existsSync(path.join(dir, ".env.studio")))
+    throw new Error("the studio-key block wrote no .env.studio")
+  return dir
+}
+
 /** Install steps: run in a copy of the working tree instead of a clone of the repository. */
 async function runInstall(block) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "kervan-docs-clone-"))
+  const dir = tempDir("kervan-docs-clone-")
   let cwd = dir
   let tree = ""
   try {
@@ -445,15 +495,14 @@ async function runInstall(block) {
       runToEnd(argv, { cwd, env, timeout: 1_200_000 })
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
+    removeTemp(dir)
   }
 }
 
 /** The Claude Code guide, in order, in a temporary project folder; servers removed at the end. */
 async function runClaudePage(pageBlocks) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "kervan-docs-claude-"))
+  const dir = tempDir("kervan-docs-claude-")
   let server
-  const added = new Set()
   try {
     for (const block of pageBlocks) {
       if (block.check === "starts") {
@@ -466,30 +515,33 @@ async function runClaudePage(pageBlocks) {
       for (const line of commandLines(codeOf(block))) {
         const { env, argv } = toProcess(line)
         if (argv[0] !== "claude") continue
-        const output = runToEnd(argv, { cwd: dir, env, timeout: 120_000 })
-        if (argv[2] === "add")
-          added.add(
-            argv.find(
-              (word, index) =>
-                index > 2 && !word.startsWith("-") && argv[index - 1] !== "--transport",
-            ),
+        // Recorded before it runs, so an interrupted add is removed too.
+        if (argv[2] === "add") {
+          const name = argv.find(
+            (word, index) =>
+              index > 2 && !word.startsWith("-") && argv[index - 1] !== "--transport",
           )
-        if (argv[2] === "remove") added.delete(argv[3])
+          claudeServers.set(name, dir)
+        }
+        const output = runToEnd(argv, { cwd: dir, env, timeout: 120_000 })
+        if (argv[2] === "remove") claudeServers.delete(argv[3])
         if (argv[2] === "get" && !/Connected/.test(output))
           throw new Error(`\`${line}\` does not say Connected:\n${output}`)
       }
     }
   } finally {
-    for (const name of added)
-      spawnSync("claude", ["mcp", "remove", name], { cwd: dir, shell: isWindows, stdio: "ignore" })
+    for (const [name, cwd] of claudeServers) {
+      spawnSync("claude", ["mcp", "remove", name], { cwd, shell: isWindows, stdio: "ignore" })
+      claudeServers.delete(name)
+    }
     await server?.stop()
-    rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
+    removeTemp(dir)
   }
 }
 
 /** The Dockerfile draft: built from a copy of the working tree, run read-only, asked over HTTP. */
 async function runDocker(dockerfile, runBlock) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "kervan-docs-docker-"))
+  const dir = tempDir("kervan-docs-docker-")
   const tag = "kervan-docs-check"
   try {
     copyWorkingTree(dir)
@@ -536,7 +588,7 @@ async function runDocker(dockerfile, runBlock) {
     }
   } finally {
     spawnSync("docker", ["rmi", "-f", tag], { stdio: "ignore" })
-    rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
+    removeTemp(dir)
   }
 }
 
@@ -633,7 +685,9 @@ export async function runExamples(
     seen.add(key)
     const needsNetwork =
       block.attrs["data-network"] === "true" || ["source", "clone"].includes(block.check)
-    if (["spec", "fragment", "ts-syntax", "manual", "output"].includes(block.check)) continue // pnpm test, or not runnable
+    // Checked by pnpm test, not runnable, or run as part of the Studio blocks (studio-key).
+    if (["spec", "fragment", "ts-syntax", "manual", "output", "studio-key"].includes(block.check))
+      continue // pnpm test, or not runnable
     if (block.check === "published" && !published) continue
     if (block.check === "source" && published) continue
     if (needsNetwork && !network) {

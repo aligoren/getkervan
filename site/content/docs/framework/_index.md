@@ -3,7 +3,7 @@ title: Kervan framework documentation
 navTitle: Framework
 seoTitle: Kervan framework docs, a TypeScript MCP framework
 description: Concepts of the Kervan MCP framework, a TypeScript layer over the official MCP SDK; tools from a kervan.yaml spec or code, transports, the CLI.
-lead: Kervan is a TypeScript framework for Model Context Protocol (MCP) servers, built on the official MCP SDK. Tools come from a `kervan.yaml` spec or from code, with the same guarantees.
+lead: Kervan is a TypeScript framework for Model Context Protocol (MCP) servers, built on the official MCP SDK. Tools come from a `kervan.yaml` spec or from code, on the same validated, timed core.
 weight: 1
 cascade:
   ogSection: Framework documentation

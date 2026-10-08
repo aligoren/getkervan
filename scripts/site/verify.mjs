@@ -8,12 +8,13 @@
 //    - nothing scrolls sideways on a phone.
 //    Without JavaScript: the theme switch works, the skip link is the first Tab stop and shows,
 //    the search page lists every page. With it: copy buttons appear and search finds pages.
-//    The home page's first load stays within the budget, measured in the browser.
+//    The home page with the images Chromium loads stays within the budget, measured in the browser.
 // 3. With --examples, runs the documentation's code blocks (scripts/site/run-examples.mjs; also
 //    --network, --claude, --docker).
 //
 // --shots <dir> saves a picture of the home page and three docs pages in each variant.
-// --skip-build checks site/public as it is.
+// --skip-build checks site/public as it is; --skip-check leaves out check:site (to test the
+// browser checks on their own).
 import { spawnSync } from "node:child_process"
 import { mkdirSync, readFileSync } from "node:fs"
 import path from "node:path"
@@ -209,18 +210,24 @@ async function browserChecks(origin, pages, shotsDir) {
     })
     {
       const page = await fresh.newPage()
-      let bytes = 0
-      page.on("response", async (response) => {
-        try {
-          bytes += (await response.body()).length
-        } catch {}
+      // Every response's body, awaited: Chromium also fetches lazy images near the viewport, so
+      // this is the page with its images (check:site budgets the first load statically).
+      const sizes = []
+      page.on("response", (response) => {
+        sizes.push(
+          response.body().then(
+            (body) => body.length,
+            () => 0,
+          ),
+        )
       })
       await page.goto(`${origin}/`, { waitUntil: "networkidle" })
+      const bytes = (await Promise.all(sizes)).reduce((sum, size) => sum + size, 0)
       console.log(
-        `home page, first load in the browser: ${bytes} bytes (budget ${BUDGET.initialLoad})`,
+        `home page in the browser, with the images it loaded: ${bytes} bytes (budget ${BUDGET.homeWithImages})`,
       )
-      if (bytes > BUDGET.initialLoad)
-        fail("/", `the first load is ${bytes} bytes, over ${BUDGET.initialLoad}`)
+      if (bytes > BUDGET.homeWithImages)
+        fail("/", `the page with its images is ${bytes} bytes, over ${BUDGET.homeWithImages}`)
       await page.close()
     }
     await fresh.close()
@@ -232,7 +239,7 @@ async function browserChecks(origin, pages, shotsDir) {
 
 async function main() {
   if (!flag("--skip-build")) step("build", ["scripts/site/build.mjs"])
-  step("check:site", ["scripts/check-site.mjs"])
+  if (!flag("--skip-check")) step("check:site", ["scripts/check-site.mjs"])
   const view = siteView(publicDir)
   const pages = [...view.files]
     .filter((file) => file.endsWith("index.html"))

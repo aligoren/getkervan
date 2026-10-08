@@ -1,0 +1,2 @@
+{{- /* Content shown only while the packages are not on npm (params.published false). Use with {{< >}} around a callout. */ -}}
+{{- if not site.Params.published }}{{ .Inner }}{{ end -}}

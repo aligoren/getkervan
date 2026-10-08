@@ -8,7 +8,7 @@
   <div class="wrap">
     <span class="eyebrow">Open source &middot; MIT &middot; pre-release</span>
     <h1 id="hero-title">MCP servers from a YAML spec, or from TypeScript</h1>
-    <p class="lead">Kervan is a framework for <a href="/guides/what-is-mcp/">Model Context Protocol</a> servers. Describe HTTP tools in a <code>kervan.yaml</code> file and serve them with one command, or write tools in TypeScript on the official MCP SDK. The same validation, limits and security checks apply either way.</p>
+    <p class="lead">Kervan is a framework for <a href="/guides/what-is-mcp/">Model Context Protocol</a> servers. Describe HTTP tools in a <code>kervan.yaml</code> file and serve them with one command, or write tools in TypeScript on the official MCP SDK. Both kinds of tool get validated arguments, masked errors and a timeout on every call; spec tools add SSRF protection, secret redaction and rate limits.</p>
     <div class="actions">
       <a class="button button-primary" href="/docs/framework/quickstart/">Get started</a>
       <a class="button" href="{{ site.Params.repoURL }}" rel="noopener noreferrer">View source</a>
@@ -88,7 +88,7 @@
 <section class="band" aria-labelledby="security-title">
   <div class="wrap">
     <h2 id="security-title">Security by design</h2>
-    <p class="section-lead">Each of these is implemented and covered by tests, including tests that break the check on purpose and expect a failure.</p>
+    <p class="section-lead">Each of these is implemented and covered by tests. The checks were also mutation-tested: broken on purpose, one at a time, to see a test fail (<a href="/docs/framework/security/#how-the-checks-are-tested">how</a>).</p>
     <ul class="grid">
       <li class="card"><h3>SSRF protection</h3><p>Spec tools reach public addresses only. DNS is resolved once and the connection pinned to the checked address; redirects are refused unless allowed, then checked again; cloud metadata addresses are always refused.</p></li>
       <li class="card"><h3>Encrypted secrets</h3><p>Studio encrypts secret values with AES-256-GCM under a master key you keep. Results, errors and logs are redacted of them, in every encoding Kervan knows.</p></li>

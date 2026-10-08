@@ -37,6 +37,13 @@ them on the public internet:
   text inside a chosen field can still carry instructions (prompt injection); Kervan cannot judge
   content.
 
+## How the checks are tested
+
+Each address check, redaction form and limit has tests that show it working. They were also
+mutation-tested: each check was broken on purpose, one at a time, and the run counted only when a
+test failed. That was done by hand during development, not on every change; the open questions the
+security reviews left are listed in the repository's `docs/REVIEW-NOTES.md`.
+
 ## Known limits
 
 {{% include file="packages/spec-runtime/README.md" section="Known limits" %}}

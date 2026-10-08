@@ -418,10 +418,12 @@ async function main() {
   // Studio's default port when it is free, so the pictures show the same address each time.
   const port = (await portFree(4310)) ? 4310 : await freePort()
   const masterKey = randomBytes(32).toString("base64")
-  const studio = await startStudio(port, temp, masterKey)
-  const browser = await chromium.launch({ args: [`--host-resolver-rules=MAP ${HOST} 127.0.0.1`] })
   const written = []
+  let studio
+  let browser
   try {
+    studio = await startStudio(port, temp, masterKey)
+    browser = await chromium.launch({ args: [`--host-resolver-rules=MAP ${HOST} 127.0.0.1`] })
     const secrets = machineSecrets([studio.token, masterKey, PASSWORD, temp])
     const context = await browser.newContext({
       viewport: WIDE,
@@ -534,8 +536,8 @@ async function main() {
     await page.waitForTimeout(800)
     await capture(page, converter, "mobile-editor", secrets, written)
   } finally {
-    await browser.close()
-    await studio.stop()
+    await browser?.close()
+    await studio?.stop()
     rmSync(temp, { recursive: true, force: true, maxRetries: 5 })
   }
   console.log(`Wrote ${written.length} screenshots to ${path.relative(root, OUT)}`)

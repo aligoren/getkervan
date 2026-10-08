@@ -6,7 +6,7 @@ lead: Claude Code is an MCP client. One command adds a Kervan server to it, as a
 weight: 40
 ---
 
-You need [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and Kervan built from a clone
+You need [Claude Code](https://code.claude.com/docs) and Kervan built from a clone
 ([quickstart](/docs/framework/quickstart/)). Use absolute paths: Claude Code starts the server from
 its own working folder.
 

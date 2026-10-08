@@ -9,8 +9,9 @@ weight: 170
 ## Export a version
 
 On the server's editor, the download button (**Export kervan.yaml**) saves the selected version
-exactly as it was written, comments included. Secret bindings stay in the file (names and hosts);
-secret **values** are never exported.
+as it was written, comments included, except that each `secrets` entry carries the hosts Studio
+allows for it (the spec's own hosts, narrowed to the vault's binding). Secret **values** are never
+exported.
 
 ## Run it without Studio
 

@@ -8,7 +8,7 @@ excludeFromSearch: false
 
 ## 0.1, in preparation
 
-Nothing has been released yet: no package is on npm and the source repository is not public.
+Nothing has been released yet: no package is on npm.
 The first release will contain:
 
 - `@kervan/core`, `@kervan/transport`, `@kervan/spec-runtime`, the `kervan` CLI and

@@ -3,6 +3,7 @@
 // home or temporary folder, a real email address, a non-documentation IP address.
 // `pnpm site:screenshots` runs `findLeaks` on every page's text before each capture and refuses
 // to capture when anything is found. Tested in scripts/test/site-leaks.test.ts.
+import { isIPv6 } from "node:net"
 import os from "node:os"
 
 /** Email domains reserved for examples (RFC 2606/6761) and the project's own. */
@@ -34,9 +35,15 @@ export function machineSecrets(extra = []) {
     os.hostname(),
     os.homedir(),
     os.tmpdir(),
-    // Shorter than this, a value would match ordinary words.
-    user.length >= 4 ? user : "",
-  ].filter((value) => typeof value === "string" && value.length >= 4)
+    // A short user name is still looked for, as a whole word (see findLeaks).
+    user,
+  ].filter((value) => typeof value === "string" && value.length >= 2)
+}
+
+/** IPv6 addresses an example may show: loopback, unspecified, the documentation range. */
+function safeIPv6(ip) {
+  const lower = ip.toLowerCase()
+  return lower === "::1" || lower === "::" || /^2001:0?db8:/.test(lower)
 }
 
 /**
@@ -65,6 +72,16 @@ export function findLeaks(text, secrets = []) {
       found.push("an IP address outside loopback and documentation ranges")
     }
   }
+  // IPv6: hex groups with at least two colons ("12:30:45", a time, has no letters and no "::";
+  // it is not a valid address with fewer than three groups in any case).
+  for (const match of text.matchAll(
+    /(?<![\w:.])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![\w:])/g,
+  )) {
+    if (isIPv6(match[0]) && (match[0].includes("::") || match[0].split(":").length >= 4)) {
+      if (!safeIPv6(match[0]))
+        found.push("an IPv6 address outside loopback and the documentation range")
+    }
+  }
   if (
     /\b[A-Za-z]:\\(?:Users|Documents and Settings)\\/i.test(text) ||
     /\/(?:home|Users)\/[^/\s]+/.test(text)
@@ -75,7 +92,14 @@ export function findLeaks(text, secrets = []) {
   const lowerSlashed = lower.replaceAll("\\", "/")
   for (const secret of secrets) {
     const value = String(secret).toLowerCase()
-    if (lower.includes(value) || lowerSlashed.includes(value.replaceAll("\\", "/"))) {
+    // Short values (a three-letter user name) only as a whole word: "ali" but not "valid".
+    const shown =
+      value.length < 4
+        ? new RegExp(
+            `(^|[^a-z0-9])${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`,
+          ).test(lower)
+        : lower.includes(value) || lowerSlashed.includes(value.replaceAll("\\", "/"))
+    if (shown) {
       found.push("a value of this run or machine (token, key, host name, user or folder)")
     }
   }

@@ -378,6 +378,30 @@ run("each check:site rule catches its problem", () => {
       /allows inline code/,
     ],
     [
+      "no noindex for preview hosts",
+      () => ({
+        _headers: page("_headers").replaceAll("X-Robots-Tag: noindex", "X-Robots-Tag: all"),
+      }),
+      /no X-Robots-Tag noindex for https:\/\/:project\.pages\.dev/,
+    ],
+    [
+      "a short HSTS",
+      () => ({
+        _headers: page("_headers").replace(/max-age=\d+/, "max-age=86400"),
+      }),
+      /no Strict-Transport-Security of at least a year/,
+    ],
+    [
+      "a canonical link on the 404 page",
+      () => ({
+        "404.html": page("404.html").replace(
+          "</head>",
+          '<link rel="canonical" href="https://getkervan.dev/404.html"></head>',
+        ),
+      }),
+      /the 404 page has a canonical link/,
+    ],
+    [
       "no CSP",
       () => ({ _headers: page("_headers").replace(/^\s+Content-Security-Policy:.*$/m, "") }),
       /the CSP for \/\* lacks default-src/,
@@ -434,16 +458,14 @@ run("each check:site rule catches its problem", () => {
     ])
   })
 
-  it("an npm command while the packages are not published (a warning; --strict fails on it)", () => {
+  it("an npm command while the packages are not published", () => {
     const withNpm = inMain(
       page("changelog/index.html"),
       "<pre><code>npm create kervan@latest my-server</code></pre>",
     )
-    expect(check({ "changelog/index.html": withNpm }, { published: false }).warnings).toEqual(
-      expect.arrayContaining([expect.stringContaining("shows an npm command (npm create kervan")]),
-    )
-    expect(
-      check({ "changelog/index.html": withNpm }, { published: true }).warnings.join("\n"),
-    ).not.toContain("npm command")
+    expect(newErrors({ "changelog/index.html": withNpm }, { published: false })).toEqual([
+      expect.stringContaining("shows an npm command (npm create kervan"),
+    ])
+    expect(newErrors({ "changelog/index.html": withNpm }, { published: true })).toEqual([])
   })
 })

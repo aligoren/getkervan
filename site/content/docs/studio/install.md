@@ -21,22 +21,22 @@ Create a master key once, and keep it somewhere safe **outside** the data direct
 manager, a secret store). Read [the data directory and the master key](/docs/studio/data-and-master-key/)
 first: without the key, stored secrets cannot be recovered.
 
-```sh {check="run"}
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+This writes a new key into `.env.studio` without showing it, and refuses to overwrite an existing
+file. Copy the key from the file to your password manager:
+
+```sh {check="studio-key"}
+node -e "require('fs').writeFileSync('.env.studio', 'KERVAN_STUDIO_MASTER_KEY=' + require('crypto').randomBytes(32).toString('base64') + '\n', { mode: 0o600, flag: 'wx' })"
 ```
 
-Then start Studio with the key in its environment:
+Then start Studio with it. Node reads the file (`--env-file`), so the key is never on the command
+line or in your shell history:
 
 ```sh {check="studio-starts"}
-KERVAN_STUDIO_MASTER_KEY=<that key> node apps/studio/bin/kervan-studio.js start
+node --env-file=.env.studio apps/studio/bin/kervan-studio.js start
 ```
 
-In PowerShell, set the variable first:
-
-```powershell {check="manual" reason="PowerShell syntax of the line above, checked on Windows"}
-$env:KERVAN_STUDIO_MASTER_KEY = "<that key>"
-node apps/studio/bin/kervan-studio.js start
-```
+Both commands are the same in PowerShell and cmd. The repository's `.gitignore` keeps `.env.*`
+files out of Git. On Windows the file mode does not apply: keep the folder private.
 
 The database goes into `.kervan-studio/` in the current folder (`KERVAN_STUDIO_DATA_DIR` changes
 it). A folder Studio creates gets a `.gitignore` that keeps it out of Git, and Studio warns at

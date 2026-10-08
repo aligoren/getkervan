@@ -21,6 +21,8 @@ described in `docs/THREAT-MODEL-STUDIO.md`.
   package, authorization checked again at every write, the password change and session renewal
   in one transaction, quoted URLs in the connect commands, the User-Agent shown with visible
   escapes. What it closed is marked "final round" below; what stays open is listed at the end.
+- **Website review** (October 2026): one independent reviewer with a fresh context over the Hugo
+  site, its scripts and the documentation it shows. See "Website" below.
 - **Threat model**, "Known limits" (and T19's limit): the accepted risks, including those from
   earlier phases.
 - **Not available:** the independent reviews at the end of phases 4a and 4c also had findings
@@ -114,6 +116,51 @@ run.
 Not separately mutation-tested on Windows (the tests that cover them run only on POSIX): the
 symbolic-link and ownership conditions of the git check. Each was mutation-tested in a Linux
 container (Node 24.21, as an unprivileged user): removing it made its test fail.
+
+## Website: independent review
+
+Fixed (each with a test, a check:site rule or a verified run):
+
+- The documented recovery from a lost master key ("set the secrets again in the UI") could not
+  work: Studio does not start while a stored secret fails to decrypt. The docs now give the
+  real procedure (back up, `DELETE FROM secrets`, start with the new key), run end to end.
+- The CLI page said nothing about `kervan create` installing `@kervan/*` and `kervan` from npm
+  before those names are registered (a failing install, or someone else's packages): a note, shown
+  until `params.published` is true, points to `pnpm try:new`.
+- Nothing stopped a deploy with the placeholder repository URL or npm commands: the Cloudflare
+  Pages build command now ends with `check:site --strict`, and an npm command while unpublished is
+  an error, not a warning.
+- Claims narrowed to what the code does: spec and code tools share validation, error masking and
+  timeouts (SSRF protection, redaction and rate limits are spec-tool features); mutation testing
+  is described as done by hand; the export keeps the text except the `secrets` hosts; the
+  self-hosting guide no longer says every step ran.
+- The master key no longer goes on the command line: Node writes it to `.env.studio` (never on
+  screen, never overwriting an existing file) and Studio starts with `node --env-file=.env.studio`.
+- Smaller: a Studio settings text named a "Keys" tab that is labelled "API keys" (bug fix); the
+  404 page had a canonical link; check:site now requires the preview `noindex` rules, a year of
+  HSTS, and warns about pages without `lastmod`; the header marks a section link
+  `aria-current="true"` (the page itself `"page"`); copy buttons report through a live region;
+  the leak scanner finds IPv6 addresses and short user names (as whole words); the docs example
+  runner works in temporary copies, cleans up on Ctrl+C, and `site:screenshots` removes its data
+  folder even when Studio fails to start; `site:verify` awaited none of the response bodies it
+  measured.
+
+Accepted, with the reason:
+
+- **`--claude` leaves an empty project entry** in Claude Code's configuration for the temporary
+  folder it used (the servers themselves are removed). Using the user scope instead would touch
+  the user's real configuration while the check runs.
+- **`run` blocks run in the working tree** (the quickstart's `pnpm build`): that is what the block
+  documents; it writes only build output.
+- **CI runs check:site without `--strict`**, so the repository can be pushed while its URL is
+  still the placeholder; the Pages build and release day run it strictly. The weekly
+  `site-check.yml` fails until the URL is set.
+- **Screenshots follow the system theme**, not the site's theme switch (`<picture>` can only test
+  `prefers-color-scheme`).
+- **The mutation runs of check:site's rules are in the test suite** (`site-build.test.ts`, one
+  case per rule); the runs that broke the code of each rule (45 of 45 caught) and the browser
+  checks (6 of 6) were done by hand, like the earlier security mutation runs.
+- **macOS** is not tested for the site scripts or the docs examples (nor anywhere else).
 
 ## Still open at the feature freeze
 

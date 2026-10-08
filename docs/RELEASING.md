@@ -88,9 +88,12 @@ steps need the Cloudflare account and the domain.
 - [ ] Workers & Pages, Create, Pages, **Connect to Git**: the repository, production branch `main`.
 - [ ] Build settings: framework preset **None** (the command below does what the Hugo preset
       would, plus the version check), build command
-      `(git fetch --unshallow || true) && node scripts/site/build.mjs`, build output directory
+      `(git fetch --unshallow || true) && node scripts/site/build.mjs && node scripts/check-site.mjs --strict`,
+      build output directory
       `site/public`, root directory empty (the build needs `examples/`, `packages/`, `apps/` and
-      `docs/`, which Hugo mounts).
+      `docs/`, which Hugo mounts). The strict check fails the deploy while `params.repoURL` is the
+      placeholder or a page shows an npm command before `params.published` is true, so nothing
+      half-ready goes live.
       Cloudflare clones shallowly; without the unshallow step every page's `lastmod` in the
       sitemap would be the latest commit's date.
 - [ ] Environment variables (production and preview): `HUGO_VERSION` = the content of

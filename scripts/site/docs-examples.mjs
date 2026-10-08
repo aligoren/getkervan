@@ -14,6 +14,7 @@
 //   repl        a kervan dev REPL transcript: the `kervan> ` lines are fed to it
 //   ts, ts-run  TypeScript: it must type-check; ts-run must also run and print `expect`
 //   ts-syntax   a TypeScript excerpt that uses names from its surroundings: it must parse
+//   studio-key  writes the master key file; run in a fresh folder before each Studio command
 //   studio-starts, studio-create-admin   Studio's own commands, run with a throwaway data folder
 //   claude      Claude Code commands (only with --claude: they write to the user's Claude config)
 //   docker, docker-run   the Dockerfile draft, built and queried (only with --docker)
@@ -30,6 +31,7 @@ export const CHECKS = new Set([
   "repl",
   "ts",
   "ts-run",
+  "studio-key",
   "studio-starts",
   "studio-create-admin",
   "claude",
