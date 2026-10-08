@@ -56,7 +56,8 @@ gateway and spec runtime; user-supplied text, terminals and supply chain) each w
 fresh context and proved findings with failing tests. Their fixes are marked "release review"
 below; their tests are kept in the `test/review` folders of `apps/studio`, `apps/studio/web`,
 `packages/spec-runtime` and `packages/cli`. `docs/TEXT-SURFACES.md` maps every user-supplied
-string to the places it is shown.
+string to the places it is shown. `docs/REVIEW-NOTES.md` lists what the reviewers suspected but did not
+prove, and every accepted risk, with its status.
 
 ### T1: Secret exfiltration through a spec (4a)
 

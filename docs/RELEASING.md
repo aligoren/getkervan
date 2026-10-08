@@ -59,6 +59,8 @@ cannot do them.
       to the generated project, the examples and Studio's starter spec.
 - [ ] Mailboxes: `security@`, `hello@` and `conduct@getkervan.dev` must reach a person.
 - [ ] Decide the version (see Open decisions) and set it in every `package.json`.
+- [ ] Read [`docs/REVIEW-NOTES.md`](REVIEW-NOTES.md): the security reviews' unproven suspicions
+      and the accepted risks. Decide for each **open** item whether it waits or blocks the release.
 - [ ] Set the variable `KERVAN_ALLOW_PUBLISH` to `1` on the `release` environment, only when
       ready to publish (and back to empty afterwards, if you like the extra step).
 
@@ -77,15 +79,17 @@ cannot do them.
 
 ## How a release runs
 
-1. A pull request bumps the versions and updates the release notes; CI is green; it is merged.
-2. Actions, **Release**, Run workflow on `main`, choose the dist-tag (`next` for a pre-release,
+1. Before every release, check [`docs/REVIEW-NOTES.md`](REVIEW-NOTES.md) for open items that
+   should be done first, and update it with anything new.
+2. A pull request bumps the versions and updates the release notes; CI is green; it is merged.
+3. Actions, **Release**, Run workflow on `main`, choose the dist-tag (`next` for a pre-release,
    `latest` for a release).
-3. A reviewer approves the `release` environment.
-4. The workflow runs the whole chain again, packs the packages, runs the guard for each of them,
+4. A reviewer approves the `release` environment.
+5. The workflow runs the whole chain again, packs the packages, runs the guard for each of them,
    and publishes them in dependency order with provenance.
-5. Check: `npm view @kervan/core dist-tags`, the provenance badge on npmjs.com, and a fresh
+6. Check: `npm view @kervan/core dist-tags`, the provenance badge on npmjs.com, and a fresh
    `npm create kervan@<version> my-server` on a clean machine.
-6. Tag the commit (`v0.1.0`) and publish the GitHub release with the notes.
+7. Tag the commit (`v0.1.0`) and publish the GitHub release with the notes.
 
 ## When a release goes wrong
 
