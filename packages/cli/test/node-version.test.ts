@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { run } from "../src/index.js"
 import {
@@ -70,8 +72,10 @@ describe("nodeVersionProblem and typeStrippingProblem", () => {
 })
 
 describe("kervan on an untested Node.js", () => {
+  // Outside the repository: if the check ever let `create` through, nothing lands in the tree.
+  const target = path.join(tmpdir(), `kervan-node-version-${process.pid}`, "anything")
   for (const command of [
-    ["create", "anything", "--no-install"],
+    ["create", target, "--no-install"],
     ["dev", "src/index.ts"],
     ["run", "kervan.yaml"],
   ]) {
@@ -87,6 +91,7 @@ describe("kervan on an untested Node.js", () => {
       expect(err).toHaveLength(1)
       expect(err[0]).toMatch(/^Error: Kervan needs Node\.js 22\.23\.3 .*v24\.15\.0/)
       expect(out).toEqual([])
+      expect(existsSync(target)).toBe(false)
     })
   }
 })
