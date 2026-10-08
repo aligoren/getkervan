@@ -155,7 +155,7 @@ export function manifestProblems(pkg, manifest, version) {
   return problems
 }
 
-function run(command, args, options = {}) {
+export function run(command, args, options = {}) {
   // npm and pnpm are .cmd scripts on Windows: one command line through the shell, arguments quoted.
   const viaShell = isWindows && /^(npm|npx|pnpm)$/.test(command)
   // cmd.exe would read a quote or a percent sign inside an argument (the temporary folder's path).
@@ -228,7 +228,7 @@ function freePort() {
  * The file an installed package's command runs: from its package.json `bin`, as npm resolves it,
  * and only if npm also made the command (node_modules/.bin), so a broken `bin` fails here.
  */
-function commandFile(app, pkgName, command) {
+export function commandFile(app, pkgName, command) {
   const dir = path.join(app, "node_modules", ...pkgName.split("/"))
   const manifest = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"))
   const target = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.[command]
@@ -244,7 +244,7 @@ function commandFile(app, pkgName, command) {
 }
 
 /** Starts `kervan run <spec> --http` from the installed package and asks it for its tools. */
-async function listToolsOverHttp(cwd, spec) {
+export async function listToolsOverHttp(cwd, spec) {
   const port = await freePort()
   const child = spawn(
     process.execPath,

@@ -24,6 +24,7 @@
     "test:watch": "vitest",
     "check:pack": "pnpm -r --filter \"./packages/*\" run check:pack",
     "test:pack": "pnpm build && node scripts/pack-check.mjs",
+    "verify:published": "node scripts/verify-published.mjs",
     "e2e": "pnpm build && pnpm --filter @kervan/studio e2e",
     "site:schema": "node scripts/site-schema.mjs",
     "site:build": "node scripts/site/build.mjs",

@@ -35,3 +35,10 @@ export declare function readTarball(tarball: string): {
   manifest: Record<string, unknown> & { dependencies?: Record<string, string> }
   mapRefs: MapRef[]
 }
+export declare function run(
+  command: string,
+  args: string[],
+  options?: import("node:child_process").SpawnSyncOptions,
+): string
+export declare function commandFile(app: string, pkgName: string, command: string): string
+export declare function listToolsOverHttp(cwd: string, spec: string): Promise<string[]>
