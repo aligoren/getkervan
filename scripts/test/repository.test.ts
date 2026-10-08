@@ -132,8 +132,8 @@ describe("the published packages", () => {
           page,
         ).toBe(true)
       }
-      // The note stays until release day; the publish guard refuses while it is there.
-      expect(readme, dir).toContain("**Not published yet.**")
+      // Released: the note is gone, or the publish guard would refuse (and npm would show it).
+      expect(readme, dir).not.toContain("Not published yet")
     }
   })
 

@@ -1,9 +1,5 @@
 # create-kervan
 
-> **Not published yet.** This package is not on npm yet; the install and `npx` commands below
-> work once it is. Until then, build Kervan from source (see the repository README,
-> "Development").
-
 ```sh
 npm create kervan@latest my-server
 pnpm create kervan my-server

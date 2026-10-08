@@ -1,9 +1,5 @@
 # @kervan/core
 
-> **Not published yet.** This package is not on npm yet; the install and `npx` commands below
-> work once it is. Until then, build Kervan from source (see the repository README,
-> "Development").
-
 Define MCP tools with Zod schemas. `@kervan/core` builds the official SDK server and contains no
 transport, database or UI code. Pair it with [`@kervan/transport`](https://www.npmjs.com/package/@kervan/transport) to serve it.
 
