@@ -68,7 +68,8 @@ const check = (overrides: Overrides = {}, options: Options = {}) =>
 const page = (file: string) => readFileSync(path.join(dir, file), "utf8")
 /** The errors that `change` causes and the unchanged build does not have. */
 const newErrors = (overrides: Overrides, options: Options = {}) => {
-  const before = new Set(check().errors)
+  // The baseline has the same published flag: the site may be built either way.
+  const before = new Set(check({}, { published: options.published }).errors)
   return check(overrides, options).errors.filter((error) => !before.has(error))
 }
 
@@ -211,7 +212,8 @@ run("the built site", () => {
 
   it("the declaration rules catch an undeclared block, a manual block without a reason and a missing spec", () => {
     const html = page("docs/framework/quickstart/index.html")
-    const undeclared = html.replace(/ data-check="?run"?/, "")
+    // Its first declared block, whatever kind it is (the page differs with params.published).
+    const undeclared = html.replace(/ data-check="?[a-z-]+"?/, "")
     expect(
       declarationProblems(
         collectBlocks(siteView(dir, { "docs/framework/quickstart/index.html": undeclared })),
