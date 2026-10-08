@@ -675,5 +675,11 @@ run("each check:site rule catches its problem", () => {
     ])
     const withTag = withNpm.replace("kervan@latest", "kervan@next")
     expect(newErrors({ "changelog/index.html": withTag }, { published: true })).toEqual([])
+    // Line by line: a block's other lines (here `kervan dev`, no npm) are not npm commands.
+    const twoLines = withTag.replace(
+      "npm create kervan@next my-server",
+      "kervan dev src/index.ts\nnpx kervan@next dev /abs/path/src/index.ts",
+    )
+    expect(newErrors({ "changelog/index.html": twoLines }, { published: true })).toEqual([])
   })
 })

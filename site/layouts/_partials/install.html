@@ -3,7 +3,7 @@
   the npm commands. While published is false, check:site refuses npm install commands.
 */ -}}
 {{- if site.Params.published }}
-<p>{{ if ne site.Params.npmTag "latest" }}Version 0.1 is a release candidate, on npm under the <code>{{ site.Params.npmTag }}</code> tag: name the tag as shown. {{ end }}You need Node.js 22.23.3 or a later 22.x, or 24.21.0 or later. To build Kervan from a clone instead, see <a href="{{ site.Params.repoURL }}#development">Development</a> in the repository's README.</p>
+<p>{{ if ne site.Params.npmTag "latest" }}Version 0.1 is a release candidate, on npm under the <code>{{ site.Params.npmTag }}</code> tag: name the tag as shown. {{ end }}You need Node.js 22.23.3 or a later 22.x, or 24.21.0 or later. To build Kervan from a clone instead, see <a href="{{ site.Params.repoURL }}#development" rel="noopener noreferrer">Development</a> in the repository's README.</p>
 {{ partial "code.html" (dict "code" (printf "npm create kervan@%s my-server\ncd my-server\nnpm run dev" site.Params.npmTag) "lang" "sh" "attrs" (dict "check" "published")) }}
 {{- else }}
 <p>Kervan is not on npm yet, so this builds it from a clone of the repository: Node.js 22.23.3 or a later 22.x, or 24.21.0 or later, and pnpm (through <code>corepack enable</code>). <code>pnpm try:new</code> creates a project from the local packages and runs its tests; once the packages are published, <code>npm create kervan</code> replaces it.</p>

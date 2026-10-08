@@ -595,8 +595,11 @@ export function checkBuild(view, params, options = {}) {
         `${where}: shows an npm command (${NPM_COMMANDS.exec(code)?.[0]}) while params.published is false.`,
       )
     }
+    // Line by line: textOf would join a block's lines into one.
     for (const problem of npmCommandProblems(
-      [...main.matchAll(/<pre[\s\S]*?<\/pre>/g)].map((block) => textOf(block[0])).join("\n"),
+      [...main.matchAll(/<pre[\s\S]*?<\/pre>/g)]
+        .map((block) => decodeEntities(block[0].replace(/<[^>]+>/g, "")))
+        .join("\n"),
       params,
     ))
       errors.push(`${where}: ${problem}`)
