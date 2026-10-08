@@ -38,7 +38,7 @@ export function Settings(props: {
             <CodeBlock label="Endpoint format">{`${origin}/s/<server id>/mcp`}</CodeBlock>
             <p className="text-sm text-fg-muted">
               {props.user.role === "admin"
-                ? "Create keys on a server's Keys tab. A key works only for the server it was created for."
+                ? "Create keys on a server's API keys tab. A key works only for the server it was created for."
                 : "An admin creates the API keys. A key works only for the server it was created for."}
             </p>
           </CardContent>
