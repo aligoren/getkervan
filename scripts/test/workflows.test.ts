@@ -70,6 +70,21 @@ describe("workflows", () => {
     )
   })
 
+  it.each(workflows)("$name pins Ubuntu to 24.04 (a new image is a deliberate change)", (w) => {
+    // ubuntu-latest moves to a new release on GitHub's schedule; Playwright's system packages
+    // and the Hugo install are checked against one image (docs/RELEASING.md, "Runner images").
+    expect(w.text).not.toMatch(/ubuntu-latest/)
+    const runners = [
+      ...[...w.text.matchAll(/^\s+runs-on: (\S+)$/gm)].map((match) => match[1]),
+      ...[...w.text.matchAll(/^\s+os: \[([^\]]+)\]$/gm)].flatMap((match) =>
+        (match[1] ?? "").split(",").map((os) => os.trim()),
+      ),
+      // `runs-on: ${{ matrix.os }}` names no runner itself: the matrix's `os` list does.
+    ].filter((runner) => !runner?.startsWith("${{"))
+    expect(runners.length).toBeGreaterThan(0)
+    for (const runner of runners) expect(runner, w.name).toMatch(/^(ubuntu-24\.04|windows-latest)$/)
+  })
+
   it("never publish or deploy outside release.yml", () => {
     for (const w of workflows.filter((each) => each.name !== "release.yml")) {
       expect(w.text, w.name).not.toMatch(/npm publish|pnpm publish|id-token/)

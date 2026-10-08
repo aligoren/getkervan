@@ -248,6 +248,19 @@ curl -s https://getkervan.dev/robots.txt                         # Sitemap: http
 **Every year:** renew `Expires` in `site/static/.well-known/security.txt` (check:site warns 30
 days ahead; `site-check.yml` fails then).
 
+## Runner images
+
+The Ubuntu jobs run on `ubuntu-24.04`, not `ubuntu-latest`: GitHub moves `ubuntu-latest` to Ubuntu
+26 from 2026-10-19, and a new image changes the system packages Playwright installs
+(`playwright install --with-deps`) and the environment of the pinned Hugo download
+(`scripts/site/install-hugo.sh`). The move to Ubuntu 26 is a deliberate change of its own: one
+pull request that changes the label in every workflow (`scripts/test/workflows.test.ts` accepts
+only the pinned one) and passes CI, the site job and e2e included. Windows stays on
+`windows-latest`.
+
+The CI job names include the runner (`test (ubuntu-24.04, Node 22.x)`): a ruleset that requires
+checks by name needs the new names after such a change.
+
 ## How a release runs
 
 After the first release (above), every release:
