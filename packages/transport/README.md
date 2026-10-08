@@ -4,8 +4,11 @@
 > work once it is. Until then, build Kervan from source (see the repository README,
 > "Development").
 
-Serve a [`@kervan/core`](../core) app over stdio or Streamable HTTP. Both MCP 2026-07-28 clients and
+Serve a [`@kervan/core`](https://www.npmjs.com/package/@kervan/core) app over stdio or Streamable HTTP. Both MCP 2026-07-28 clients and
 2025-era clients (up to `2025-11-25`) are served from the same app.
+
+Documentation: [getkervan.dev/docs/framework](https://getkervan.dev/docs/framework/) (see
+[Transports](https://getkervan.dev/docs/framework/transports/) and [Testing](https://getkervan.dev/docs/framework/testing/)).
 
 ## Node: `@kervan/transport/node`
 

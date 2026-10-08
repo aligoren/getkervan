@@ -1,8 +1,30 @@
 {
   "name": "@kervan/spec-runtime",
-  "version": "0.1.0",
-  "description": "Turn a declarative kervan.yaml spec into MCP tools that call HTTP APIs safely.",
+  "version": "0.1.0-rc.1",
+  "description": "Turn a kervan.yaml spec into MCP tools that call HTTP APIs: templates, JMESPath output selection, SSRF protection and secret redaction.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "yaml",
+    "no-code",
+    "http",
+    "ai-agents"
+  ],
   "license": "MIT",
+  "author": {
+    "name": "Kervan contributors",
+    "url": "https://getkervan.dev"
+  },
+  "homepage": "https://getkervan.dev",
+  "bugs": {
+    "url": "https://github.com/aligoren/getkervan/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aligoren/getkervan.git",
+    "directory": "packages/spec-runtime"
+  },
   "type": "module",
   "sideEffects": false,
   "engines": {
@@ -20,18 +42,14 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "src",
-    "schema",
-    "!**/*.tsbuildinfo"
+    "!dist/**/*.map",
+    "!**/*.tsbuildinfo",
+    "schema"
   ],
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "spec",
-    "yaml",
-    "http",
-    "no-code"
-  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
   "scripts": {
     "gen:schema": "node scripts/gen-schema.mjs",
     "check:pack": "publint && attw --pack . --profile esm-only",

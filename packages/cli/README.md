@@ -4,7 +4,9 @@
 > work once it is. Until then, build Kervan from source (see the repository README,
 > "Development").
 
-Command line tools for [Kervan](../../README.md) MCP servers.
+Command line tools for [Kervan](https://getkervan.dev) MCP servers.
+
+Documentation: [getkervan.dev/docs/framework](https://getkervan.dev/docs/framework/) (see the [CLI](https://getkervan.dev/docs/framework/cli/) page).
 
 ```sh
 npx kervan create my-server          # or: npm create kervan@latest my-server
@@ -37,7 +39,7 @@ cannot run).
 
 ## `kervan run <spec>`
 
-Serves a `kervan.yaml` spec (see [`@kervan/spec-runtime`](../spec-runtime)).
+Serves a `kervan.yaml` spec (see [`@kervan/spec-runtime`](https://www.npmjs.com/package/@kervan/spec-runtime)).
 
 ```sh {check="starts" each="true" cwd="examples/spec" files=".env"}
 kervan run kervan.yaml                                   # stdio

@@ -1,8 +1,30 @@
 {
   "name": "kervan",
-  "version": "0.1.0",
-  "description": "Command line tools for Kervan MCP servers: create projects and develop with hot reload.",
+  "version": "0.1.0-rc.1",
+  "description": "The kervan command line: create MCP server projects, develop with hot reload and an inspector, serve kervan.yaml specs.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "cli",
+    "yaml",
+    "typescript",
+    "ai-agents"
+  ],
   "license": "MIT",
+  "author": {
+    "name": "Kervan contributors",
+    "url": "https://getkervan.dev"
+  },
+  "homepage": "https://getkervan.dev",
+  "bugs": {
+    "url": "https://github.com/aligoren/getkervan/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aligoren/getkervan.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "engines": {
     "node": "^22.23.3 || >=24.21.0"
@@ -22,17 +44,14 @@
   "files": [
     "bin",
     "dist",
-    "src",
     "templates",
+    "!dist/**/*.map",
     "!**/*.tsbuildinfo"
   ],
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "cli",
-    "scaffold",
-    "kervan"
-  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
   "scripts": {
     "check:pack": "publint && attw --pack . --profile esm-only",
     "prepublishOnly": "node ../../scripts/guard-publish.mjs"

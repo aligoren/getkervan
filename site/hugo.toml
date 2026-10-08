@@ -19,7 +19,7 @@ disableHugoGeneratorInject = true
   # On release day: set true; `pnpm check:site --strict` refuses npm commands while it is false.
   published = false
   # The source repository. A placeholder until it exists; `pnpm check:site --strict` fails on it.
-  repoURL = "https://github.com/REPLACE-WITH-ORG/kervan"
+  repoURL = "https://github.com/aligoren/getkervan"
   description = "Kervan turns a kervan.yaml spec into a working MCP server, or lets you write tools in TypeScript on the official MCP SDK. Optional self-hosted Studio."
   # Contact addresses: the same as SECURITY.md and CODE_OF_CONDUCT.md.
   hello = "hello@getkervan.dev"

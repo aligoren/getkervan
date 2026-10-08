@@ -33,7 +33,8 @@ import { codeOf } from "./docs-examples.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 const isWindows = process.platform === "win32"
-const PLACEHOLDER_CLONE = /^git clone \S+\/kervan\.git$/
+// The documented clone command ("git clone <repository>.git kervan"): a copy of the working tree stands in for it.
+const CLONE_LINE = /^git clone \S+\.git kervan$/
 /** Terminal color codes (ESC [ ... m), which the REPL prints at a terminal. */
 const ANSI_COLOR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g")
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -469,7 +470,7 @@ async function runInstall(block) {
   let tree = ""
   try {
     for (const line of commandLines(codeOf(block))) {
-      if (PLACEHOLDER_CLONE.test(line)) {
+      if (CLONE_LINE.test(line)) {
         tree = path.join(dir, "kervan")
         copyWorkingTree(tree)
         continue

@@ -1,8 +1,30 @@
 {
   "name": "@kervan/transport",
-  "version": "0.1.0",
-  "description": "stdio and Streamable HTTP transports for Kervan MCP apps (Node and fetch runtimes).",
+  "version": "0.1.0-rc.1",
+  "description": "stdio and stateless Streamable HTTP transports for Kervan MCP servers: a Node.js server, a standard fetch handler and an in-memory test client.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "typescript",
+    "streamable-http",
+    "stdio",
+    "ai-agents"
+  ],
   "license": "MIT",
+  "author": {
+    "name": "Kervan contributors",
+    "url": "https://getkervan.dev"
+  },
+  "homepage": "https://getkervan.dev",
+  "bugs": {
+    "url": "https://github.com/aligoren/getkervan/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aligoren/getkervan.git",
+    "directory": "packages/transport"
+  },
   "type": "module",
   "sideEffects": false,
   "engines": {
@@ -27,17 +49,13 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "src",
+    "!dist/**/*.map",
     "!**/*.tsbuildinfo"
   ],
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "streamable-http",
-    "stdio",
-    "hono",
-    "cloudflare-workers"
-  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
   "scripts": {
     "check:pack": "publint && attw --pack . --profile esm-only",
     "prepublishOnly": "node ../../scripts/guard-publish.mjs"

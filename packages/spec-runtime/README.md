@@ -4,6 +4,9 @@ Turns a declarative `kervan.yaml` file into MCP tools that call HTTP APIs. Every
 to an ordinary `app.tool()` definition, so anything a spec does can also be done in code
 (`httpTool()`).
 
+Documentation: [getkervan.dev/docs/framework](https://getkervan.dev/docs/framework/) (see the
+[spec reference](https://getkervan.dev/docs/framework/spec-reference/)).
+
 > **Not published yet.** This package is not on npm yet; the install and `npx` commands below
 > work once it is. Until then, build Kervan from source (see the repository README,
 > "Development").

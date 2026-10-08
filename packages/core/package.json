@@ -1,8 +1,30 @@
 {
   "name": "@kervan/core",
-  "version": "0.1.0",
-  "description": "A thin, typed layer over the official MCP TypeScript SDK for writing MCP servers.",
+  "version": "0.1.0-rc.1",
+  "description": "A thin, typed layer over the official MCP TypeScript SDK: define MCP tools with Zod schemas, validated arguments, timeouts and masked errors.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "typescript",
+    "zod",
+    "ai-agents",
+    "tools"
+  ],
   "license": "MIT",
+  "author": {
+    "name": "Kervan contributors",
+    "url": "https://getkervan.dev"
+  },
+  "homepage": "https://getkervan.dev",
+  "bugs": {
+    "url": "https://github.com/aligoren/getkervan/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aligoren/getkervan.git",
+    "directory": "packages/core"
+  },
   "type": "module",
   "sideEffects": false,
   "engines": {
@@ -19,17 +41,13 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "src",
+    "!dist/**/*.map",
     "!**/*.tsbuildinfo"
   ],
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "mcp-server",
-    "framework",
-    "ai",
-    "llm"
-  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
   "scripts": {
     "check:pack": "publint && attw --pack . --profile esm-only",
     "prepublishOnly": "node ../../scripts/guard-publish.mjs"

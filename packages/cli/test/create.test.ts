@@ -7,6 +7,13 @@ import { fileURLToPath } from "node:url"
 import { afterEach, describe, expect, it } from "vitest"
 import { CreateError, createProject, detectPackageManager } from "../src/create.js"
 
+/** The CLI's own version: generated projects depend on it, `kervan --version` prints it. */
+const VERSION = (
+  JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    version: string
+  }
+).version
+
 const cliRoot = fileURLToPath(new URL("..", import.meta.url))
 const temps: string[] = []
 
@@ -50,8 +57,8 @@ describe("createProject", () => {
       name: "my-server",
       type: "module",
       engines: { node: "^22.23.3 || >=24.21.0" },
-      dependencies: { "@kervan/core": "^0.1.0", "@kervan/transport": "^0.1.0" },
-      devDependencies: { kervan: "^0.1.0" },
+      dependencies: { "@kervan/core": `^${VERSION}`, "@kervan/transport": `^${VERSION}` },
+      devDependencies: { kervan: `^${VERSION}` },
       scripts: {
         dev: "kervan dev src/index.ts",
         start: "node check-node.mjs && node src/index.ts",
@@ -176,7 +183,7 @@ describe("command line", () => {
       /--pm must be/,
     )
     expect(runBin(bin, ["launch"], parent).stderr).toMatch(/Unknown command "launch"/)
-    expect(runBin(bin, ["--version"], parent).stdout.trim()).toBe("0.1.0")
+    expect(runBin(bin, ["--version"], parent).stdout.trim()).toBe(VERSION)
     // Four process starts: slow on a busy Windows machine.
   }, 30_000)
 })

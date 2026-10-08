@@ -144,8 +144,12 @@ ecosystem moves quickly.
 ## Development
 
 Requires Node.js 22.23.3 or a later 22.x, or 24.21.0 or later, and pnpm. This is also how to use Kervan before it is published.
+The source is at [github.com/aligoren/getkervan](https://github.com/aligoren/getkervan).
 
 ```sh
+git clone https://github.com/aligoren/getkervan.git kervan
+cd kervan
+corepack enable
 pnpm install
 pnpm build        # tsc -b
 pnpm test         # build, then Vitest

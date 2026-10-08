@@ -14,6 +14,8 @@ every package, the generated project and these documents on the same range), and
 corepack provides at the version in `package.json`:
 
 ```sh
+git clone https://github.com/aligoren/getkervan.git kervan
+cd kervan
 corepack enable
 pnpm install
 pnpm build

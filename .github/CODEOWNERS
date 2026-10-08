@@ -1,10 +1,5 @@
-# Code owners: GitHub asks them to review pull requests that touch their paths.
-#
-# TODO(owner): the repository's owner is not decided yet. Once the GitHub organization exists,
-# replace the line below with real owners (a user or a team, e.g. `* @kervan/maintainers`) and
-# uncomment it. With branch protection's "Require review from Code Owners", their review is then
-# needed to merge. Security-sensitive paths can get a second, narrower line:
-#
-#   *                                    @TODO-owner
-#   /packages/spec-runtime/src/network.ts @TODO-security-reviewer
-#   /apps/studio/src/                    @TODO-security-reviewer
+# Code owners: GitHub asks them to review pull requests that touch their paths. With branch
+# protection's "Require review from Code Owners", their review is needed to merge.
+*                                     @aligoren
+/packages/spec-runtime/src/network.ts @aligoren
+/apps/studio/src/                     @aligoren

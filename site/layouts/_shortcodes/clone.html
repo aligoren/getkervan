@@ -1,2 +1,2 @@
 {{- /* Clone and build the repository (params.repoURL: one place to set the address). */ -}}
-{{- partial "code.html" (dict "code" (printf "git clone %s.git\ncd kervan\ncorepack enable\npnpm install\npnpm build" site.Params.repoURL) "lang" "sh" "attrs" (dict "check" "clone")) -}}
+{{- partial "code.html" (dict "code" (printf "git clone %s.git kervan\ncd kervan\ncorepack enable\npnpm install\npnpm build" site.Params.repoURL) "lang" "sh" "attrs" (dict "check" "clone")) -}}

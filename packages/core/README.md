@@ -5,7 +5,10 @@
 > "Development").
 
 Define MCP tools with Zod schemas. `@kervan/core` builds the official SDK server and contains no
-transport, database or UI code. Pair it with [`@kervan/transport`](../transport) to serve it.
+transport, database or UI code. Pair it with [`@kervan/transport`](https://www.npmjs.com/package/@kervan/transport) to serve it.
+
+Documentation: [getkervan.dev/docs/framework](https://getkervan.dev/docs/framework/) (start with the
+[quickstart](https://getkervan.dev/docs/framework/quickstart/)).
 
 ```ts
 import { createApp, z } from "@kervan/core"

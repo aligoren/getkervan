@@ -36,6 +36,8 @@ function allowed(file: string, text: string): boolean {
   // The scripts that build and check the website name it; they never send it a request.
   if (file === "scripts/check-site.mjs" || file.startsWith("scripts/site/")) return true
   if (/^scripts\/test\/site[\w-]*\.test\.ts$/.test(file)) return true
+  // Checks the packages' homepage and documentation links as text; it requests nothing.
+  if (file === "scripts/test/repository.test.ts") return true
   if (file === "packages/spec-runtime/scripts/schema-id.mjs") return true
   if (file.endsWith("package.json")) return true
   if (file === "packages/spec-runtime/schema/kervan.schema.json") {

@@ -1,6 +1,14 @@
 {
   "name": "kervan-monorepo",
   "private": true,
+  "homepage": "https://getkervan.dev",
+  "bugs": {
+    "url": "https://github.com/aligoren/getkervan/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aligoren/getkervan.git"
+  },
   "type": "module",
   "packageManager": "pnpm@12.9.1",
   "engines": {
@@ -15,6 +23,7 @@
     "test": "pnpm build && vitest run",
     "test:watch": "vitest",
     "check:pack": "pnpm -r --filter \"./packages/*\" run check:pack",
+    "test:pack": "pnpm build && node scripts/pack-check.mjs",
     "e2e": "pnpm build && pnpm --filter @kervan/studio e2e",
     "site:schema": "node scripts/site-schema.mjs",
     "site:build": "node scripts/site/build.mjs",

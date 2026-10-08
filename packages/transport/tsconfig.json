@@ -3,6 +3,9 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
+    // Published without its sources (package.json "files"), so no maps that would point at them.
+    "sourceMap": false,
+    "declarationMap": false,
     "lib": ["es2023", "dom"],
     "types": ["node"]
   },

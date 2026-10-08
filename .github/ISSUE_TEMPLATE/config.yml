@@ -1,8 +1,7 @@
 # Issue choices. Security reports never go into a public issue: this link sends people to the
-# private reporting form.
-# TODO(release): replace OWNER/REPO with the repository's path once it exists (docs/RELEASING.md).
+# private reporting form (see SECURITY.md).
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability (privately)
-    url: https://github.com/OWNER/REPO/security/advisories/new
+    url: https://github.com/aligoren/getkervan/security/advisories/new
     about: Do not open a public issue for a security problem. See SECURITY.md.
