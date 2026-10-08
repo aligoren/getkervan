@@ -43,6 +43,15 @@ export function plan(target, version) {
 }
 
 /** A path as it is typed in a shell: quoted when it has spaces. */
+/**
+ * The command line cmd.exe runs for a step on Windows. Every argument is quoted, so "&", "|",
+ * "<", ">" and "^" in a path stay part of it; the command name is not: for a quoted name
+ * ("npm"), cmd.exe gives the .cmd script the wrong %~dp0 and npm cannot find itself.
+ */
+export function windowsCommandLine(command, args) {
+  return [command, ...args.map((arg) => `"${arg}"`)].join(" ")
+}
+
 const shown = (value) => (/\s/.test(value) ? `"${value}"` : value)
 
 function usage(message) {
@@ -73,11 +82,10 @@ export function main(argv, cwd = process.env.INIT_CWD ?? process.cwd()) {
     if (dryRun) continue
     if (step.title === "Pack the local packages")
       mkdirSync(path.join(target, TARBALLS), { recursive: true })
-    // npm and pnpm are .cmd scripts on Windows: run one command line through the shell, every
-    // argument in quotes, so "&", "|", "<", ">" and "^" in a path stay part of it.
+    // npm and pnpm are .cmd scripts on Windows: run one command line through the shell.
     const shell = process.platform === "win32" && step.command !== process.execPath
     const result = shell
-      ? spawnSync([step.command, ...step.args].map((arg) => `"${arg}"`).join(" "), {
+      ? spawnSync(windowsCommandLine(step.command, step.args), {
           cwd: step.cwd,
           stdio: "inherit",
           shell: true,

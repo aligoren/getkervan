@@ -1,10 +1,11 @@
 // `pnpm try:new <dir>`: the steps it runs (checked with --dry-run, which changes nothing), and
 // what it refuses. The full run installs from npm, so it is exercised by hand, not here.
+import { spawnSync } from "node:child_process"
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { main, plan, TARBALLS } from "../try-new.mjs"
+import { main, plan, TARBALLS, windowsCommandLine } from "../try-new.mjs"
 
 const dirs: string[] = []
 afterEach(() => {
@@ -59,5 +60,15 @@ describe("pnpm try:new", () => {
     expect(err.at(-1)).toContain("Give the folder for the new project.")
     expect(main(["."], parent)).toBe(1)
     expect(err.at(-1)).toContain("is not empty")
+  })
+
+  it("on Windows quotes every argument but not the command name", () => {
+    expect(windowsCommandLine("npm", ["install", "C:/a & b/x.tgz"])).toBe('npm "install" "C:/a & b/x.tgz"')
+  })
+
+  it.runIf(process.platform === "win32")("starts npm through cmd.exe that way (a quoted name breaks npm.cmd)", () => {
+    const result = spawnSync(windowsCommandLine("npm", ["--version"]), { shell: true, encoding: "utf8" })
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/)
   })
 })
