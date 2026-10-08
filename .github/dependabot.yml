@@ -14,6 +14,17 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    # An ignore rule holds back security updates too; Dependabot alerts still report advisories,
+    # and these are then updated by hand.
+    ignore:
+      # Pinned on purpose (apps/studio): monaco-yaml 5.5.1 does not work with Monaco 0.53 or later
+      # (its createWebWorker API changed). Update both together, by hand, and check the editor.
+      - dependency-name: monaco-editor
+      - dependency-name: monaco-yaml
+      # No major updates: a newer major describes APIs that the supported Node.js lines (22, 24)
+      # do not have. The types stay at 24 for now; moving them to 22 is a separate decision.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-security:
         applies-to: security-updates
