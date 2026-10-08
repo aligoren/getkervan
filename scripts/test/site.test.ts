@@ -19,9 +19,15 @@ describe("the website's files", () => {
   it("has a well-formed security.txt (RFC 9116)", () => {
     const fields = securityTxtFields(read("site/static/.well-known/security.txt"))
     expect([...fields.keys()].sort()).toEqual(
-      ["Canonical", "Contact", "Expires", "Preferred-Languages"].sort(),
+      ["Canonical", "Contact", "Expires", "Policy", "Preferred-Languages"].sort(),
     )
     expect(fields.get("Contact")).toBe("mailto:security@getkervan.dev")
+    // The policy is SECURITY.md as GitHub shows it, in the repository the root package.json names.
+    const repository = /^git\+(https:\/\/github\.com\/[\w.-]+\/[\w.-]+)\.git$/.exec(
+      JSON.parse(read("package.json")).repository.url,
+    )?.[1]
+    expect(repository).toBeDefined()
+    expect(fields.get("Policy")).toBe(`${repository}/security/policy`)
     expect(fields.get("Preferred-Languages")).toBe("en, tr")
     expect(fields.get("Canonical")).toBe("https://getkervan.dev/.well-known/security.txt")
     // A full ISO 8601 date-time in UTC. Whether it is still in the future is `pnpm check:site`'s

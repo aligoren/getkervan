@@ -240,8 +240,8 @@ install's shell as `cmd.exe` by name; the same lookup applies, in the new empty 
 | 60 built-site tests (`site-build.test.ts`) | CI `test` jobs (no Hugo) | Need Hugo at the pinned version | the `site` job (`KERVAN_REQUIRE_HUGO=1` fails if Hugo is missing) |
 | 6 POSIX-only (file modes, symbolic links, another owner, the loopback overlap) | Windows | Not meaningful on Windows | the Linux jobs |
 | 6 Windows-only in the first run (planted git.exe, UNC paths, `cmd.exe` quoting, mixed `\` and `/`); 11 with this round's tests (planted taskkill.exe and npm.cmd, `Path` rules, short paths) | Linux | Windows behaviour | the Windows jobs |
-| 5 zsh connect-command tests | everywhere (no zsh on Windows or, by the counts, on the Ubuntu image) | zsh not installed | **none until now**: CI installs zsh on Linux, and `KERVAN_REQUIRE_SHELLS` makes a missing shell fail |
-| 4 PowerShell connect-command tests | Linux (no `pwsh`) | PowerShell not installed | the Windows jobs (Windows PowerShell) |
+| 5 zsh connect-command tests | everywhere (no zsh on Windows or on the Ubuntu image: the second CI run's log shows apt setting it up) | zsh not installed | **none until now**: CI installs zsh on Linux, and `KERVAN_REQUIRE_SHELLS` makes a missing shell fail |
+| 4 PowerShell connect-command tests | only in the Linux Docker image used locally (no `pwsh`) | PowerShell not installed there | every CI job: GitHub's Ubuntu image has `pwsh`, Windows has Windows PowerShell (the second CI run skipped 71 on Ubuntu: the 60 built-site tests and the 11 Windows-only ones) |
 
 So the difference to the development machine is Hugo (60). No security test was skipped
 everywhere except the zsh quoting tests, which now run on Linux.
