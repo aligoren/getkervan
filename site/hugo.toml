@@ -15,9 +15,9 @@ timeZone = "UTC"
 disableHugoGeneratorInject = true
 
 [params]
-  # false until the packages are on npm: every install instruction shows the from-source path.
-  # On release day: set true; `pnpm check:site --strict` refuses npm commands while it is false.
-  published = false
+  # true once the packages are on npm (set by the post-publish branch, merged after the release):
+  # install instructions show npm commands with npmTag; check:site asks the registry for it.
+  published = true
   # The npm dist-tag the install commands name once published: "next" for a release candidate,
   # "latest" from 0.1.0. With published true, check:site requires it in every npm command and
   # asks the registry that each package has it.

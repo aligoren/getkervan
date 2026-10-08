@@ -66,7 +66,7 @@ structured: {"name":"Ankara","country":"Republic of Türkiye","latitude":39.9198
 ### In TypeScript
 
 The same tool in code, called in memory the way a client would. Run it with `node geo.ts` in a
-project made by `pnpm try:new` (or, once published, `npm create kervan`):
+project made by `npm create kervan@next` (or `pnpm try:new` from a clone):
 
 ```ts {check="ts-run" expect="first: Ankara, Republic of Türkiye" network="true"}
 import { createApp, ToolError, z } from "@kervan/core"

@@ -26,8 +26,8 @@ Workers, Deno or Bun. See [transports](/docs/framework/transports/#a-fetch-handl
 
 ## A container (draft)
 
-Until the packages are on npm, an image builds Kervan from a clone of the repository and serves a
-spec. Put this `Dockerfile` at the repository root, with your spec in `deploy/kervan.yaml`:
+This image builds Kervan from a clone of the repository (the code you build is the code you run)
+and serves a spec. Put this `Dockerfile` at the repository root, with your spec in `deploy/kervan.yaml`:
 
 ```dockerfile {check="docker" id="spec-server"}
 # syntax=docker/dockerfile:1

@@ -13,8 +13,8 @@ next:
     text: 'Troubleshooting'
 ---
 
-Until the packages are published, run the CLI from a clone as
-`node packages/cli/bin/kervan.js <command>`; afterwards, `npx kervan <command>`. The CLI refuses
+Run the CLI with `npx kervan@next <command>` (the 0.1 release candidate is under npm's `next`
+tag), or from a clone as `node packages/cli/bin/kervan.js <command>`. The CLI refuses
 Node.js versions outside 22.23.3 or a later 22.x, or 24.21.0 or later, with one line.
 
 {{< cli-help command="kervan" without="studio" >}}

@@ -1,15 +1,15 @@
 ---
 title: Changelog
 seoTitle: Kervan changelog, release notes
-description: Release notes for Kervan's packages and Kervan Studio. Version 0.1 is in preparation; nothing has been published to npm yet.
+description: Release notes for Kervan's packages and Kervan Studio. Version 0.1 is a release candidate on npm, under the next tag; 0.1.0 follows under latest.
 lead: Release notes, newest first.
 excludeFromSearch: false
 ---
 
-## 0.1, in preparation
+## 0.1.0-rc.1, release candidate
 
-Nothing has been released yet: no package is on npm.
-The first release will contain:
+The first release, on npm under the `next` tag (`npm create kervan@next my-server`); `0.1.0`
+follows under `latest`. It contains:
 
 - `@kervan/core`, `@kervan/transport`, `@kervan/spec-runtime`, the `kervan` CLI and
   `create-kervan`, with the API listed in [programmatic API](/docs/framework/api/);

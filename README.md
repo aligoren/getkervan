@@ -5,18 +5,17 @@ servers. It is a thin layer over the official SDK (`@modelcontextprotocol/server
 tools, and Kervan handles validation, error masking, timeouts, transports and change
 notifications. Tools can also be declared in a `kervan.yaml` file, without code.
 
-> **Status: pre-release, not published yet.** No package is on npm and the source repository is
-> not public yet; the first release (0.1) is being prepared. To try Kervan today, build it from
-> source (see [Development](#development)). The API planned for 0.1 is listed in
-> [docs/API.md](docs/API.md) with its stability.
+> **Status: 0.1 release candidate.** The packages are on npm under the `next` tag
+> (`npm create kervan@next`, `npm install @kervan/core@next`); `0.1.0` follows under `latest`.
+> The API of 0.1 is listed in [docs/API.md](docs/API.md) with its stability.
 
 ## Quick start
 
-These commands work once the packages are published to npm. Until then, build from source
-([Development](#development)) and use `node packages/cli/bin/kervan.js` instead of `npx kervan`.
+During the release candidate, name the `next` tag (a plain `npm create kervan` asks for
+`latest`). To build from source instead, see [Development](#development).
 
 ```sh
-npm create kervan@latest my-server
+npm create kervan@next my-server
 cd my-server
 npm run dev      # hot reload, plus a REPL in the terminal
 npm test
@@ -47,7 +46,7 @@ app.tool("get_weather", {
 await serve(app) // stdio by default; --http for Streamable HTTP on 127.0.0.1:3000
 ```
 
-The same tool as a spec, served with `npx kervan run kervan.yaml` (once published):
+The same tool as a spec, served with `npx kervan@next run kervan.yaml`:
 
 ```yaml
 specVersion: 1
@@ -82,7 +81,7 @@ claude mcp add weather -- npx kervan run /absolute/path/to/kervan.yaml
 | [`@kervan/transport`](packages/transport) | stdio and Streamable HTTP on Node, a standard fetch handler (tested on Node), multi-tenant `resolveServer`, and `createTestClient`. |
 | [`@kervan/spec-runtime`](packages/spec-runtime) | `kervan.yaml` specs: HTTP tools with templates, JMESPath output selection, SSRF protection and secret redaction. |
 | [`kervan`](packages/cli) | The CLI: `kervan create`, `kervan dev` (hot reload, REPL), `kervan run`. |
-| [`create-kervan`](packages/create-kervan) | `npm create kervan` (once published). |
+| [`create-kervan`](packages/create-kervan) | `npm create kervan@next`. |
 
 Examples: [`weather`](examples/weather) (code), [`spec`](examples/spec) (`kervan.yaml`),
 [`dynamic`](examples/dynamic) (runtime changes and multi-tenancy).
@@ -143,7 +142,8 @@ ecosystem moves quickly.
 
 ## Development
 
-Requires Node.js 22.23.3 or a later 22.x, or 24.21.0 or later, and pnpm. This is also how to use Kervan before it is published.
+Requires Node.js 22.23.3 or a later 22.x, or 24.21.0 or later, and pnpm. To use the published
+release candidate instead, `npm create kervan@next my-server` (see [Quick start](#quick-start)).
 The source is at [github.com/orchesta/getkervan](https://github.com/orchesta/getkervan).
 
 ```sh
@@ -160,15 +160,15 @@ pnpm e2e          # build, then Studio's Playwright tests (opt-in; needs Chromiu
 pnpm site:build   # the website, with Hugo (version in site/.hugo-version; see docs/SITE.md)
 pnpm check:site   # the website's rules on the build, and security.txt expiry
 pnpm site:verify  # the website in a browser: accessibility, CSP, layout (slow, not in pnpm test)
-pnpm try:new <dir> # a new project from this repository (until the packages are published)
+pnpm try:new <dir> # a new project from this repository's packages
 ```
 
 `prepublishOnly` blocks publishing unless `KERVAN_ALLOW_PUBLISH=1` is set.
 
-### Trying a new project before the packages are published
+### Trying a new project with the repository's packages
 
-`kervan create` cannot install `@kervan/*` from npm yet. Until it can, one command creates a
-project from this repository: it builds the packages, runs `kervan create --no-install`, packs the
+`npm create kervan@next` installs the published packages. To try the repository's own code
+instead, one command creates a project from it: it builds the packages, runs `kervan create --no-install`, packs the
 local packages into the project's `.kervan-tarballs/` folder, installs them with npm and runs the
 project's tests.
 
@@ -178,7 +178,7 @@ cd ../my-server
 npm run dev
 ```
 
-This is temporary: once the packages are published, `npm create kervan@latest` replaces it.
+To install from npm instead, use `npm create kervan@next my-server` (see [Quick start](#quick-start)).
 
 ## Contact
 
