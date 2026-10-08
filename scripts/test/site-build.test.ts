@@ -69,7 +69,8 @@ const page = (file: string) => readFileSync(path.join(dir, file), "utf8")
 /** The errors that `change` causes and the unchanged build does not have. */
 const newErrors = (overrides: Overrides, options: Options = {}) => {
   // The baseline has the same published flag: the site may be built either way.
-  const before = new Set(check({}, { published: options.published }).errors)
+  const flag = options.published === undefined ? {} : { published: options.published }
+  const before = new Set(check({}, flag).errors)
   return check(overrides, options).errors.filter((error) => !before.has(error))
 }
 
