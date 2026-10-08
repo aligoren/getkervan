@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process"
+import path from "node:path"
 import { type ToolContext, ToolError } from "@kervan/core"
 import { type CallToolResult, Client, type Tool } from "@modelcontextprotocol/client"
 import { ChildProcessTransport } from "./child-transport.js"
@@ -185,6 +186,16 @@ async function listAllTools(client: Client): Promise<Tool[]> {
 }
 
 /**
+ * Windows' taskkill by its full path. Run by its bare name it would be looked up in the current
+ * directory (the user's project) first, unless NoDefaultCurrentDirectoryInExePath is set.
+ */
+export function taskkillProgram(env: NodeJS.ProcessEnv = process.env): string {
+  const root = env.SystemRoot ?? env.SYSTEMROOT ?? env.windir ?? env.WINDIR
+  const windows = root && /^[A-Za-z]:\\/.test(root) ? root : "C:\\Windows"
+  return path.win32.join(windows, "System32", "taskkill.exe")
+}
+
+/**
  * Kills a process and its descendants: `taskkill /T /F` on Windows, which has no process groups;
  * on POSIX, SIGKILL to the process group the child leads (it was spawned with `detached`).
  * Descendants that moved to a group of their own (setsid, daemons) are out of reach on POSIX.
@@ -196,7 +207,7 @@ export function killTree(
 ): void {
   if (child.pid === undefined) return
   if (platform === "win32") {
-    spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+    spawnSync(taskkillProgram(), ["/pid", String(child.pid), "/T", "/F"], {
       windowsHide: true,
       stdio: "ignore",
     })

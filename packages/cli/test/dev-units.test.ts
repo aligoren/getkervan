@@ -1,7 +1,10 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
+import { spawnSync } from "node:child_process"
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { afterEach, describe, expect, it } from "vitest"
-import { ChildServer, killTree } from "../src/dev/child.js"
+import { ChildServer, killTree, taskkillProgram } from "../src/dev/child.js"
 import { devPreflight } from "../src/dev/index.js"
 import { collectSecrets, createRedactor, REDACTED } from "../src/dev/redact.js"
 import { findProjectRoot, shouldReload, watchProject } from "../src/dev/watch.js"
@@ -9,8 +12,12 @@ import { isAlive, makeProject, type Project, repo } from "./dev-helpers.js"
 
 const POLL = { timeout: 15_000, interval: 50 }
 const projects: Project[] = []
+const cleanupDirs: string[] = []
 afterEach(async () => {
   await Promise.all(projects.splice(0).map((project) => project.cleanup()))
+  await Promise.all(
+    cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 5 })),
+  )
 })
 
 async function project() {
@@ -97,6 +104,55 @@ describe("killTree", () => {
     })
     expect(calls).toEqual(["kill SIGKILL"])
   })
+
+  it("runs Windows' own taskkill by its full path, never one found in the current directory", () => {
+    expect(taskkillProgram({ SystemRoot: "D:\\Win" })).toBe("D:\\Win\\System32\\taskkill.exe")
+    expect(taskkillProgram({ WINDIR: "C:\\Windows" })).toBe("C:\\Windows\\System32\\taskkill.exe")
+    // A relative or missing root would be looked up from the current directory: not used.
+    for (const SystemRoot of [undefined, "Windows", ".\\Windows", "\\Windows"]) {
+      expect(taskkillProgram({ SystemRoot }), String(SystemRoot)).toBe(
+        "C:\\Windows\\System32\\taskkill.exe",
+      )
+    }
+  })
+
+  // End to end on Windows: a taskkill.exe planted in the working directory (a copy of cmd.exe,
+  // which would exit without killing anything) must not be what kills the server. Runs the built
+  // dist in a child process without NoDefaultCurrentDirectoryInExePath (libuv reads it from the
+  // spawning process; with it set, the bare name would be safe and the test blind).
+  it.runIf(process.platform === "win32")(
+    "kills the tree even with a taskkill.exe planted in the working directory",
+    async () => {
+      const cwd = await mkdtemp(path.join(os.tmpdir(), "kervan-taskkill-plant-"))
+      cleanupDirs.push(cwd)
+      await copyFile(
+        path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "cmd.exe"),
+        path.join(cwd, "taskkill.exe"),
+      )
+      const env = { ...process.env }
+      for (const name of Object.keys(env)) {
+        if (name.toLowerCase() === "nodefaultcurrentdirectoryinexepath") delete env[name]
+      }
+      const dist = pathToFileURL(path.join(repo, "packages/cli/dist/dev/child.js")).href
+      const script = `
+        import { spawn } from "node:child_process"
+        const { killTree } = await import(${JSON.stringify(dist)})
+        const victim = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" })
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        killTree(victim, "win32")
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+        let alive = true
+        try { process.kill(victim.pid, 0) } catch { alive = false }
+        if (alive) victim.kill()
+        console.log(alive ? "alive" : "killed")`
+      const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+        cwd,
+        env,
+        encoding: "utf8",
+      })
+      expect(`${run.stdout}${run.stderr}`.trim()).toBe("killed")
+    },
+  )
 })
 
 describe("watching", () => {

@@ -1,7 +1,7 @@
 // Studio's data directory holds the database: encrypted secrets, session and key hashes, the audit
 // log. It must never end up in a git repository by accident.
 import { execFileSync } from "node:child_process"
-import { lstatSync, readdirSync, readFileSync, type Stats, writeFileSync } from "node:fs"
+import { lstatSync, readdirSync, readFileSync, type Stats, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
 /**
@@ -131,9 +131,42 @@ function safeToInspect(repository: Repository): boolean {
   }
 }
 
-function git(repository: Repository, dir: string, args: string[]): boolean | undefined {
+/**
+ * The git program, from PATH's absolute folders only. Run by its bare name, it would be looked up
+ * in the current directory first on Windows (libuv does, as CreateProcess does, unless
+ * NoDefaultCurrentDirectoryInExePath is set); on POSIX an empty or relative PATH entry means the
+ * current directory too. A git planted in Studio's working directory must never run.
+ */
+export function gitProgram(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
+  const windows = platform === "win32"
+  const value = (windows ? (env.Path ?? env.PATH) : env.PATH) ?? ""
+  const join = windows ? path.win32.join : path.posix.join
+  for (const entry of value.split(windows ? ";" : ":")) {
+    const folder = windows ? entry.trim().replace(/^"(.*)"$/, "$1") : entry
+    // Absolute only: a drive letter and a separator, or a UNC path on Windows; "/..." on POSIX.
+    const absolute = windows ? /^([A-Za-z]:[\\/]|\\\\[^\\])/.test(folder) : folder.startsWith("/")
+    if (!absolute) continue
+    const candidate = join(folder, windows ? "git.exe" : "git")
+    try {
+      if (statSync(candidate).isFile()) return candidate
+    } catch {
+      // Not in this folder.
+    }
+  }
+  return undefined
+}
+
+function git(
+  program: string,
+  repository: Repository,
+  dir: string,
+  args: string[],
+): boolean | undefined {
   try {
-    execFileSync("git", gitArguments(dir, args), {
+    execFileSync(program, gitArguments(dir, args), {
       stdio: "ignore",
       timeout: 5000,
       env: gitEnvironment(process.env, repository),
@@ -177,18 +210,24 @@ export function dataDirectoryGitWarning(dir: string, file: string): string | und
       "in it), or set KERVAN_STUDIO_DATA_DIR to a folder outside the repository."
     )
   }
+  const program = gitProgram()
+  if (!program) return undefined
   const name = path.basename(file)
   // SQLite keeps recent pages in `-wal` next to the database (and an index in `-shm`): an ignore
   // rule like `*.db` covers the database but not those.
   const names = [name, `${name}-wal`, `${name}-shm`]
-  if (names.some((each) => git(repository, dir, ["ls-files", "--error-unmatch", each]) === true)) {
+  if (
+    names.some(
+      (each) => git(program, repository, dir, ["ls-files", "--error-unmatch", each]) === true,
+    )
+  ) {
     return (
       `Warning: ${file} (or its -wal/-shm file) is tracked by git. It holds encrypted secrets, sessions and the audit ` +
       `log: remove it from the repository (git rm --cached) and set KERVAN_STUDIO_DATA_DIR to a ` +
       "folder outside it."
     )
   }
-  if (names.some((each) => git(repository, dir, ["check-ignore", "-q", each]) === false)) {
+  if (names.some((each) => git(program, repository, dir, ["check-ignore", "-q", each]) === false)) {
     return (
       `Warning: ${file} (or its -wal/-shm file) is inside a git repository and not ignored, so ` +
       `it could be committed. Add ${path.basename(dir)}/ to .gitignore, or set ` +
