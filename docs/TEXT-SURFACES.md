@@ -20,7 +20,7 @@ blank).
 | Secret name | admins | `secrets.ts`, spec schema (`[A-Z][A-Z0-9_]*`) | UI, audit, spec issues, logs | Plain ASCII. |
 | API key name | admins | `studio.ts` | UI (keys, "Caller" column) | Hidden characters refused. React text. |
 | Client IP (`X-Forwarded-For`) | network | `client-ip.ts` (`isIP`) | audit, rate-limit keys | Entries that are not IP addresses are never used. |
-| User-Agent | browser | `db/repos/sessions.ts` (200 characters) | profile sessions (device name; raw text only in a tooltip) | React attribute. |
+| User-Agent | browser | `db/repos/sessions.ts` (`displayUserAgent`, 200 characters) | profile sessions (device name; the text in a tooltip) | Stored as sent; listed with hidden characters (C1 controls, the soft hyphen, ...) as visible escapes and backslashes doubled. The only header-derived text shown (client IPs are checked with `isIP`). |
 | Hash route (`#/servers/<id>`) | anyone who sends a link | `web/src/App.tsx` | the page shown | Only UUID characters make a server link; anything else shows the server list. |
 
 ## Spec text
@@ -55,4 +55,4 @@ blank).
 | MCP clients and the model | What the spec says, without hidden characters; upstream data redacted and selected. |
 | CLI terminal (`kervan run`, `kervan dev`, `kervan create`) | Every line through `terminalSafe` (`packages/cli/src/terminal.ts`). |
 | Exported `kervan.yaml` | The saved text exactly; bindings, never secret values. |
-| `claude mcp add` command in the UI | Built from the public URL, a UUID, the slug and a base64url key only. |
+| `claude mcp add` command in the UI | Built from the public URL, a UUID, the slug and a base64url key only; the URL is a single-quoted literal in every variant (an IPv6 URL is a glob in zsh otherwise). Tested in real bash, zsh and PowerShell. |

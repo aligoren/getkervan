@@ -42,7 +42,7 @@ describe("the generated `claude mcp add` command", () => {
       .concat([...document.querySelectorAll("code, pre, span, p")].map((e) => e.textContent ?? ""))
       .find((text) => text.startsWith("claude mcp add"))
     expect(command).toMatch(
-      /^claude mcp add --transport http weather-1 https?:\/\/[a-z0-9.:-]+\/s\/[0-9a-f-]{36}\/mcp --header "Authorization: Bearer kvn_[A-Za-z0-9_-]{43}"$/,
+      /^claude mcp add --transport http weather-1 'https?:\/\/[a-z0-9.:-]+\/s\/[0-9a-f-]{36}\/mcp' --header "Authorization: Bearer kvn_[A-Za-z0-9_-]{43}"$/,
     )
   })
 })

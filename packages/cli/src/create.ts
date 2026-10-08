@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { TYPE_STRIPPING_ENGINES } from "./node-version.js"
+import { NODE_ENGINES } from "./node-version.js"
 
 const templatesDir = fileURLToPath(new URL("../templates/", import.meta.url))
 
@@ -70,7 +70,7 @@ export async function createProject(options: CreateOptions): Promise<CreateResul
   const values: Record<string, string> = {
     name,
     kervanVersion: cliVersion(),
-    nodeEngines: TYPE_STRIPPING_ENGINES,
+    nodeEngines: NODE_ENGINES,
     ...TEMPLATE_VERSIONS,
   }
   const files: string[] = []

@@ -121,7 +121,7 @@ public issue.
 
 | | |
 | --- | --- |
-| Node.js | 22 or newer for the libraries; 22.18+ (or 23.6+) for the CLI and generated projects, which run TypeScript directly. On Windows with Node 24, use 24.21 or newer (24.15 has a libuv crash). |
+| Node.js | 22.23.3 or a later 22.x, or 24.21.0 or later for the CLI, generated projects and Studio: the oldest releases the whole test suite has passed on (earlier 24.x releases crash on Windows with a libuv bug). The libraries declare 22 or newer. |
 | MCP | 2026-07-28 (stateless) and the 2025 revisions up to 2025-11-25, from the same server. Over HTTP, 2025-era clients are served statelessly and receive `list_changed` only on their next `tools/list`. |
 | Runtimes | Node for everything; the fetch handler also runs on Workers, Deno and Bun. Spec tools need Node. |
 
@@ -143,7 +143,7 @@ ecosystem moves quickly.
 
 ## Development
 
-Requires Node 22.18+ and pnpm. This is also how to use Kervan before it is published.
+Requires Node.js 22.23.3 or a later 22.x, or 24.21.0 or later, and pnpm. This is also how to use Kervan before it is published.
 
 ```sh
 pnpm install

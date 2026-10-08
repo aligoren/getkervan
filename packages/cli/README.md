@@ -24,8 +24,10 @@ Creates a project from the `basic` template: an app with two tools, a test using
 
 The target directory must be new or empty.
 
-Generated projects run TypeScript directly with Node.js's built-in type stripping, so they need
-Node.js **22.18.0+** (or 23.6.0+); `create` refuses to run on older versions. Relative imports use
+Generated projects run TypeScript directly with Node.js's built-in type stripping. Kervan's
+tools and generated projects need Node.js **22.23.3 or a later 22.x, or 24.21.0 or later** (the oldest releases the whole test suite has
+passed on); `create`, `dev` and `run` refuse older versions with one line, and a generated
+project's `npm start` does too. Relative imports use
 the `.ts` extension, and the `tsconfig.json` enables `rewriteRelativeImportExtensions` (so `tsc`
 emits `.js` imports) and `erasableSyntaxOnly` (no enums or namespaces, which type stripping
 cannot run).
@@ -91,8 +93,6 @@ claude mcp add my-server -- npx kervan dev /abs/path/src/index.ts   # stdio, for
   replaced with `[redacted]` in everything `kervan dev` prints and in error results it forwards.
 - **Development only.** `kervan dev` refuses to start with `NODE_ENV=production`. File watching
   lives only in this CLI; `@kervan/core` and `@kervan/transport` never watch files.
-- On Windows with Node.js 24 older than 24.21, `kervan dev` warns about a libuv bug that can
-  crash Node.js processes.
 
 REPL commands: `tools`, `call <tool> [json]`, `reload`, `help`, `exit`. Calls go through the same
 app that serves clients, so validation and error masking match what a client sees.

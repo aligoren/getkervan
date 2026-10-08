@@ -1,5 +1,15 @@
-/** First releases that run `.ts` files without flags: 22.18.0 (LTS line) and 23.6.0. */
-export const TYPE_STRIPPING_ENGINES = "^22.18.0 || >=23.6.0"
+import { readFileSync } from "node:fs"
+
+/**
+ * The Node.js releases Kervan's tools run on, from this package's `engines` (the repository keeps
+ * every runtime package and the generated project on the same range: the oldest release of each
+ * line the whole test suite has passed on). They all run TypeScript without flags.
+ */
+export const NODE_ENGINES: string = (
+  JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    engines: { node: string }
+  }
+).engines.node
 
 interface Version {
   major: number
@@ -13,12 +23,35 @@ export function parseVersion(version: string): Version {
   return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) }
 }
 
-/** Whether this Node.js version strips TypeScript types without flags. */
-export function supportsTypeStripping(version: string): boolean {
-  const { major, minor } = parseVersion(version)
-  if (major === 22) return minor >= 18
-  if (major === 23) return minor >= 6
-  return major >= 24
+const compare = (a: Version, b: Version) =>
+  a.major - b.major || a.minor - b.minor || a.patch - b.patch
+
+/**
+ * Whether a version is in an engines range made of `^x.y.z` (that line, from x.y.z) and
+ * `>=x.y.z` (from x.y.z on) parts joined by `||`.
+ */
+export function satisfiesEngines(version: string, engines = NODE_ENGINES): boolean {
+  const current = parseVersion(version)
+  return engines.split("||").some((part) => {
+    const match = /^\s*(\^|>=)(\d+\.\d+\.\d+)\s*$/.exec(part)
+    if (!match) throw new Error(`Unsupported engines range "${engines}"`)
+    const floor = parseVersion(match[2] as string)
+    if (compare(current, floor) < 0) return false
+    return match[1] === ">=" || current.major === floor.major
+  })
+}
+
+/** "22.23.3 or a later 22.x, or 24.21.0 or later", from the engines range. */
+export function describeEngines(engines = NODE_ENGINES): string {
+  return engines
+    .split("||")
+    .map((part) => part.trim())
+    .map((part) =>
+      part.startsWith("^")
+        ? `${part.slice(1)} or a later ${part.slice(1).split(".")[0]}.x`
+        : `${part.slice(2)} or later`,
+    )
+    .join(", or ")
 }
 
 export interface RuntimeInfo {
@@ -33,14 +66,20 @@ export function currentRuntime(): RuntimeInfo {
   return { version: process.version, platform: process.platform, typescript: features.typescript }
 }
 
+/** Why Kervan's tools do not run on this Node.js version, or undefined. */
+export function nodeVersionProblem(runtime: RuntimeInfo = currentRuntime()): string | undefined {
+  if (satisfiesEngines(runtime.version)) return undefined
+  return (
+    `Kervan needs Node.js ${describeEngines()}; you are running ${runtime.version}. ` +
+    "Older releases were not tested (and Node 24 before 24.21 can crash on Windows). " +
+    "Please upgrade Node.js."
+  )
+}
+
 /** Returns an error message when this runtime cannot run a Kervan TypeScript project directly. */
 export function typeStrippingProblem(runtime: RuntimeInfo = currentRuntime()): string | undefined {
-  if (!supportsTypeStripping(runtime.version)) {
-    return (
-      `Kervan projects run TypeScript with Node.js's built-in type stripping, which needs ` +
-      `Node.js 22.18.0+ (or 23.6.0+). You are running ${runtime.version}. Please upgrade Node.js.`
-    )
-  }
+  const version = nodeVersionProblem(runtime)
+  if (version) return version
   if (runtime.typescript === false) {
     return (
       "Node.js type stripping is disabled in this process (for example by " +
@@ -48,18 +87,4 @@ export function typeStrippingProblem(runtime: RuntimeInfo = currentRuntime()): s
     )
   }
   return undefined
-}
-
-/**
- * Node 24 before 24.21 on Windows ships libuv 1.51, which can crash with a
- * `UV_HANDLE_CLOSING` assertion around fetch and process exit.
- */
-export function windowsLibuvWarning(runtime: RuntimeInfo = currentRuntime()): string | undefined {
-  if (runtime.platform !== "win32") return undefined
-  const { major, minor } = parseVersion(runtime.version)
-  if (major !== 24 || minor >= 21) return undefined
-  return (
-    `Node.js ${runtime.version} on Windows has a libuv bug that can crash processes with ` +
-    `"Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)". Upgrade to Node.js 24.21 or newer.`
-  )
 }

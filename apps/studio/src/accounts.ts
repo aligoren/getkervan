@@ -1,8 +1,9 @@
+import { requireActor } from "./authorize.js"
 import { hashPassword, passwordProblem, randomToken, verifyPassword } from "./crypto.js"
 import { type Db, writeTransaction } from "./db/open.js"
 import { listActiveKeysCreatedBy, revokeApiKey } from "./db/repos/api-keys.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
-import { deleteOtherSessions, sessionAlive } from "./db/repos/sessions.js"
+import { deleteOtherSessions, deleteSession, sessionAlive } from "./db/repos/sessions.js"
 import { consumeSetupToken, retireSetupTokens, setupTokenValid } from "./db/repos/tokens.js"
 import {
   anyAdminExists,
@@ -278,16 +279,22 @@ export async function checkPassword(
 /**
  * Changes the signed-in user's own password. The current password is required (the caller
  * throttles wrong ones like failed logins). Every other session of the user ends, and with them
- * their playground tokens; the session that made the change stays.
+ * their playground tokens.
+ *
+ * With `renew`, the session that made the change goes on under a new id: the old session is
+ * deleted and `renew` creates the new one, all in the transaction that writes the password. Either
+ * all of it happens or none of it (a failure leaves the old password and the old session).
+ * Without `renew`, that session stays as it is.
  */
-export async function changeOwnPassword(
+export async function changeOwnPassword<Renewed = undefined>(
   db: Db,
   scope: WorkspaceScope,
   userId: string,
   input: { currentPassword: string; newPassword: string },
-  keepSessionHash: string,
+  sessionHash: string,
   actor: Actor,
-): Promise<{ sessionsEnded: number }> {
+  renew?: (tx: Db) => Renewed,
+): Promise<{ sessionsEnded: number; renewed: Renewed | undefined }> {
   const current = getUserWithHash(db, scope, userId)
   const valid =
     current !== undefined &&
@@ -305,20 +312,25 @@ export async function changeOwnPassword(
     // The hashes took a while: if the password changed meanwhile (an admin's reset, another
     // session's change) or this session ended, this request must not undo that.
     const unchanged = getUserWithHash(tx, scope, userId)?.passwordHash === current.passwordHash
-    if (!unchanged || !sessionAlive(tx, keepSessionHash, userId)) {
+    if (!unchanged || !sessionAlive(tx, sessionHash, userId)) {
       throw new StudioError(
         "conflict",
         "Your password was changed meanwhile, or this session ended. Sign in again.",
       )
     }
     if (!setPasswordHash(tx, scope, userId, passwordHash)) throw notFound()
-    const sessionsEnded = deleteOtherSessions(tx, scope, userId, keepSessionHash)
+    const sessionsEnded = deleteOtherSessions(tx, scope, userId, sessionHash)
+    let renewed: Renewed | undefined
+    if (renew) {
+      deleteSession(tx, sessionHash)
+      renewed = renew(tx)
+    }
     recordAudit(tx, scope, actor, {
       action: "user.password_change",
       target: { type: "user", id: userId },
       details: { sessionsEnded },
     })
-    return { sessionsEnded }
+    return { sessionsEnded, renewed }
   })
 }
 
@@ -459,6 +471,7 @@ export function updateProfile(
     throw new StudioError("invalid", "A display name cannot be an email address.")
   }
   return writeTransaction(db, (tx) => {
+    requireActor(tx, scope, actor)
     const user = getUser(tx, scope, userId)
     if (!user) throw notFound()
     updateUser(tx, scope, user.id, { displayName })
@@ -483,6 +496,7 @@ export function setTheme(
 ): Theme {
   if (!THEMES.includes(theme)) throw new StudioError("invalid", "Unknown theme.")
   return writeTransaction(db, (tx) => {
+    requireActor(tx, scope, actor)
     const user = getUser(tx, scope, userId)
     if (!user) throw notFound()
     if (user.theme === theme) return theme

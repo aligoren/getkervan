@@ -49,7 +49,7 @@ describe("createProject", () => {
     expect(manifest).toMatchObject({
       name: "my-server",
       type: "module",
-      engines: { node: "^22.18.0 || >=23.6.0" },
+      engines: { node: "^22.23.3 || >=24.21.0" },
       dependencies: { "@kervan/core": "^0.1.0", "@kervan/transport": "^0.1.0" },
       devDependencies: { kervan: "^0.1.0" },
       scripts: {
@@ -202,16 +202,17 @@ describe("a generated project on an old Node.js", () => {
     expect(pkg.scripts["start:http"]).toBe("node check-node.mjs && node src/index.ts --http")
     // npm refuses to install on an unsupported Node.js, with its own clear message.
     expect(readFileSync(path.join(result.dir, ".npmrc"), "utf8")).toMatch(/^engine-strict=true$/m)
-    expect(pkg.engines.node).toBe("^22.18.0 || >=23.6.0")
+    expect(pkg.engines.node).toBe("^22.23.3 || >=24.21.0")
 
-    const old = asNode("22.17.1", "check-node.mjs", result.dir)
-    expect(old.status).toBe(1)
-    expect(old.stderr).toContain(
-      "This project needs Node.js 22.18 or newer (or 23.6+) to run its TypeScript sources; you have 22.17.1. Upgrade Node.js.",
-    )
-    for (const fine of ["22.18.0", "23.6.0", "24.21.0"]) {
+    for (const old of ["22.17.1", "22.23.2", "23.6.0", "24.15.0", "24.20.9"]) {
+      const result_ = asNode(old, "check-node.mjs", result.dir)
+      expect(result_.status, old).toBe(1)
+      expect(result_.stderr).toContain(
+        `This project needs Node.js ^22.23.3 || >=24.21.0 to run its TypeScript sources; you have ${old}. Upgrade Node.js.`,
+      )
+    }
+    for (const fine of ["22.23.3", "22.24.0", "24.21.0", "25.1.0"]) {
       expect(asNode(fine, "check-node.mjs", result.dir).status, fine).toBe(0)
     }
-    expect(asNode("23.5.0", "check-node.mjs", result.dir).status).toBe(1)
   })
 })

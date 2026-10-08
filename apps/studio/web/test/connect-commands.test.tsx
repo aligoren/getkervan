@@ -4,7 +4,8 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { setCsrfToken } from "../src/api.js"
-import { connectCommands, KeysPanel } from "../src/pages/ServerPanels.js"
+import { connectCommands } from "../src/connect.js"
+import { KeysPanel } from "../src/pages/ServerPanels.js"
 
 const KEY = "kvn_test-only-not-a-real-key"
 const copied: string[] = []
@@ -68,7 +69,7 @@ describe("the connect command for a new key", () => {
     ])
 
     expect(shownCommand()).toBe(
-      `claude mcp add --transport http weather ${endpoint} --header "Authorization: Bearer ${KEY}"`,
+      `claude mcp add --transport http weather '${endpoint}' --header "Authorization: Bearer ${KEY}"`,
     )
     expect(await copyShown()).toBe(shownCommand())
 
@@ -77,7 +78,7 @@ describe("the connect command for a new key", () => {
     expect(bash).toBe(
       [
         "printf 'API key: '; read -rs KERVAN_API_KEY; echo",
-        `claude mcp add --transport http weather ${endpoint} --header "Authorization: Bearer $KERVAN_API_KEY"`,
+        `claude mcp add --transport http weather '${endpoint}' --header "Authorization: Bearer $KERVAN_API_KEY"`,
         "unset KERVAN_API_KEY",
       ].join("\n"),
     )
@@ -107,7 +108,7 @@ describe("the connect command for a new key", () => {
     const commands = connectCommands("weather", endpoint)
     expect(commands.inline(KEY)).toContain(KEY)
     for (const text of [commands.bash, commands.powershell]) {
-      expect(text).toContain(`claude mcp add --transport http weather ${endpoint}`)
+      expect(text).toContain(`claude mcp add --transport http weather '${endpoint}'`)
       expect(text).not.toMatch(/kvn_/)
     }
   })

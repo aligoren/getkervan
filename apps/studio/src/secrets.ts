@@ -27,15 +27,25 @@ export interface SecretWrite {
   allowedHosts: readonly string[]
 }
 
-/** A store the management API can write to. Writes never return the value. */
+/**
+ * A store the management API can write to. Writes never return the value. `within` runs right
+ * before the write, in the same synchronous step (a database store: in its write transaction), and
+ * stops it by throwing: Studio checks there that the actor may still write.
+ */
 export interface WritableSecretStore extends SecretStore {
   put(
     scope: WorkspaceScope,
     serverId: string,
     input: SecretWrite,
     now?: number,
+    within?: () => void,
   ): Promise<{ binding: SecretBinding; created: boolean; rotated: boolean }>
-  remove(scope: WorkspaceScope, serverId: string, name: string): Promise<boolean>
+  remove(
+    scope: WorkspaceScope,
+    serverId: string,
+    name: string,
+    within?: () => void,
+  ): Promise<boolean>
 }
 
 export class SecretInputError extends Error {
@@ -139,7 +149,14 @@ export class InMemorySecretStore implements WritableSecretStore {
     return this.#entries.delete(key(scope, serverId, name))
   }
 
-  async put(scope: WorkspaceScope, serverId: string, input: SecretWrite, now = Date.now()) {
+  async put(
+    scope: WorkspaceScope,
+    serverId: string,
+    input: SecretWrite,
+    now = Date.now(),
+    within?: () => void,
+  ) {
+    within?.()
     const existing = this.#entries.get(key(scope, serverId, input.name))
     const value = input.value ?? existing?.value
     if (value === undefined) throw new SecretInputError("A new secret needs a value.")
@@ -152,7 +169,13 @@ export class InMemorySecretStore implements WritableSecretStore {
     return { binding, created: !existing, rotated: Boolean(existing && input.value !== undefined) }
   }
 
-  async remove(scope: WorkspaceScope, serverId: string, name: string): Promise<boolean> {
+  async remove(
+    scope: WorkspaceScope,
+    serverId: string,
+    name: string,
+    within?: () => void,
+  ): Promise<boolean> {
+    within?.()
     return this.delete(scope, serverId, name)
   }
 

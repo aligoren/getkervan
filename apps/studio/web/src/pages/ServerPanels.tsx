@@ -10,6 +10,7 @@ import {
   type SecretSummary,
   SecretTable,
 } from "../components/untrusted.js"
+import { connectCommands } from "../connect.js"
 import { Ago, DateOnly, shortTime } from "../time.js"
 import { Badge } from "../ui/Badge.js"
 import { Button, buttonClass } from "../ui/Button.js"
@@ -398,30 +399,6 @@ export function SecretsPanel(props: { serverId: string }) {
       </Dialog>
     </Card>
   )
-}
-
-/**
- * The `claude mcp add` command for a new key: with the key in it, or reading it from the
- * environment (bash/zsh, PowerShell) so it stays out of the shell's history. The last two never
- * hold the key: it is typed, hidden, when they run.
- */
-export function connectCommands(slug: string, endpoint: string) {
-  const add = (bearer: string) =>
-    `claude mcp add --transport http ${slug} ${endpoint} --header "Authorization: Bearer ${bearer}"`
-  return {
-    inline: (key: string) => add(key),
-    bash: [
-      "printf 'API key: '; read -rs KERVAN_API_KEY; echo",
-      add("$KERVAN_API_KEY"),
-      "unset KERVAN_API_KEY",
-    ].join("\n"),
-    powershell: [
-      '$key = Read-Host "API key" -AsSecureString',
-      '$env:KERVAN_API_KEY = [Net.NetworkCredential]::new("", $key).Password',
-      add("$env:KERVAN_API_KEY"),
-      "Remove-Item Env:KERVAN_API_KEY; Remove-Variable key",
-    ].join("\n"),
-  }
 }
 
 interface KeyInfo {

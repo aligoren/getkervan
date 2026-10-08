@@ -8,6 +8,7 @@ import {
   type SpecIssue,
   SpecLoadError,
 } from "@kervan/spec-runtime"
+import { requireActor } from "./authorize.js"
 import { type Db, writeTransaction } from "./db/open.js"
 import { type ApiKeyInfo, createApiKey, listApiKeys, revokeApiKey } from "./db/repos/api-keys.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
@@ -125,6 +126,7 @@ export class Studio {
     if (unsafe) throw new StudioError("invalid", unsafe)
     try {
       return writeTransaction(this.db, (tx) => {
+        requireActor(tx, scope, actor)
         const created = createServer(tx, scope, { slug: input.slug, name })
         recordAudit(tx, scope, actor, {
           action: "server.create",
@@ -143,6 +145,7 @@ export class Studio {
 
   async deleteServer(scope: WorkspaceScope, serverId: string, actor: Actor): Promise<void> {
     const deleted = writeTransaction(this.db, (tx) => {
+      requireActor(tx, scope, actor)
       if (!deleteServer(tx, scope, serverId)) return false
       recordAudit(tx, scope, actor, {
         action: "server.delete",
@@ -165,7 +168,10 @@ export class Studio {
     if (Buffer.byteLength(yamlText) > SPEC_LIMITS.maxSpecBytes) {
       throw new StudioError("invalid", `A spec can be at most ${SPEC_LIMITS.maxSpecBytes} bytes.`)
     }
-    const version = saveVersion(this.db, scope, serverId, yamlText, actorUser(actor))
+    const version = writeTransaction(this.db, (tx) => {
+      requireActor(tx, scope, actor)
+      return saveVersion(tx, scope, serverId, yamlText, actorUser(actor))
+    })
     if (!version) throw notFound()
     return version
   }
@@ -236,6 +242,7 @@ export class Studio {
       throw new StudioError("invalid", "Not published: fix the problems below.", error.issues)
     }
     const published = writeTransaction(this.db, (tx) => {
+      requireActor(tx, scope, actor)
       const server = getServer(tx, scope, serverId)
       if (!server) return false
       const current =
@@ -274,6 +281,7 @@ export class Studio {
   /** Turns logging of (redacted, cut) call arguments and results on or off for a server. */
   setLogPayloads(scope: WorkspaceScope, serverId: string, on: boolean, actor: Actor): void {
     const changed = writeTransaction(this.db, (tx) => {
+      requireActor(tx, scope, actor)
       if (!setLogPayloads(tx, scope, serverId, on)) return false
       recordAudit(tx, scope, actor, {
         action: "server.settings",
@@ -297,6 +305,7 @@ export class Studio {
     actor: Actor,
   ): Promise<Server> {
     const server = writeTransaction(this.db, (tx) => {
+      requireActor(tx, scope, actor)
       const current = getServer(tx, scope, serverId)
       if (!current) return undefined
       if ((current.disabledAt !== null) === disabled) return current
@@ -389,7 +398,9 @@ export class Studio {
     actor: Actor,
   ): Promise<SecretBinding> {
     if (!getServer(this.db, scope, serverId)) throw notFound()
-    const result = await this.secrets.put(scope, serverId, input)
+    // Checked again in the store's write transaction: the request may have waited since the API's.
+    const within = () => requireActor(this.db, scope, actor)
+    const result = await this.secrets.put(scope, serverId, input, Date.now(), within)
     const action = result.created
       ? "secret.create"
       : result.rotated
@@ -426,7 +437,9 @@ export class Studio {
         { usedBy },
       )
     }
-    if (!(await this.secrets.remove(scope, serverId, name))) throw notFound()
+    // `secretUsage` loaded the published spec meanwhile: the actor is checked again as it writes.
+    const within = () => requireActor(this.db, scope, actor)
+    if (!(await this.secrets.remove(scope, serverId, name, within))) throw notFound()
     recordAudit(this.db, scope, actor, {
       action: "secret.delete",
       target: { type: "server", id: serverId },
@@ -480,6 +493,7 @@ export class Studio {
     const unsafe = unsafeTextProblem(trimmed, "The key name")
     if (unsafe) throw new StudioError("invalid", unsafe)
     const created = writeTransaction(this.db, (tx) => {
+      requireActor(tx, scope, actor)
       const result = createApiKey(tx, scope, {
         serverId,
         name: trimmed,
@@ -500,6 +514,7 @@ export class Studio {
 
   revokeApiKey(scope: WorkspaceScope, keyId: string, actor: Actor): void {
     const revoked = writeTransaction(this.db, (tx) => {
+      requireActor(tx, scope, actor)
       if (!revokeApiKey(tx, scope, keyId)) return false
       recordAudit(tx, scope, actor, {
         action: "api_key.revoke",

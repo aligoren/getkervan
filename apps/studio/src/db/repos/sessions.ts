@@ -1,9 +1,24 @@
 import { and, desc, eq, lt, ne, or } from "drizzle-orm"
 import { randomToken, sha256 } from "../../crypto.js"
+import { sanitizeDisplayText } from "../../display-text.js"
 import type { Db } from "../open.js"
 import { sessions, users } from "../schema.js"
 import { type WorkspaceScope, workspaceScope } from "../scope.js"
 import type { Role, Theme } from "./users.js"
+
+/** How much of a User-Agent is kept and shown. */
+const USER_AGENT_LENGTH = 200
+
+/**
+ * A User-Agent as the session list shows it: the browser chose it (decoded as latin1, so it can
+ * hold C1 controls and a soft hyphen). Hidden characters become visible escapes and backslashes
+ * are doubled (display-text.ts). It is stored as sent (cut to the same length), and cleaned once,
+ * here, where it leaves the database for a screen.
+ */
+export function displayUserAgent(userAgent: string | null | undefined): string | null {
+  if (userAgent === null || userAgent === undefined) return null
+  return sanitizeDisplayText(userAgent, USER_AGENT_LENGTH)
+}
 
 /** A session ends after this long without a request. */
 export const SESSION_IDLE_MS = 2 * 60 * 60 * 1000
@@ -62,7 +77,7 @@ export function createSession(
       lastSeenAt: now,
       expiresAt,
       ip: origin.ip?.slice(0, 64) ?? null,
-      userAgent: origin.userAgent?.slice(0, 200) ?? null,
+      userAgent: origin.userAgent?.slice(0, USER_AGENT_LENGTH) ?? null,
     })
     .run()
   return { id, expiresAt }
@@ -180,7 +195,7 @@ export function listSessionsOf(
       createdAt: row.createdAt,
       lastSeenAt: row.lastSeenAt,
       ip: row.ip,
-      userAgent: row.userAgent,
+      userAgent: displayUserAgent(row.userAgent),
     }))
 }
 

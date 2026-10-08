@@ -4,7 +4,12 @@ import { pathToFileURL } from "node:url"
 import { parseArgs } from "node:util"
 import { CreateError, cliVersion, createProject, type PackageManager } from "./create.js"
 import { defaultDevOptions, runDev } from "./dev/index.js"
-import { currentRuntime, type RuntimeInfo, typeStrippingProblem } from "./node-version.js"
+import {
+  currentRuntime,
+  nodeVersionProblem,
+  type RuntimeInfo,
+  typeStrippingProblem,
+} from "./node-version.js"
 import { runSpec } from "./run.js"
 import { terminalSafe } from "./terminal.js"
 
@@ -79,18 +84,19 @@ export async function run(argv: string[], io: RunIo = defaultIo): Promise<number
     return 0
   }
   try {
-    if (command === "dev") return await runDevCommand(rest, io)
-    if (command === "run") return await runSpecCommand(rest)
-    if (command === "studio") return await runStudioCommand(rest, io)
-    if (command === "create") {
-      // Checked before parsing, so old Node.js versions get this message, not a parse error.
-      const problem = typeStrippingProblem(io.runtime ?? currentRuntime())
+    if (command === "dev" || command === "run" || command === "create") {
+      // Checked before parsing, so untested Node.js versions get this message, not a parse error.
+      const check = command === "create" ? typeStrippingProblem : nodeVersionProblem
+      const problem = check(io.runtime ?? currentRuntime())
       if (problem) {
         io.err(`Error: ${problem}`)
         return 1
       }
-      return await runCreate(rest, io)
     }
+    if (command === "dev") return await runDevCommand(rest, io)
+    if (command === "run") return await runSpecCommand(rest)
+    if (command === "studio") return await runStudioCommand(rest, io)
+    if (command === "create") return await runCreate(rest, io)
     io.err(`Unknown command "${command}".\n\n${HELP}`)
     return 1
   } catch (error) {

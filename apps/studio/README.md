@@ -14,7 +14,7 @@ The security design is in [docs/THREAT-MODEL-STUDIO.md](../../docs/THREAT-MODEL-
 
 ## Running it
 
-Studio needs Node.js 22.23.3 or a later 22.x, or 24.15.0 or later: the oldest releases the whole
+Studio needs Node.js 22.23.3 or a later 22.x, or 24.21.0 or later: the oldest releases the whole
 test suite has passed on. It refuses to start on anything older (see "Node.js versions" below).
 
 ```sh
@@ -290,13 +290,16 @@ It needs access to the data directory, so only someone with a shell on the host 
 
 ## Node.js versions
 
-Studio refuses to start on Node.js older than 22.23.3 (on the 22 line) or 24.15.0, with one line
-saying so; `engines` in its `package.json` says the same. Those are the oldest releases the whole
-test suite has passed on. (On 22.17.1 Studio's own tests passed, but the framework's tests run
-TypeScript files directly, which needs 22.18, so that run was not green.) Node.js 22.0 to 22.12 in particular were never tested: they name
-the permission model differently (`--experimental-permission`), and the separate process that
-runs `select` expressions depends on it (threat model, T19). On Windows, prefer 24.21 or later
-on the 24 line: earlier 24.x releases have an intermittent libuv crash.
+Studio needs Node.js 22.23.3 or a later 22.x, or 24.21.0 or later, and refuses to start on anything else with one line,
+before it loads; it reads the range from `engines` in its `package.json`. Those are the oldest
+releases the whole test suite has passed on:
+
+- 22.17.1 was tried: Studio's own tests passed, but the framework's tests run TypeScript files
+  directly, which needs 22.18, so the run was not green.
+- Node.js 22.0 to 22.12 were never tested: they name the permission model differently
+  (`--experimental-permission`), and the separate process that runs `select` expressions depends
+  on it (threat model, T19).
+- 24.x releases before 24.21 crash intermittently on Windows (a libuv bug: `UV_HANDLE_CLOSING`).
 
 ## Data and backups
 

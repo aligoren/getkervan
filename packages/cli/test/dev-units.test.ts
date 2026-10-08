@@ -211,7 +211,7 @@ describe("dev only", () => {
         env: {},
         runtime: { ...runtime, version: "v22.17.0" },
       }).errors.join(),
-    ).toMatch(/22\.18\.0/)
+    ).toMatch(/22\.23\.3/)
     expect(
       devPreflight({ entry: path.join(p.dir, "missing.ts"), env: {}, runtime }).errors.join(),
     ).toMatch(/not found/)
@@ -220,7 +220,7 @@ describe("dev only", () => {
         entry: p.entry,
         env: {},
         runtime: { ...runtime, platform: "win32", version: "v24.15.0" },
-      }).warnings.join(),
-    ).toMatch(/24\.21/)
+      }).errors.join(),
+    ).toMatch(/24\.21\.0 or later/)
   })
 })

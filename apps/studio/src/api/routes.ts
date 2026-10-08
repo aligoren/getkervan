@@ -21,7 +21,7 @@ import {
 } from "../accounts.js"
 import { isSecure, type StudioConfig } from "../config.js"
 import { constantTimeEqual, sha256 } from "../crypto.js"
-import { writeTransaction } from "../db/open.js"
+import { type Db, writeTransaction } from "../db/open.js"
 import { listApiKeys } from "../db/repos/api-keys.js"
 import { listAudit, recordAudit } from "../db/repos/audit.js"
 import { getServer, listServers } from "../db/repos/servers.js"
@@ -58,6 +58,8 @@ export type ApiEnv = {
     clientIp: string
     session: ActiveSession | undefined
     sessionId: string | undefined
+    /** What `signedIn` checked; writes check it again (`requireActor`). */
+    requires: "admin" | "user" | undefined
   }
 }
 
@@ -205,26 +207,33 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
       if (role === "admin" && session.user.role !== "admin") {
         return c.json({ error: "Only admins can do this." }, 403)
       }
+      c.set("requires", role ?? "user")
       return next()
     }
   const duringPasswordChange = { duringPasswordChange: true }
 
-  const startSession = (c: Context<ApiEnv>, user: SessionUser) => {
-    // Never reuse an id the browser brought along (session fixation): always a new one.
-    const previous = c.get("sessionId")
-    if (previous) deleteSession(db, sha256(previous))
-    const scope = defaultWorkspace(db)
-    const session = createSession(db, scope, user.id, Date.now(), {
+  /** A new session row for the user of this request (in `tx`, when given). */
+  const newSession = (c: Context<ApiEnv>, userId: string, tx: Db = db) =>
+    createSession(tx, defaultWorkspace(tx), userId, Date.now(), {
       ip: c.get("clientIp"),
       userAgent: c.req.header("user-agent"),
     })
-    setCookie(c, cookieName, session.id, {
+
+  const setSessionCookie = (c: Context<ApiEnv>, id: string) =>
+    setCookie(c, cookieName, id, {
       path: "/",
       httpOnly: true,
       sameSite: "Lax",
       secure,
       maxAge: Math.floor(SESSION_ABSOLUTE_MS / 1000),
     })
+
+  const startSession = (c: Context<ApiEnv>, user: SessionUser) => {
+    // Never reuse an id the browser brought along (session fixation): always a new one.
+    const previous = c.get("sessionId")
+    if (previous) deleteSession(db, sha256(previous))
+    const session = newSession(c, user.id)
+    setSessionCookie(c, session.id)
     return { user: publicUser(user), csrfToken: csrfTokenFor(session.id) }
   }
 
@@ -232,6 +241,7 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     type: "user" as const,
     id: c.get("session")?.user.id,
     ip: c.get("clientIp"),
+    requires: c.get("requires"),
   })
   const scopeOf = (c: Context<ApiEnv>) => {
     const session = c.get("session")
@@ -359,8 +369,11 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     // A wrong current password counts like a failed login for this account and IP.
     const attempt = throttle.login(session.user.email, c.get("clientIp"))
     if ("retryAfter" in attempt) return tooMany(c, attempt.retryAfter)
-    let result: { sessionsEnded: number }
+    let result: Awaited<ReturnType<typeof changeOwnPassword<{ id: string }>>>
     try {
+      // This session continues under a new id (and so a new CSRF token), created in the same
+      // transaction that writes the password: a copy of the old cookie, say one taken before the
+      // change, no longer works, and a failure leaves both the old password and the old session.
       result = await changeOwnPassword(
         db,
         session.scope,
@@ -368,6 +381,7 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
         body,
         session.idHash,
         actor(c),
+        (tx) => newSession(c, session.user.id, tx),
       )
     } catch (error) {
       attempt.done(!(error instanceof StudioError && error.code === "forbidden"))
@@ -376,12 +390,10 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     attempt.done(true)
     // Other sessions are gone, so their playground tokens are too; open streams end here.
     studio.gateway.endPlayground(session.user.id)
-    // This session continues under a new id (and so a new CSRF token): a copy of the old cookie,
-    // say one taken before the change, no longer works.
-    const user = getUser(db, session.scope, session.user.id)
-    if (!user) throw new StudioError("not_found", "Not found.")
-    const { csrfToken } = startSession(c, user)
-    return c.json({ ...result, csrfToken })
+    const renewed = result.renewed
+    if (!renewed) throw new StudioError("not_found", "Not found.")
+    setSessionCookie(c, renewed.id)
+    return c.json({ sessionsEnded: result.sessionsEnded, csrfToken: csrfTokenFor(renewed.id) })
   })
 
   api.get("/profile/sessions", signedIn(), (c) => {

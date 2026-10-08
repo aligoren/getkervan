@@ -308,25 +308,29 @@ describe("the Node.js version", () => {
       "22.12.0",
       "22.13.0",
       "22.17.0",
+      "22.23.2",
       "23.11.0",
       "24.14.9",
+      "24.15.0",
+      "v24.20.9",
       "v18.0.0",
       "garbage",
     ]) {
       expect(nodeVersionProblem(version), version).toMatch(
-        /needs Node\.js 22\.23\.3 or a later 22\.x, or 24\.15\.0 or later/,
+        /needs Node\.js 22\.23\.3 or a later 22\.x, or 24\.21\.0 or later/,
       )
     }
-    for (const version of ["22.23.3", "22.24.0", "v24.15.0", "24.21.0", "25.0.0", "26.2.1"]) {
+    for (const version of ["22.23.3", "22.24.0", "v24.21.0", "24.22.1", "25.0.0", "26.2.1"]) {
       expect(nodeVersionProblem(version), version).toBeUndefined()
     }
   })
 
-  it("matches the engines field of Studio's package.json", () => {
+  it("comes from the engines field of Studio's package.json", () => {
     const manifest = JSON.parse(
       readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
     ) as { engines: { node: string } }
-    expect(manifest.engines.node).toBe(NODE_ENGINES)
+    expect(NODE_ENGINES).toBe(manifest.engines.node)
+    expect(NODE_ENGINES).toBe("^22.23.3 || >=24.21.0")
   })
 
   it("stops every command before it does anything", async () => {
@@ -345,23 +349,37 @@ describe("the Node.js version", () => {
     expect(existsSync(path.join(dir, "data"))).toBe(false)
   })
 
-  it("is checked by the kervan-studio command before Studio loads", () => {
+  /** Runs the real command as an older Node.js, as far as Studio can tell. */
+  function asNode(version: string) {
     const dir = tempDir("kervan-node-version-bin-")
     const bin = fileURLToPath(new URL("../bin/kervan-studio.js", import.meta.url))
-    // An older Node.js, as far as Studio can tell, and a hook that reports loading Studio's CLI.
+    // A hook reports loading Studio's CLI.
     const fake =
-      'data:text/javascript,Object.defineProperty(process,"versions",{value:{...process.versions,node:"22.12.0"}});' +
+      `data:text/javascript,Object.defineProperty(process,"versions",{value:{...process.versions,node:"${version}"}});` +
       'import{registerHooks}from"node:module";registerHooks({load(u,c,n){if(u.endsWith("/dist/cli.js"))process.stderr.write("LOADING-CLI ");return n(u,c)}})'
     const result = spawnSync(process.execPath, ["--import", fake, bin, "start"], {
       cwd: dir,
       env: { ...process.env, KERVAN_STUDIO_DATA_DIR: path.join(dir, "data") },
       encoding: "utf8",
     })
-    expect(result.stderr).not.toContain("LOADING-CLI")
-    expect(result.status).toBe(1)
-    expect(result.stderr).toMatch(/^Error: Kervan Studio needs Node\.js .*this is 22\.12\.0/)
-    expect(existsSync(path.join(dir, "data"))).toBe(false)
-  })
+    return { result, data: path.join(dir, "data") }
+  }
+
+  for (const version of ["22.12.0", "24.15.0"]) {
+    it(`stops on ${version} with one line, before Studio loads`, () => {
+      const { result, data } = asNode(version)
+      expect(result.stderr).not.toContain("LOADING-CLI")
+      expect(result.status).toBe(1)
+      const lines = result.stderr.split(/\r?\n/).filter((line) => line !== "")
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toMatch(
+        new RegExp(
+          `^Error: Kervan Studio needs Node\\.js .*this is ${version.replaceAll(".", "\\.")}\\.`,
+        ),
+      )
+      expect(existsSync(data)).toBe(false)
+    })
+  }
 })
 
 describe("hidden terminal input", () => {

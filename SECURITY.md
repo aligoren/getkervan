@@ -101,7 +101,8 @@ These are known and documented, so not vulnerabilities:
   - slow regular expressions written in a spec's own schemas (ReDoS);
   - DNS lookups cannot be cancelled (they are capped instead);
   - forced process kills on macOS are untested;
-  - the Node 24.15 libuv crash on Windows.
+  - Node.js 24 before 24.21 crashes intermittently on Windows (libuv); the CLI and Studio refuse
+    those versions.
 
 ## Hardening checklist for operators
 

@@ -1,10 +1,13 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { run } from "../src/index.js"
 import {
+  describeEngines,
+  NODE_ENGINES,
+  nodeVersionProblem,
   type RuntimeInfo,
-  supportsTypeStripping,
+  satisfiesEngines,
   typeStrippingProblem,
-  windowsLibuvWarning,
 } from "../src/node-version.js"
 
 const runtime = (version: string, extra: Partial<RuntimeInfo> = {}): RuntimeInfo => ({
@@ -14,24 +17,44 @@ const runtime = (version: string, extra: Partial<RuntimeInfo> = {}): RuntimeInfo
   ...extra,
 })
 
-describe("supportsTypeStripping", () => {
+describe("the supported Node.js releases", () => {
+  it("come from this package's engines", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ) as { engines: { node: string } }
+    expect(NODE_ENGINES).toBe(manifest.engines.node)
+    expect(describeEngines()).toBe("22.23.3 or a later 22.x, or 24.21.0 or later")
+  })
+
   it.each([
     ["v20.19.0", false],
     ["v22.17.1", false],
-    ["v22.18.0", true],
+    ["v22.18.0", false],
+    ["v22.23.2", false],
     ["v22.23.3", true],
-    ["v23.5.0", false],
-    ["v23.6.0", true],
-    ["v24.0.0", true],
+    ["v22.24.0", true],
+    ["v23.6.0", false],
+    ["v24.0.0", false],
+    ["v24.15.0", false],
+    ["v24.20.9", false],
+    ["v24.21.0", true],
+    ["v25.0.0", true],
     ["v26.10.0", true],
   ])("%s → %s", (version, expected) => {
-    expect(supportsTypeStripping(version)).toBe(expected)
+    expect(satisfiesEngines(version)).toBe(expected)
   })
 })
 
-describe("typeStrippingProblem", () => {
-  it("names the required version on old Node.js", () => {
-    expect(typeStrippingProblem(runtime("v22.17.1"))).toMatch(/22\.18\.0\+.*v22\.17\.1/)
+describe("nodeVersionProblem and typeStrippingProblem", () => {
+  it("name the required versions on an untested Node.js", () => {
+    for (const version of ["v22.17.1", "v24.15.0"]) {
+      expect(nodeVersionProblem(runtime(version))).toMatch(
+        new RegExp(
+          `22\\.23\\.3 or a later 22\\.x, or 24\\.21\\.0 or later; you are running ${version}`,
+        ),
+      )
+      expect(typeStrippingProblem(runtime(version))).toBe(nodeVersionProblem(runtime(version)))
+    }
   })
 
   it("explains a disabled type stripping", () => {
@@ -40,38 +63,30 @@ describe("typeStrippingProblem", () => {
     )
   })
 
-  it("accepts supported runtimes", () => {
-    expect(typeStrippingProblem(runtime("v22.18.0"))).toBeUndefined()
+  it("accept supported runtimes", () => {
+    expect(nodeVersionProblem(runtime("v22.23.3"))).toBeUndefined()
+    expect(typeStrippingProblem(runtime("v24.21.0"))).toBeUndefined()
   })
 })
 
-describe("windowsLibuvWarning", () => {
-  it.each([
-    ["win32", "v24.15.0", true],
-    ["win32", "v24.20.0", true],
-    ["win32", "v24.21.0", false],
-    ["win32", "v22.23.3", false],
-    ["win32", "v26.10.0", false],
-    ["linux", "v24.15.0", false],
-    ["darwin", "v24.15.0", false],
-  ] as const)("%s %s → warn %s", (platform, version, warns) => {
-    const warning = windowsLibuvWarning(runtime(version, { platform }))
-    expect(warning !== undefined).toBe(warns)
-    if (warning) expect(warning).toMatch(/24\.21/)
-  })
-})
-
-describe("kervan create on old Node.js", () => {
-  it("fails with a clear message before doing anything", async () => {
-    const out: string[] = []
-    const err: string[] = []
-    const code = await run(["create", "anything", "--no-install"], {
-      out: (line) => out.push(line),
-      err: (line) => err.push(line),
-      runtime: runtime("v22.17.1"),
+describe("kervan on an untested Node.js", () => {
+  for (const command of [
+    ["create", "anything", "--no-install"],
+    ["dev", "src/index.ts"],
+    ["run", "kervan.yaml"],
+  ]) {
+    it(`${command[0]}: fails with one clear line before doing anything`, async () => {
+      const out: string[] = []
+      const err: string[] = []
+      const code = await run(command, {
+        out: (line) => out.push(line),
+        err: (line) => err.push(line),
+        runtime: runtime("v24.15.0"),
+      })
+      expect(code).toBe(1)
+      expect(err).toHaveLength(1)
+      expect(err[0]).toMatch(/^Error: Kervan needs Node\.js 22\.23\.3 .*v24\.15\.0/)
+      expect(out).toEqual([])
     })
-    expect(code).toBe(1)
-    expect(err.join("\n")).toMatch(/Node\.js 22\.18\.0\+/)
-    expect(out).toEqual([])
-  })
+  }
 })

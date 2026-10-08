@@ -10,3 +10,6 @@ coverage/
 dist-web/
 .playwright-mcp/
 .kervan-studio/
+
+# Local Claude Code settings of whoever works on the repository
+.claude/

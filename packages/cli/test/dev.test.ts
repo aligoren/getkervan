@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest"
-import { currentRuntime, windowsLibuvWarning } from "../src/node-version.js"
 import {
   connectDev,
   type DevSession,
@@ -226,19 +225,6 @@ describe("preflight", () => {
     const dev = spawnDev(project, ["--stdio"], { NODE_ENV: "production" })
     expect(await dev.exited).toBe(1)
     expect(dev.stderr()).toMatch(/refuses to run with NODE_ENV=production/)
-  })
-
-  it("warns about Node 24 before 24.21 on Windows when that is what runs", {
-    timeout: 30_000,
-  }, async () => {
-    const project = await makeProject()
-    projects.push(project)
-    const dev = spawnDev(project, ["--stdio", "--no-watch"])
-    dev.child.stdin?.end()
-    await dev.exited
-    const expected = windowsLibuvWarning(currentRuntime())
-    if (expected) expect(dev.stderr()).toContain(expected)
-    else expect(dev.stderr()).not.toMatch(/libuv bug/)
   })
 })
 

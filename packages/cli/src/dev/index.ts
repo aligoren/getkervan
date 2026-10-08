@@ -3,12 +3,7 @@ import path from "node:path"
 import type { App } from "@kervan/core"
 import { serveHttp, serveStdio } from "@kervan/transport/node"
 import { portInUseMessage } from "../listen.js"
-import {
-  currentRuntime,
-  type RuntimeInfo,
-  typeStrippingProblem,
-  windowsLibuvWarning,
-} from "../node-version.js"
+import { currentRuntime, type RuntimeInfo, typeStrippingProblem } from "../node-version.js"
 import { cliNetworkPolicy, INSECURE_SECRETS_WARNING, loadEnvFiles, SpecHost } from "../spec-host.js"
 import { terminalSafe } from "../terminal.js"
 import { DevHost } from "./host.js"
@@ -58,8 +53,6 @@ export function devPreflight(options: Pick<DevOptions, "entry" | "env" | "runtim
     const problem = typeStrippingProblem(options.runtime)
     if (problem) errors.push(problem)
   }
-  const warning = windowsLibuvWarning(options.runtime)
-  if (warning) warnings.push(warning)
   return { errors, warnings }
 }
 

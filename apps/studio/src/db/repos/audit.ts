@@ -7,6 +7,11 @@ export interface Actor {
   type: "user" | "api_key" | "system" | "cli"
   id?: string | undefined
   ip?: string | undefined
+  /**
+   * What the API checked when the request came in: an active user, or an admin. Writes check it
+   * again in their transaction (`requireActor`); it is not recorded.
+   */
+  requires?: "admin" | "user" | undefined
 }
 
 export interface AuditInput {

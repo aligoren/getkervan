@@ -9,8 +9,9 @@ See [SECURITY.md](SECURITY.md).
 
 ## Setting up
 
-You need Node.js 22.18+ (or 24; on Windows, 24.21 or later) and pnpm, which corepack provides at
-the version in `package.json`:
+You need Node.js 22.23.3 or a later 22.x, or 24.21.0 or later (`engines` in the root `package.json`; a repository test keeps
+every package, the generated project and these documents on the same range), and pnpm, which
+corepack provides at the version in `package.json`:
 
 ```sh
 corepack enable

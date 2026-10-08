@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
 import type { SecretSource } from "@kervan/spec-runtime"
 import { and, eq } from "drizzle-orm"
-import type { Db } from "./db/open.js"
+import { type Db, writeTransaction } from "./db/open.js"
 import { secrets } from "./db/schema.js"
 import type { WorkspaceScope } from "./db/scope.js"
 import type { KeyProvider } from "./keys.js"
@@ -39,57 +39,68 @@ export class DbSecretStore implements WritableSecretStore {
     serverId: string,
     input: SecretWrite,
     now = Date.now(),
+    within?: () => void,
   ): Promise<{ binding: SecretBinding; created: boolean; rotated: boolean }> {
     const allowedHosts = normalizeAllowedHosts(input.allowedHosts)
-    const existing = this.#row(scope, serverId, input.name)
-    if (input.value === undefined && !existing) {
-      throw new SecretInputError("A new secret needs a value.")
-    }
     if (input.value !== undefined) checkSecretInput(input.name, input.value)
     else checkSecretName(input.name)
     const sealed =
       input.value === undefined ? undefined : this.#seal(scope, serverId, input.name, input.value)
-    const values = {
-      allowedHosts: JSON.stringify(allowedHosts),
-      updatedAt: now,
-      ...(sealed ?? {}),
-    }
-    if (existing) {
-      this.#db.update(secrets).set(values).where(eq(secrets.id, existing.id)).run()
-    } else if (sealed) {
-      this.#db
-        .insert(secrets)
-        .values({
-          id: crypto.randomUUID(),
-          workspaceId: scope.workspaceId,
-          serverId,
-          name: input.name,
-          createdAt: now,
-          ...values,
-          ...sealed,
-        })
-        .run()
-    }
-    return {
-      binding: { name: input.name, allowedHosts, updatedAt: now },
-      created: !existing,
-      rotated: Boolean(existing && sealed),
-    }
+    return writeTransaction(this.#db, (tx) => {
+      within?.()
+      const existing = this.#row(scope, serverId, input.name, tx)
+      if (input.value === undefined && !existing) {
+        throw new SecretInputError("A new secret needs a value.")
+      }
+      const values = {
+        allowedHosts: JSON.stringify(allowedHosts),
+        updatedAt: now,
+        ...(sealed ?? {}),
+      }
+      if (existing) {
+        tx.update(secrets).set(values).where(eq(secrets.id, existing.id)).run()
+      } else if (sealed) {
+        tx.insert(secrets)
+          .values({
+            id: crypto.randomUUID(),
+            workspaceId: scope.workspaceId,
+            serverId,
+            name: input.name,
+            createdAt: now,
+            ...values,
+            ...sealed,
+          })
+          .run()
+      }
+      return {
+        binding: { name: input.name, allowedHosts, updatedAt: now },
+        created: !existing,
+        rotated: Boolean(existing && sealed),
+      }
+    })
   }
 
-  async remove(scope: WorkspaceScope, serverId: string, name: string): Promise<boolean> {
-    return (
-      this.#db
-        .delete(secrets)
-        .where(
-          and(
-            eq(secrets.workspaceId, scope.workspaceId),
-            eq(secrets.serverId, serverId),
-            eq(secrets.name, name),
-          ),
-        )
-        .run().changes === 1
-    )
+  async remove(
+    scope: WorkspaceScope,
+    serverId: string,
+    name: string,
+    within?: () => void,
+  ): Promise<boolean> {
+    return writeTransaction(this.#db, (tx) => {
+      within?.()
+      return (
+        tx
+          .delete(secrets)
+          .where(
+            and(
+              eq(secrets.workspaceId, scope.workspaceId),
+              eq(secrets.serverId, serverId),
+              eq(secrets.name, name),
+            ),
+          )
+          .run().changes === 1
+      )
+    })
   }
 
   async list(scope: WorkspaceScope, serverId: string): Promise<SecretBinding[]> {
@@ -151,8 +162,8 @@ export class DbSecretStore implements WritableSecretStore {
     return rewrapped
   }
 
-  #row(scope: WorkspaceScope, serverId: string, name: string) {
-    return this.#db
+  #row(scope: WorkspaceScope, serverId: string, name: string, db: Db = this.#db) {
+    return db
       .select()
       .from(secrets)
       .where(

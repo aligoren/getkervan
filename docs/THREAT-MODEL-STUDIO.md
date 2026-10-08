@@ -208,7 +208,10 @@ prove, and every accepted risk, with its status. After the hardening rounds, one
 - **Changing one's own password** needs the current password and ends every other session of
   the user (and so their playground tokens). The session that made the change goes on under a
   new id, with a new cookie and CSRF token: a copy of its old cookie, taken before the change,
-  no longer works.
+  no longer works. Writing the password, ending the other sessions, deleting the old session and
+  creating the new one are one transaction (BEGIN IMMEDIATE); the cookie is set only after it
+  commits. A failure in the middle leaves the old password and every session as they were
+  (tested by failing the new session's creation).
 - **An admin's password reset** needs the admin's own password, ends all of the user's
   sessions, and sets `must_change_password`. Until the user picks a new password, the API
   answers 403 (`password_change_required`) to everything except the session check, the profile,
@@ -242,6 +245,14 @@ prove, and every accepted risk, with its status. After the hardening rounds, one
     session still lives (compare-and-set): it cannot undo an admin's reset;
   - every admin write (adding a user, role, email, password reset, deactivation) checks in its
     transaction that the admin making it is still an active admin.
+- **Every write checks its authorization again** (final hardening round). The API checks the
+  session and the role when a request comes in; the request then waits (its body, a spec load,
+  a password hash) before it writes. Each write of Studio checks in its transaction that the user
+  is still active and, for an admin action, still an admin (`requireActor`): servers (create,
+  delete, settings, disable), versions (save, publish), API keys, secrets (set and delete, in the
+  store's own transaction), profile and theme. Tested by demoting or deactivating the user while
+  the request waits where its handler reads the body, or while a secret's usage or a version is
+  checked.
 - **Members** reach only their own profile, which has no user id in its path, and its body is
   strict: a `role`, `email` or `id` field is refused (400), not ignored. Every endpoint about
   another user is admin-only (IDOR tests), and sessions are ended by an opaque reference that
@@ -493,10 +504,11 @@ prove, and every accepted risk, with its status. After the hardening rounds, one
     no `KERVAN_` variable, and every file, process, worker and network attempt refused.
 - Tests: a 34-character expression that used to end the process, a 1,000^3 nested `map`, and
   gradual growth past the heap limit, each in a child process; the process is not kept alive.
-- Studio refuses to start on Node.js versions the test suite has not passed on (older than 22.23.3
-  on the 22 line, or than 24.15.0), before it loads anything (hardening round). Node.js 22.0 to
-  22.12 name the permission flag differently (`--experimental-permission`) and were never tested
-  with this sandbox. The framework's own minimum stays `>=22` (and `kervan run` needs 22.18).
+- Studio, and `kervan run`, `dev` and `create`, refuse to start on Node.js versions the test
+  suite has not passed on: they need 22.23.3 or a later 22.x, or 24.21.0 or later (hardening
+  rounds; 24.x before 24.21 also crashes on Windows). Node.js 22.0 to 22.12 name the permission
+  flag differently (`--experimental-permission`) and were never tested with this sandbox. The
+  libraries' own `engines` stays `>=22`.
 - A process that cannot start (EAGAIN, EMFILE: Node then reports only an error, never an exit),
   or a `fork` that throws, fails its call at once with a clear message instead of leaving it to
   its timeout with one that blames the expression (independent review). Replies are used only when

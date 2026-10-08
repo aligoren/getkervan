@@ -124,7 +124,7 @@ describe("the API keys panel", () => {
     expect(field.value).toBe("kvn_new-key-value")
     const figure = screen.getByRole("figure", { name: "Connect command for Claude Code" })
     expect(figure.querySelector("pre")?.textContent).toBe(
-      `claude mcp add --transport http weather ${endpoint} --header "Authorization: Bearer kvn_new-key-value"`,
+      `claude mcp add --transport http weather '${endpoint}' --header "Authorization: Bearer kvn_new-key-value"`,
     )
     // Separate buttons for the key and the command.
     expect(screen.getByRole("button", { name: "Copy key" })).toBeTruthy()

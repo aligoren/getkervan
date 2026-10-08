@@ -17,6 +17,10 @@ described in `docs/THREAT-MODEL-STUDIO.md`.
   release files): what was found while doing it but not tested or not solved.
 - **Second hardening round** (October 2026): `create-admin`, the small items below, and a
   targeted independent review of the code added in the two hardening rounds.
+- **Final round before the feature freeze** (October 2026): one Node.js range for every runtime
+  package, authorization checked again at every write, the password change and session renewal
+  in one transaction, quoted URLs in the connect commands, the User-Agent shown with visible
+  escapes. What it closed is marked "final round" below; what stays open is listed at the end.
 - **Threat model**, "Known limits" (and T19's limit): the accepted risks, including those from
   earlier phases.
 - **Not available:** the independent reviews at the end of phases 4a and 4c also had findings
@@ -62,7 +66,7 @@ not to be a problem; the test stays).
 | **The connect command puts the key in shell history.** | A usage observation. | **Partly addressed:** Studio also offers bash/zsh and PowerShell commands that read the key hidden (tested). The command with the key in it remains, as an option. |
 | **The publish guard can be bypassed:** `npm publish <tarball>` does not run `prepublishOnly`. | True by npm's design. | **Partly addressed:** `release.yml` runs the guard for every package before publishing. A person publishing a tarball by hand still skips it. |
 | **SQLite temporary files** (`temp_store` default) may land in the system temp folder with default permissions during large sorts. | Not verified. | **Resolved.** `temp_store = MEMORY` is set on every connection (`hardening.test.ts`, "SQLite temporary data"; mutation-tested). |
-| **User-Agent text** decoded as latin1 can hold C1 controls; it is shown only in a tooltip. | Low impact; not tested. | **Open.** Next step: pass it through the same visible-escape rule as other untrusted text. |
+| **User-Agent text** decoded as latin1 can hold C1 controls; it is shown only in a tooltip. | Low impact; not tested. | **Resolved** (final round). The session list shows it through `sanitizeDisplayText`: C1 controls, DEL and the soft hyphen as visible escapes, backslashes doubled, 200 characters (`apps/studio/test/header-text.test.ts`; mutation-tested). It was the only header-derived text shown. |
 | **`..` as a server id** in the hash route became `/api/servers/..`; no matching endpoint was found. | Inert at the time. | **Fixed later:** only UUID characters make a server link (tested). |
 
 ## Hardening round: not tested or not solved
@@ -70,7 +74,7 @@ not to be a problem; the test stays).
 | Item | Why | Status and next step |
 | --- | --- | --- |
 | **The permission model does not cover the network in Node 22 and 24** (`--allow-net` comes in Node 25). The select process closes TCP and UDP in its own script instead. | Measured on 22.17, 22.23 and 24.21: connections were attempted under `--permission`. | **Accepted with a mitigation** (tested on Windows and Linux). A way around it would need code execution inside the process, which JMESPath does not give. Next step: add `--allow-net`-style restriction when the minimum Node version allows it. |
-| **Node 22.0 to 22.12** use `--experimental-permission`, picked automatically; without either flag the process runs with only its empty environment and network block. | **Not tested:** those versions were not run. | **Partly addressed.** Studio refuses to start below the oldest releases the whole suite passed on (22.23.3 on the 22 line, 24.15.0), before loading anything (on 22.17.1 Studio's own tests passed, but not the framework's, which run TypeScript directly and need 22.18); `engines` says the same (`hardening.test.ts`, "the Node.js version"; mutation-tested). `kervan run` already needs 22.18. Still open for the libraries used directly (`engines >=22`): next step, one run on 22.12, or raise their minimum. |
+| **Node 22.0 to 22.12** use `--experimental-permission`, picked automatically; without either flag the process runs with only its empty environment and network block. | **Not tested:** those versions were not run. | **Partly addressed.** Everything that runs Kervan's code as a program needs `^22.23.3 \|\| >=24.21.0` (the root `engines`; the oldest releases the whole suite passed on; 24.x before 24.21 crashes on Windows): Studio, and `kervan create`, `dev` and `run`, refuse anything else with one line, and a generated project's `npm start` does too. A repository test keeps every `engines`, check and document on that range (`scripts/test/node-versions.test.ts`). **Still open** for the libraries used directly (`@kervan/core`, `transport`, `spec-runtime` keep `engines >=22`, since their users choose their Node.js): the select sandbox was never run on 22.0 to 22.12. Next step: one run on 22.12, or raise their minimum before 0.1. |
 | **Windows passes some system variables to every child process** (libuv: `PATH`, `SYSTEMROOT`, `USERNAME` and others), even with an empty environment. | Measured; libuv adds them. | **Accepted:** none is a Kervan secret; the test allows exactly that list. |
 | **A container cannot run Studio's first setup:** before the first admin exists Studio listens on loopback only, which is the container's own. | Found while checking the Dockerfile draft. | **Resolved.** `kervan-studio create-admin` (through `docker exec`) creates the first admin; the running Studio then moves to its configured host (`apps/studio/test/create-admin.test.ts`, threat model T9; mutation-tested). |
 | **The Dockerfile draft's base image is not pinned by digest.** | A draft. | **Open:** pin it before the image is used. |
@@ -100,16 +104,32 @@ run.
 
 | Suspicion | Why not proven | Status and next step |
 | --- | --- | --- |
-| **Admin routes that await do not check the role again:** `deleteSecret` (awaits `loadSpec`), `putSecret` and `deleteServer` complete for an admin demoted while the request was in flight. Only the account writes re-check (`requireActiveAdmin`). | A short window; the request was authorized when it was sent. | **Open.** Next step: re-check the actor inside those writes, as account writes do. |
-| **Session renewal is not one transaction with the password change:** the old session is deleted after the change commits. If that delete hit SQLITE_BUSY (another process holding the write lock past the 5 s busy timeout), the old session would survive the change. | Needs a second process holding the lock. | **Open.** Next step: delete the old session in the change's transaction. |
+| **Admin routes that await do not check the role again:** `deleteSecret` (awaits `loadSpec`), `putSecret` and `deleteServer` complete for an admin demoted while the request was in flight. Only the account writes re-check (`requireActiveAdmin`). | A short window; the request was authorized when it was sent. | **Resolved** (final round). Every write re-checks what the API checked (`requireActor`, in BEGIN IMMEDIATE): admin actions that the actor is still an admin, every action that the user is still active. The other admin and member writes of the same kind were covered too (keys, settings, server create/delete/disable, versions, publish, profile, theme). Tested with the request held after the API's check (`apps/studio/test/authorization-recheck.test.ts`; mutation-tested). |
+| **Session renewal is not one transaction with the password change:** the old session is deleted after the change commits. If that delete hit SQLITE_BUSY (another process holding the write lock past the 5 s busy timeout), the old session would survive the change. | Needs a second process holding the lock. | **Resolved** (final round). The password, the other sessions, the old session and the new one change in one transaction; the cookie is set after it commits. A failure injected into the new session's creation leaves everything as it was (`apps/studio/test/password-renewal-atomic.test.ts`; mutation-tested). |
 | **The parent did not validate select replies** (a `null` message would throw in a listener; an oversized `text` passed). | Only matters with code execution in the child. | **Resolved.** Replies must be well formed, answer the running job and fit its size limit (`packages/spec-runtime/test/select-replies.test.ts`; mutation-tested). |
-| **Process churn:** every timed-out or cancelled select forks a new process; cheap cancelled calls across many tools could fork often, bounded only by rate limits. | Not measured. | **Open.** Next step: measure; if needed, a short pause before forking again after kills. |
-| **A FIFO in the repository could block git** (POSIX): each git call waits for its 5 s timeout. | Not tested on Linux. | **Partly addressed:** a FIFO named by the config (`core.excludesFile`) no longer makes git run at all. A FIFO as an in-tree `.gitignore` remains (bounded by the timeout). |
-| **An IPv6 public URL in the connect command** (`http://[::1]:4310/...`) is not quoted, so zsh treats the brackets as a glob and the command fails. | Robustness, not injection: it fails closed. | **Open.** Next step: quote the URL in the generated commands. |
+| **Process churn:** every timed-out or cancelled select forks a new process; cheap cancelled calls across many tools could fork often, bounded only by rate limits. | Not measured. | **Open** (still not measured at the feature freeze). Bounded by the per-tool rate limits (60 calls a minute, 10 at once by default) and by two processes at a time. Next step: measure; if needed, a short pause before forking again after kills. |
+| **A FIFO in the repository could block git** (POSIX): each git call waits for its 5 s timeout. | Not tested on Linux. | **Partly addressed, still open:** a FIFO named by the config (`core.excludesFile`) no longer makes git run at all. A FIFO as an in-tree `.gitignore` remains: it delays the start by at most the timeouts of the git calls (5 s each) and does nothing else. Next step if it matters: skip the check when a `.gitignore` on the path is not a regular file. |
+| **An IPv6 public URL in the connect command** (`http://[::1]:4310/...`) is not quoted, so zsh treats the brackets as a glob and the command fails. | Robustness, not injection: it fails closed. | **Resolved** (final round). The URL is a single-quoted literal in every variant (PowerShell's typographic quotes doubled too); real bash, zsh and PowerShell get every argument exactly, with IPv6 and other URLs (`apps/studio/web/test/connect-shells.test.tsx`). |
 
 Not separately mutation-tested on Windows (the tests that cover them run only on POSIX): the
 symbolic-link and ownership conditions of the git check. Each was mutation-tested in a Linux
 container (Node 24.21, as an unprivileged user): removing it made its test fail.
+
+## Still open at the feature freeze
+
+Nothing below blocks a release candidate on its own; each needs a decision in
+`docs/RELEASING.md`'s checklist ("decide for each open item whether it waits or blocks").
+
+- **Node.js 22.0 to 22.12 for the libraries:** `@kervan/core`, `transport` and `spec-runtime`
+  declare `>=22`; the select sandbox was never run there (the tools and Studio refuse those
+  versions). Why open: the libraries' users choose their own Node.js, and raising the minimum is a
+  release decision.
+- **select process churn:** not measured. Why open: it needs a load test; it is bounded by rate
+  limits and two processes.
+- **A FIFO as an in-tree `.gitignore`:** delays Studio's start by the git timeouts. Why open: low
+  impact (a delay, nothing else) and a rare setup.
+- The earlier open items above (playground draft load churn, DNS slots per server, the Dockerfile
+  base image digest, the workflows that have never run).
 
 ## Accepted risks (threat model, "Known limits")
 
