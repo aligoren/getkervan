@@ -70,7 +70,7 @@ tools:
 Connect either one to an MCP client, for example Claude Code:
 
 ```sh
-claude mcp add weather -- npx kervan run /absolute/path/to/kervan.yaml
+claude mcp add weather -- npx kervan@next run /absolute/path/to/kervan.yaml
 ```
 
 ## Packages
