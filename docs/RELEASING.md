@@ -188,7 +188,7 @@ git clone https://github.com/aligoren/getkervan.git kervan-release
 Set-Location kervan-release
 git log -1 --format="%h %s"     # the merge of release/0.1.0-rc.1
 git status --porcelain          # prints nothing
-node --version                  # v22.23.3 or a later 22.x, or v24.21.0 or later
+node --version                  # 22.23.3 or a later 22.x, or 24.21.0 or later
 npm --version                   # 11.x
 corepack enable
 pnpm install --frozen-lockfile
@@ -202,7 +202,7 @@ git clone https://github.com/aligoren/getkervan.git kervan-release
 cd kervan-release
 git log -1 --format="%h %s"     # the merge of release/0.1.0-rc.1
 git status --porcelain          # prints nothing
-node --version                  # v22.23.3 or a later 22.x, or v24.21.0 or later
+node --version                  # 22.23.3 or a later 22.x, or 24.21.0 or later
 npm --version                   # 11.x
 corepack enable
 pnpm install --frozen-lockfile
