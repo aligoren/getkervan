@@ -1,0 +1,9 @@
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Home</a></li>
+    {{- range .Ancestors.Reverse }}{{ if not .IsHome }}
+    <li><a href="{{ .RelPermalink }}">{{ .Params.navTitle | default .LinkTitle }}</a></li>
+    {{- end }}{{ end }}
+    <li aria-current="page">{{ .Params.navTitle | default .LinkTitle }}</li>
+  </ol>
+</nav>

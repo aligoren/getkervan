@@ -1,0 +1,11 @@
+{{- /*
+  Code blocks: highlighted at build time (no JavaScript), with an optional label (`title`).
+  The block's attributes (check, ready, spec, reason, network, expect, id) are kept as data-*
+  for the documentation's example checks (scripts/site/docs-examples.mjs).
+*/ -}}
+{{- $lang := .Type | default "text" -}}
+{{- $attrs := .Attributes -}}
+<div class="code" data-lang="{{ $lang }}"{{ range $key, $value := $attrs }}{{ if ne $key "title" }} data-{{ $key }}="{{ $value }}"{{ end }}{{ end }}>
+{{- with $attrs.title }}<span class="code-label">{{ . }}</span>{{ end -}}
+{{- transform.Highlight (.Inner | strings.TrimRight "\n") $lang "" -}}
+</div>

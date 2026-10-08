@@ -9,11 +9,16 @@ import { describe, expect, it } from "vitest"
 const DOMAIN = "getkervan.dev"
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 const SKIP = new Set(["node_modules", ".git", "dist", "dist-web", "coverage", ".playwright-mcp"])
+// The website's build output and Hugo's cache and lock (gitignored; the lock is held during a build).
+const SKIP_PATHS = new Set(
+  ["site/public", "site/resources", "site/.hugo_build.lock"].map((p) => path.join(root, p)),
+)
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     if (SKIP.has(name)) return []
     const full = path.join(dir, name)
+    if (SKIP_PATHS.has(full)) return []
     const stat = statSync(full)
     if (stat.isDirectory()) return files(full)
     return stat.size < 4_000_000 ? [full] : []
@@ -30,6 +35,9 @@ function allowed(file: string, text: string): boolean {
   if (file === "scripts/test/domain.test.ts") return true
   if (file.endsWith(".md")) return true
   if (file.startsWith("site/")) return true
+  // The scripts that build and check the website name it; they never send it a request.
+  if (file === "scripts/check-site.mjs" || file.startsWith("scripts/site/")) return true
+  if (/^scripts\/test\/site[\w-]*\.test\.ts$/.test(file)) return true
   if (file === "packages/spec-runtime/scripts/schema-id.mjs") return true
   if (file.endsWith("package.json")) return true
   if (file === "packages/spec-runtime/schema/kervan.schema.json") {
@@ -48,7 +56,7 @@ describe(`the ${DOMAIN} domain`, () => {
     expect(found).toEqual(
       expect.arrayContaining([
         "SECURITY.md",
-        "site/.well-known/security.txt",
+        "site/static/.well-known/security.txt",
         "packages/spec-runtime/schema/kervan.schema.json",
       ]),
     )

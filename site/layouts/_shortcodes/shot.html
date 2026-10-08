@@ -1,0 +1,5 @@
+{{- /* A Studio screenshot in a page: {{< shot name="servers" alt="..." caption="..." >}} */ -}}
+<figure>
+{{ partial "shot.html" (dict "name" (.Get "name") "alt" (.Get "alt")) }}
+{{- with .Get "caption" }}<figcaption>{{ . | markdownify }}</figcaption>{{ end }}
+</figure>

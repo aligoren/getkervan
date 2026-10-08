@@ -54,7 +54,7 @@ On first start, Studio:
 Where the browser cannot reach Studio's loopback address (a container, a remote server without
 a tunnel), create the first admin with a command on the host instead:
 
-```sh
+```sh {check="studio-create-admin"}
 node apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
 ```
 
@@ -74,7 +74,7 @@ node apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
 
 In a container (see `docs/RELEASING.md` for the image draft):
 
-```sh
+```sh {check="manual" reason="needs a running Studio container"}
 docker exec -it kervan-studio node apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
 ```
 
@@ -176,14 +176,14 @@ pnpm e2e                                                       # build, then Pla
 Each published server is served at `/s/{serverId}/mcp` (Streamable HTTP, both protocol eras).
 Clients send one of the server's API keys:
 
-```sh
+```sh {check="manual" reason="needs a running Studio with a published server and a key"}
 claude mcp add --transport http weather https://studio.example.com/s/<serverId>/mcp \
   --header "Authorization: Bearer kvn_..."
 ```
 
 To keep the key out of your shell history, read it hidden and pass it through a variable:
 
-```sh
+```sh {check="manual" reason="needs a running Studio with a published server and a key"}
 # bash / zsh
 printf 'API key: '; read -rs KERVAN_API_KEY; echo
 claude mcp add --transport http weather https://studio.example.com/s/<serverId>/mcp \
@@ -191,7 +191,7 @@ claude mcp add --transport http weather https://studio.example.com/s/<serverId>/
 unset KERVAN_API_KEY
 ```
 
-```powershell
+```powershell {check="manual" reason="needs a running Studio with a published server and a key"}
 # PowerShell
 $key = Read-Host "API key" -AsSecureString
 $env:KERVAN_API_KEY = [Net.NetworkCredential]::new("", $key).Password
@@ -211,7 +211,7 @@ Remove-Item Env:KERVAN_API_KEY; Remove-Variable key
 
 ## Configuration
 
-| Variable | Default | |
+| Variable | Default | Description |
 | --- | --- | --- |
 | `KERVAN_STUDIO_PUBLIC_URL` | `http://127.0.0.1:<port>` | The URL people use, e.g. `https://studio.example.com`. Required when not on loopback. Origin checks, cookies, the accepted `Host` header and the SSRF deny list derive from it. |
 | `KERVAN_STUDIO_HOST` | `127.0.0.1` | Interface to listen on once an admin exists. |
@@ -247,13 +247,13 @@ no `flush_interval` setting is needed. (Tested with Caddy 2.11 and `tls internal
 proxy, a client's `subscriptions/listen` stream received `list_changed` about 30 ms after a
 publish, also after 65 seconds idle.)
 
-```caddyfile
+```caddyfile {check="manual" reason="needs a public DNS name for the certificate"}
 studio.example.com {
 	reverse_proxy 127.0.0.1:4310
 }
 ```
 
-```sh
+```sh {check="manual" reason="needs the proxy above"}
 KERVAN_STUDIO_PUBLIC_URL=https://studio.example.com \
 KERVAN_STUDIO_TRUST_PROXY=1 \
 KERVAN_STUDIO_HOST=127.0.0.1 \
@@ -275,7 +275,7 @@ on Studio's console, is what protects a fresh install.
 
 ## Recovering admin access
 
-```sh
+```sh {check="manual" reason="a synopsis: the brackets mark optional flags"}
 node apps/studio/bin/kervan-studio.js reset-admin [--email admin@example.com] [--password-stdin]
 ```
 
@@ -323,7 +323,7 @@ and the database alone reveals no secret values.
 To back up a running Studio, use SQLite's online backup rather than copying the file. Data that
 is still only in the `-wal` file would be missing from a plain copy.
 
-```sh
+```sh {check="manual" reason="needs the sqlite3 command-line tool"}
 sqlite3 .kervan-studio/studio.db ".backup 'studio-backup.db'"
 # or: sqlite3 .kervan-studio/studio.db "VACUUM INTO 'studio-backup.db'"
 ```

@@ -1,0 +1,19 @@
+{{- /*
+  The Open Graph image of a page, drawn at build time (1200x630 PNG): the site's dark surface and
+  amber bar (assets/og/base.png), the brand, the page's section and its title. Nothing external.
+*/ -}}
+{{- $base := resources.Get "og/base.png" -}}
+{{- $title := .Title | default site.Title -}}
+{{- if .IsHome }}{{ $title = "MCP servers from a YAML spec or TypeScript" }}{{ end -}}
+{{- if eq .Kind "404" }}{{ $title = "Page not found" }}{{ end -}}
+{{- $section := "" -}}
+{{- with .Params.ogSection }}{{ $section = . }}{{ else }}{{ with .Section }}{{ $section = . | humanize }}{{ end }}{{ end -}}
+{{- $filters := slice
+  (images.Text "Kervan" (dict "color" "#f59e0b" "size" 44 "x" 80 "y" 70))
+  (images.Text $section (dict "color" "#b8b2ac" "size" 30 "x" 80 "y" 150))
+  (images.Text $title (dict "color" "#f5f5f4" "size" 66 "linespacing" 10 "x" 80 "y" 230))
+  (images.Text "getkervan.dev" (dict "color" "#918a83" "size" 28 "x" 80 "y" 545))
+-}}
+{{- $img := $base | images.Filter $filters -}}
+{{- $name := printf "og/%s.png" (cond .IsHome "home" (cond (eq .Kind "404") "404" (.RelPermalink | strings.TrimPrefix "/" | strings.TrimSuffix "/" | replaceRE "/" "-"))) -}}
+{{- return ($img | resources.Copy $name) -}}

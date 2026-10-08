@@ -1,0 +1,28 @@
+{{- $current := . -}}
+<nav class="docs-nav" aria-label="Documentation menu">
+  <details>
+    <summary>Documentation menu</summary>
+    <div class="nav-inner">
+      {{- /* Each book shows its own pages and the guides; the guides and other pages show all. */}}
+      {{- $books := slice "/docs/framework/" "/guides/" "/docs/studio/" }}
+      {{- if hasPrefix .RelPermalink "/docs/framework/" }}{{ $books = slice "/docs/framework/" "/guides/" }}{{ end }}
+      {{- if hasPrefix .RelPermalink "/docs/studio/" }}{{ $books = slice "/docs/studio/" "/guides/" }}{{ end }}
+      {{- range $books }}
+      {{- with site.GetPage . }}
+      {{- $book := partial "book.html" . }}
+      <h2>{{ .Params.navTitle | default .Title }}</h2>
+      <ul>
+        {{- range $book.pages }}
+        <li><a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $current.RelPermalink }} aria-current="page"{{ end }}>{{ .Params.navTitle | default .LinkTitle }}</a></li>
+        {{- end }}
+      </ul>
+      {{- end }}
+      {{- end }}
+      <h2>More</h2>
+      <ul>
+        <li><a href="/changelog/"{{ if eq .RelPermalink "/changelog/" }} aria-current="page"{{ end }}>Changelog</a></li>
+        <li><a href="/search/"{{ if eq .RelPermalink "/search/" }} aria-current="page"{{ end }}>Search and all pages</a></li>
+      </ul>
+    </div>
+  </details>
+</nav>

@@ -45,6 +45,38 @@ jobs:
       - run: pnpm check:pack
       - run: pnpm check:site
 
+  # The website: Hugo at the pinned version (checksum-checked), the built-site tests that need
+  # it, then every page in Chromium and the documentation's code blocks (docs/SITE.md).
+  site:
+    name: site (Hugo, Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KERVAN_REQUIRE_HUGO: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the sitemap's lastmod dates come from git history
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+      - name: Install Hugo
+        run: |
+          sh scripts/site/install-hugo.sh
+          echo "$HUGO_BIN_DIR" >> "$GITHUB_PATH"
+        env:
+          HUGO_BIN_DIR: ${{ runner.temp }}/hugo
+      - name: Enable pnpm
+        run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec vitest run --project repo
+      - run: pnpm site:verify --examples
+
   e2e:
     name: e2e (Playwright, Linux)
     runs-on: ubuntu-latest

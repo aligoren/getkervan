@@ -41,7 +41,7 @@ applySpec(app.registry, await loadSpec(await readFile("kervan.yaml", "utf8")))
 
 ## Format
 
-| Field | |
+| Field | Description |
 | --- | --- |
 | `specVersion` | Always `1` |
 | `name`, `version`, `description` | Server identity |
@@ -91,7 +91,7 @@ loads and cannot write files, start processes or use the network. Numbers that h
 
 ## Built-in limits
 
-| | Default |
+| Limit | Default |
 | --- | --- |
 | Scheme | `https` only; `allowInsecureHttp: true` allows `http` |
 | Timeout | 10 s |
@@ -185,7 +185,7 @@ the check off.
 
 A secret can be restricted to the hosts, and ports, it may be sent to:
 
-```yaml
+```yaml {check="fragment"}
 secrets:
   - OTHER_KEY                    # unrestricted
   - name: API_KEY

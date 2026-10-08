@@ -153,8 +153,9 @@ pnpm lint         # Biome
 pnpm typecheck    # sources and tests
 pnpm check:pack   # publint + are-the-types-wrong
 pnpm e2e          # build, then Studio's Playwright tests (opt-in; needs Chromium)
-pnpm site:schema  # copy the editor schema to site/schema/v1.json
-pnpm check:site   # website date checks (security.txt expiry), kept out of pnpm test
+pnpm site:build   # the website, with Hugo (version in site/.hugo-version; see docs/SITE.md)
+pnpm check:site   # the website's rules on the build, and security.txt expiry
+pnpm site:verify  # the website in a browser: accessibility, CSP, layout (slow, not in pnpm test)
 pnpm try:new <dir> # a new project from this repository (until the packages are published)
 ```
 
@@ -181,8 +182,8 @@ This is temporary: once the packages are published, `npm create kervan@latest` r
 - Security reports: [security@getkervan.dev](mailto:security@getkervan.dev) (see
   [SECURITY.md](SECURITY.md))
 
-The website, [getkervan.dev](https://getkervan.dev), is a static page in [`site/`](site); see
-[docs/DEPLOY-SITE.md](docs/DEPLOY-SITE.md). Kervan itself never contacts it: no telemetry, no
+The website, [getkervan.dev](https://getkervan.dev), is built with Hugo from [`site/`](site); see
+[docs/SITE.md](docs/SITE.md). Kervan itself never contacts it: no telemetry, no
 update checks, no remote schemas.
 
 ## License

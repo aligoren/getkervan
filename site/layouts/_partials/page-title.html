@@ -1,0 +1,7 @@
+{{- /* The <title>: the page's own title (or seoTitle), then the brand. The home page has its own. */ -}}
+{{- if .IsHome -}}
+{{- return (.Params.seoTitle | default "Kervan: MCP servers from a YAML spec or TypeScript") -}}
+{{- end -}}
+{{- $base := .Params.seoTitle | default .Title -}}
+{{- if eq .Kind "404" }}{{ $base = "Page not found" }}{{ end -}}
+{{- return (printf "%s | Kervan" $base) -}}

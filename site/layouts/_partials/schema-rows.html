@@ -1,0 +1,34 @@
+{{- /*
+  The rows of the kervan.yaml reference, walked from the editor schema itself (recursive).
+  Input: dict "node" "path" "required". Returns a slice of dicts (path, node, required).
+  Free-form JSON Schema values (a tool's input, an output schema) are not walked into.
+*/ -}}
+{{- $rows := slice -}}
+{{- $node := .node -}}
+{{- $path := .path -}}
+{{- if $path }}{{ $rows = $rows | append (dict "path" $path "node" $node "required" .required) }}{{ end -}}
+{{- $free := and $node.propertyNames (not $node.properties) -}}
+{{- if not $free -}}
+  {{- with $node.properties -}}
+    {{- range $key, $child := . -}}
+      {{- $childPath := cond (eq $path "") $key (printf "%s.%s" $path $key) -}}
+      {{- $rows = $rows | append (partial "schema-rows.html" (dict "node" $child "path" $childPath "required" (in ($node.required | default slice) $key))) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- with $node.items -}}
+    {{- if .properties -}}
+      {{- $rows = $rows | append ((partial "schema-rows.html" (dict "node" . "path" (printf "%s[]" $path) "required" false)) | after 1) -}}
+    {{- end -}}
+    {{- range .anyOf -}}
+      {{- if .properties -}}
+        {{- $rows = $rows | append ((partial "schema-rows.html" (dict "node" . "path" (printf "%s[]" $path) "required" false)) | after 1) -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- range $node.anyOf -}}
+    {{- if .properties -}}
+      {{- $rows = $rows | append ((partial "schema-rows.html" (dict "node" . "path" $path "required" false)) | after 1) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- return $rows -}}

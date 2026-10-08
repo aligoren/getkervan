@@ -23,7 +23,7 @@ app.tool("add", {
 
 ## `createApp(options)`
 
-| Option | Default | |
+| Option | Default | Description |
 | --- | --- | --- |
 | `name`, `version` | required | Server identity sent to clients |
 | `title`, `instructions` | | Display name and server-level guidance |
@@ -35,7 +35,7 @@ app.tool("add", {
 
 ## `app.tool(name, definition)`
 
-| Field | |
+| Field | Description |
 | --- | --- |
 | `description` | Required. The model's main guidance. |
 | `input` | `z.object(...)`; omit for a tool without arguments |
@@ -59,7 +59,7 @@ app.tool("add", {
 
 ## Registry
 
-| | |
+| API | Description |
 | --- | --- |
 | `app.registry` | The app's `MutableToolRegistry` (default `InMemoryToolRegistry`; pass `createApp({ registry })` to use another) |
 | `app.tool` / `app.replaceTool` / `app.removeTool` | Change the tool set at runtime; connected clients get `list_changed` |
@@ -75,7 +75,7 @@ single `onChange` call.
 
 ## Middleware
 
-```ts
+```ts {check="ts-syntax"}
 app.use(async (call, next) => {
   const started = Date.now()
   try {
@@ -102,7 +102,7 @@ app.tool("drop_table", { description: "...", middleware: [requireAdmin], handler
 
 ## Tool context
 
-| | |
+| Member | Description |
 | --- | --- |
 | `ctx.signal` | Aborts on client cancellation or timeout. Pass it to `fetch` and other I/O. |
 | `ctx.progress(value, total?, message?)` | Sends progress if the client asked for it. Values must increase. |

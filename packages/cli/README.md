@@ -16,7 +16,7 @@ cd my-server && npm run dev
 Creates a project from the `basic` template: an app with two tools, a test using
 `createTestClient`, and scripts for `dev`, `start`, `build` and `test`.
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `--name <name>` | npm package name (default: the directory name) |
 | `--pm <manager>` | `npm`, `pnpm`, `yarn` or `bun` (default: the one that ran `create`, else `npm`) |
@@ -36,14 +36,14 @@ cannot run).
 
 Serves a `kervan.yaml` spec (see [`@kervan/spec-runtime`](../spec-runtime)).
 
-```sh
+```sh {check="starts" each="true" cwd="examples/spec" files=".env"}
 kervan run kervan.yaml                                   # stdio
 kervan run kervan.yaml --http --port 8080                # http://127.0.0.1:8080/mcp
 kervan run kervan.yaml --http --host 0.0.0.0 --allowed-host mcp.example.com
 kervan run kervan.yaml --env-file .env --watch
 ```
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `--http` | Streamable HTTP instead of stdio |
 | `--port`, `--host` | Default `3000` and `127.0.0.1` |
@@ -65,12 +65,12 @@ MCP server in front of it that clients stay connected to. Given a `.yaml`/`.yml`
 it reloads the spec in its own process (`--env-file`, `--allow-private-network` and
 `--allow-insecure-secrets` work as for `run`).
 
-```sh
+```sh {check="manual" reason="the first line runs in the project try:new creates (checked by the install step); the second writes to the Claude Code configuration"}
 kervan dev src/index.ts            # in a terminal: HTTP on 127.0.0.1:3000 plus a REPL
 claude mcp add my-server -- npx kervan dev /abs/path/src/index.ts   # stdio, for MCP clients
 ```
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `--http` / `--stdio` | Default: HTTP with a REPL in a terminal, stdio when started by a client |
 | `--port <port>` | HTTP port (default 3000). The host is always `127.0.0.1`. |

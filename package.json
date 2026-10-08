@@ -17,13 +17,20 @@
     "check:pack": "pnpm -r --filter \"./packages/*\" run check:pack",
     "e2e": "pnpm build && pnpm --filter @kervan/studio e2e",
     "site:schema": "node scripts/site-schema.mjs",
+    "site:build": "node scripts/site/build.mjs",
+    "site:generate": "node scripts/site/generate.mjs",
+    "site:screenshots": "node scripts/site/screenshots.mjs",
+    "site:serve": "node scripts/site/serve.mjs",
+    "site:verify": "node scripts/site/verify.mjs",
     "check:site": "node scripts/check-site.mjs",
     "try:new": "node scripts/try-new.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "^2.5.15",
+    "@playwright/test": "1.63.0",
     "@types/node": "^24.19.1",
+    "axe-core": "4.13.0",
     "publint": "^0.3.25",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"

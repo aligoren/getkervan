@@ -1,0 +1,5 @@
+{{- /* Every page has its own description in its front matter; check:site enforces 120-160 characters. */ -}}
+{{- $d := .Description | default .Params.description -}}
+{{- if eq .Kind "404" }}{{ $d = "This page does not exist on getkervan.dev. Find Kervan's documentation, guides and the kervan.yaml reference from the links on this page." }}{{ end -}}
+{{- if not $d }}{{ errorf "%s has no description in its front matter" .File.Path }}{{ end -}}
+{{- return ($d | plainify | strings.TrimSpace) -}}

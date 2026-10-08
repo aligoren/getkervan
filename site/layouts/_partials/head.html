@@ -1,0 +1,29 @@
+{{- $title := partial "page-title.html" . -}}
+{{- $description := partial "page-description.html" . -}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ $title }}</title>
+<meta name="description" content="{{ $description }}">
+<link rel="canonical" href="{{ .Permalink }}">
+<meta name="color-scheme" content="light dark">
+{{- /* Sets data-theme from the visitor's saved choice before the first paint (no flash). */}}
+{{- $theme := resources.Get "js/theme.js" | minify | fingerprint "sha256" }}
+<script src="{{ $theme.RelPermalink }}" integrity="{{ $theme.Data.Integrity }}"></script>
+<link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+{{ partial "css.html" . }}
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+{{- $og := partial "og-image.html" . }}
+<meta property="og:type" content="{{ if .IsHome }}website{{ else }}article{{ end }}">
+<meta property="og:site_name" content="Kervan">
+<meta property="og:title" content="{{ $title }}">
+<meta property="og:description" content="{{ $description }}">
+<meta property="og:url" content="{{ .Permalink }}">
+<meta property="og:image" content="{{ $og.Permalink }}">
+<meta property="og:image:width" content="{{ $og.Width }}">
+<meta property="og:image:height" content="{{ $og.Height }}">
+<meta property="og:image:alt" content="{{ .Title | default site.Title }}: Kervan">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ $title }}">
+<meta name="twitter:description" content="{{ $description }}">
+<meta name="twitter:image" content="{{ $og.Permalink }}">
+{{ partial "jsonld.html" . }}

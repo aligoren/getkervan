@@ -1,0 +1,10 @@
+{{- /*
+  How to get Kervan: from source until the packages are on npm (params.published = false), then
+  the npm commands. While published is false, check:site --strict refuses npm install commands.
+*/ -}}
+{{- if site.Params.published }}
+<div class="code" data-check="published" data-lang="sh">{{ transform.Highlight "npm create kervan@latest my-server\ncd my-server\nnpm run dev" "sh" "" }}</div>
+{{- else }}
+<p>Kervan is not on npm yet, so this builds it from a clone of the repository: Node.js 22.23.3 or a later 22.x, or 24.21.0 or later, and pnpm (through <code>corepack enable</code>). <code>pnpm try:new</code> creates a project from the local packages and runs its tests; once the packages are published, <code>npm create kervan</code> replaces it.</p>
+<div class="code" data-check="source" data-lang="sh">{{ transform.Highlight (printf "git clone %s.git\ncd kervan\ncorepack enable\npnpm install\npnpm try:new ../my-server\ncd ../my-server\nnpm run dev" site.Params.repoURL) "sh" "" }}</div>
+{{- end }}

@@ -1,0 +1,18 @@
+{{- /* A schema node's type in words: "string", "integer", "array of string", "string or object", "1". */ -}}
+{{- $n := . -}}
+{{- $t := "" -}}
+{{- if isset $n "const" }}{{ $t = printf "%v (constant)" $n.const }}
+{{- else if $n.anyOf -}}
+  {{- $parts := slice -}}
+  {{- range $n.anyOf }}{{ $parts = $parts | append (partial "schema-type.html" .) }}{{ end -}}
+  {{- $t = delimit (uniq $parts) " or " -}}
+{{- else if eq (printf "%T" $n.type) "[]interface {}" -}}{{ $t = delimit $n.type " or " }}
+{{- else if eq $n.type "array" -}}
+  {{- with $n.items }}{{ $t = printf "array of %s" (partial "schema-type.html" .) }}{{ else }}{{ $t = "array" }}{{ end -}}
+{{- else if and (eq $n.type "object") $n.propertyNames (not $n.properties) -}}
+  {{- $t = "map" -}}
+  {{- with $n.additionalProperties }}{{ if reflect.IsMap . }}{{ with partial "schema-type.html" . }}{{ $t = printf "map of %s" . }}{{ end }}{{ end }}{{ end -}}
+{{- else if $n.type }}{{ $t = $n.type }}
+{{- else if $n.properties }}{{ $t = "object" }}
+{{- else }}{{ $t = "any JSON value" }}{{ end -}}
+{{- return $t -}}

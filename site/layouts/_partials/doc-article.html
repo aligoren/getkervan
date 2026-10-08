@@ -1,0 +1,36 @@
+{{- /* A documentation or guide page: menu, article with "On this page", previous and next. */ -}}
+{{- $toc := .TableOfContents -}}
+{{- $hasToc := and (gt (len .Fragments.Headings) 0) (strings.Contains $toc "<li>") -}}
+<div class="wrap">
+  <div class="docs-layout{{ if $hasToc }} with-toc{{ end }}">
+    {{ partial "docs-nav.html" . }}
+    <article class="prose">
+      {{ partial "breadcrumb.html" . }}
+      <h1>{{ .Title }}</h1>
+      {{- with .Params.lead }}<p class="page-lead">{{ . | markdownify }}</p>{{ end }}
+      {{- if $hasToc }}
+      <details class="toc-inline">
+        <summary>On this page</summary>
+        {{ $toc }}
+      </details>
+      {{- end }}
+      {{ .Content }}
+      {{- if .Params.listPages }}
+      <ul class="grid">
+        {{- range .Pages.ByWeight }}
+        <li class="card"><a class="card-link" href="{{ .RelPermalink }}"><h2 class="card-title">{{ .Title }}</h2><p>{{ .Description }}</p></a></li>
+        {{- end }}
+      </ul>
+      {{- end }}
+      {{ partial "pager.html" . }}
+    </article>
+    {{- if $hasToc }}
+    <aside class="toc" aria-labelledby="toc-title">
+      <div class="toc-inner">
+        <h2 id="toc-title">On this page</h2>
+        {{ $toc }}
+      </div>
+    </aside>
+    {{- end }}
+  </div>
+</div>

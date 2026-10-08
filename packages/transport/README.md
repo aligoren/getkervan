@@ -9,7 +9,7 @@ Serve a [`@kervan/core`](../core) app over stdio or Streamable HTTP. Both MCP 20
 
 ## Node: `@kervan/transport/node`
 
-```ts
+```ts {check="ts-syntax"}
 import { serve, serveHttp, serveStdio } from "@kervan/transport/node"
 
 await serve(app) // --http / --stdio flag, else KERVAN_TRANSPORT, else stdio; closes on SIGINT/SIGTERM
@@ -20,7 +20,7 @@ const server = await serveHttp(app, { port: 3000 }) // server.url, server.close(
 
 `serveHttp` options (in addition to the fetch handler options below):
 
-| Option | Default | |
+| Option | Default | Description |
 | --- | --- | --- |
 | `port` | `3000` | `0` picks a free port. `serve` also reads `--port=` and `PORT`. |
 | `host` | `"127.0.0.1"` | Interface to bind. `serve` also reads `--host=` and `HOST`. Anything but loopback needs `allowedHosts`: without it `serveHttp` refuses to start, and `serve` says why in one line and exits 1. |
@@ -32,13 +32,13 @@ platform's rate limiting.
 
 ## Fetch runtimes: `@kervan/transport`
 
-```ts
+```ts {check="ts-syntax"}
 import { toFetchHandler } from "@kervan/transport"
 
 export default toFetchHandler(app, { allowedHosts: ["mcp.example.com"] })
 ```
 
-| Option | Default | |
+| Option | Default | Description |
 | --- | --- | --- |
 | `path` | `"/mcp"` | |
 | `allowedHosts` | localhost only | Accepted `Host` header names (DNS rebinding protection, `403` otherwise) |
@@ -61,7 +61,7 @@ pushed notifications.
 
 ## Testing: `@kervan/transport/testing`
 
-```ts
+```ts {check="ts-syntax"}
 import { createTestClient } from "@kervan/transport/testing"
 
 const client = await createTestClient(app) // era: "modern" (default) or "legacy"

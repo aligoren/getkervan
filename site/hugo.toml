@@ -1,0 +1,105 @@
+# getkervan.dev: the landing page and the documentation. A static site, built with Hugo (the
+# version is pinned in .hugo-version; `pnpm site:build` checks it). See docs/SITE.md.
+
+baseURL = "https://getkervan.dev/"
+locale = "en"
+defaultContentLanguage = "en"
+title = "Kervan"
+# Pages end in "/" (https://getkervan.dev/docs/quickstart/): one URL per page.
+uglyURLs = false
+enableRobotsTXT = true
+# Each page's last change for the sitemap comes from git (the commit that last touched it).
+enableGitInfo = true
+disableKinds = ["taxonomy", "term", "rss"]
+timeZone = "UTC"
+disableHugoGeneratorInject = true
+
+[params]
+  # false until the packages are on npm: every install instruction shows the from-source path.
+  # On release day: set true; `pnpm check:site --strict` refuses npm commands while it is false.
+  published = false
+  # The source repository. A placeholder until it exists; `pnpm check:site --strict` fails on it.
+  repoURL = "https://github.com/REPLACE-WITH-ORG/kervan"
+  description = "Kervan turns a kervan.yaml spec into a working MCP server, or lets you write tools in TypeScript on the official MCP SDK. Optional self-hosted Studio."
+  # Contact addresses: the same as SECURITY.md and CODE_OF_CONDUCT.md.
+  hello = "hello@getkervan.dev"
+  security = "security@getkervan.dev"
+  conduct = "conduct@getkervan.dev"
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = false
+  [markup.goldmark.parser.attribute]
+    block = true
+  [markup.highlight]
+    noClasses = false
+    guessSyntax = false
+  [markup.tableOfContents]
+    startLevel = 2
+    endLevel = 3
+
+[outputs]
+  home = ["HTML"]
+  section = ["HTML"]
+  page = ["HTML"]
+
+[outputFormats.SearchIndex]
+  mediaType = "application/json"
+  baseName = "index"
+  isPlainText = true
+  notAlternative = true
+
+[sitemap]
+  changeFreq = ""
+  priority = -1
+  filename = "sitemap.xml"
+
+[minify]
+  minifyOutput = true
+
+[build]
+  [build.buildStats]
+    enable = false
+
+# One source for what the site shows from the repository: the example spec, the editor schema,
+# Studio's design tokens and the documents in docs/ are mounted, not copied.
+[module]
+  [[module.mounts]]
+    source = "content"
+    target = "content"
+  [[module.mounts]]
+    source = "layouts"
+    target = "layouts"
+  [[module.mounts]]
+    source = "static"
+    target = "static"
+  [[module.mounts]]
+    source = "data"
+    target = "data"
+  [[module.mounts]]
+    source = "assets"
+    target = "assets"
+  [[module.mounts]]
+    source = "../examples/spec"
+    target = "assets/repo/examples/spec"
+    files = ["kervan.yaml"]
+  [[module.mounts]]
+    source = "../packages/spec-runtime/schema"
+    target = "assets/repo/schema"
+    files = ["kervan.schema.json"]
+  [[module.mounts]]
+    source = "../apps/studio/web/src/ui"
+    target = "assets/repo/studio-ui"
+    files = ["theme.css"]
+  [[module.mounts]]
+    source = "../docs"
+    target = "assets/repo/docs"
+    files = ["*.md"]
+  [[module.mounts]]
+    source = "../packages"
+    target = "assets/repo/packages"
+    files = ["*/README.md"]
+  [[module.mounts]]
+    source = "../apps/studio"
+    target = "assets/repo/apps/studio"
+    files = ["README.md"]

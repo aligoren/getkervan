@@ -1,0 +1,2 @@
+{{- /* Content shown only once the packages are on npm (params.published). Use with {{% %}}. */ -}}
+{{- if site.Params.published }}{{ .Inner }}{{ else }}{{ with .Get "otherwise" }}{{ . }}{{ end }}{{ end -}}

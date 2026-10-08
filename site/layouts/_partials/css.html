@@ -1,0 +1,24 @@
+{{- /*
+  The stylesheet: Studio's color tokens, taken at build time from
+  apps/studio/web/src/ui/theme.css (mounted as repo/studio-ui/theme.css), then site.css.
+  The three token blocks are found by their exact headers; if theme.css changes shape, the
+  build fails here instead of drifting.
+
+  The theme follows the system unless the visitor picks one with the radio buttons in the
+  header: :has() reads them without JavaScript, and site.js keeps the choice (data-theme).
+*/ -}}
+{{- $theme := resources.Get "repo/studio-ui/theme.css" -}}
+{{- if not $theme -}}{{- errorf "Studio's theme.css is not mounted (see hugo.toml)" -}}{{- end -}}
+{{- $src := $theme.Content | replaceRE "\r\n" "\n" -}}
+{{- $light := index (findRE `(?s)\n:root \{\n  --k-bg:.*?\n\}` $src 1) 0 -}}
+{{- $system := index (findRE `(?s)@media \(prefers-color-scheme: dark\) \{\n  :root:not\(\[data-theme="light"\]\) \{\n.*?\n  \}\n\}` $src 1) 0 -}}
+{{- $chosen := index (findRE `(?s)\n:root\[data-theme="dark"\] \{\n.*?\n\}` $src 1) 0 -}}
+{{- if or (not $light) (not $system) (not $chosen) -}}
+  {{- errorf "Studio's theme.css no longer has the token blocks the site reads (light, system dark, chosen dark)" -}}
+{{- end -}}
+{{- $system = replace $system `:root:not([data-theme="light"])` `:root:not([data-theme="light"]):not(:has(#theme-light:checked))` -}}
+{{- $chosen = replace $chosen `:root[data-theme="dark"]` `:root[data-theme="dark"], :root:has(#theme-dark:checked)` -}}
+{{- $tokens := printf "/* From apps/studio/web/src/ui/theme.css */\n%s\n%s\n%s\n" $light $system $chosen -}}
+{{- $site := resources.Get "css/site.css" -}}
+{{- $css := slice (resources.FromString "css/tokens.css" $tokens) $site | resources.Concat "css/kervan.css" | minify | fingerprint "sha256" -}}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}" integrity="{{ $css.Data.Integrity }}">

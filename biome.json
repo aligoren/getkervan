@@ -7,7 +7,16 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/dist", "!**/node_modules", "!**/*.tsbuildinfo", "!**/dist-web"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/*.tsbuildinfo",
+      "!**/dist-web",
+      "!site/layouts",
+      "!site/data/generated",
+      "!site/static/**/*.svg"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -45,6 +54,15 @@
     }
   },
   "overrides": [
+    {
+      "includes": ["site/assets/css/**"],
+      "linter": {
+        "rules": {
+          "style": { "noDescendingSpecificity": "off" },
+          "complexity": { "noImportantStyles": "off" }
+        }
+      }
+    },
     {
       "includes": ["apps/studio/src/**", "apps/studio/web/src/**"],
       "linter": {

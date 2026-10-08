@@ -1,0 +1,20 @@
+{{- /*
+  A Studio screenshot (assets/screenshots/<name>-light.webp and -dark.webp, made by
+  `pnpm site:screenshots`), in the visitor's system theme, with its size (no layout shift).
+  Params: name, alt, eager (the page's largest image: loaded first, never lazily), mobile (also
+  offer the phone-width capture, mobile-<name>, on narrow screens).
+*/ -}}
+{{- $light := resources.Get (printf "screenshots/%s-light.webp" .name) -}}
+{{- $dark := resources.Get (printf "screenshots/%s-dark.webp" .name) -}}
+{{- if not (and $light $dark) }}{{ errorf "screenshot %q is missing: run pnpm site:screenshots" .name }}{{ end -}}
+{{- if not .alt }}{{ errorf "screenshot %q has no alt text" .name }}{{ end -}}
+{{- $mobileLight := resources.Get (printf "screenshots/mobile-%s-light.webp" .name) -}}
+{{- $mobileDark := resources.Get (printf "screenshots/mobile-%s-dark.webp" .name) -}}
+<picture class="shot">
+  {{- if and .mobile $mobileLight $mobileDark }}
+  <source srcset="{{ $mobileDark.RelPermalink }}" media="(max-width: 40rem) and (prefers-color-scheme: dark)" width="{{ $mobileDark.Width }}" height="{{ $mobileDark.Height }}">
+  <source srcset="{{ $mobileLight.RelPermalink }}" media="(max-width: 40rem)" width="{{ $mobileLight.Width }}" height="{{ $mobileLight.Height }}">
+  {{- end }}
+  <source srcset="{{ $dark.RelPermalink }}" media="(prefers-color-scheme: dark)" width="{{ $dark.Width }}" height="{{ $dark.Height }}">
+  <img src="{{ $light.RelPermalink }}" alt="{{ .alt }}" width="{{ $light.Width }}" height="{{ $light.Height }}"{{ if .eager }} fetchpriority="high"{{ else }} loading="lazy" decoding="async"{{ end }}>
+</picture>

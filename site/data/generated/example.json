@@ -1,0 +1,207 @@
+{
+  "spec": "examples/spec/kervan.yaml",
+  "specSha256": "538199422764f236e5896fc33ccb03197223009a66d18bd5b94dc01e49fa79c4",
+  "protocolVersion": "2026-07-28",
+  "discover": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "server/discover",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {}
+        }
+      }
+    },
+    "result": {
+      "supportedVersions": [
+        "2026-07-28"
+      ],
+      "capabilities": {
+        "tools": {
+          "listChanged": true
+        }
+      },
+      "instructions": "Weather and city lookup backed by the public Open-Meteo APIs (no API key needed).",
+      "resultType": "complete",
+      "ttlMs": 0,
+      "cacheScope": "private",
+      "_meta": {
+        "io.modelcontextprotocol/serverInfo": {
+          "name": "open-meteo",
+          "version": "0.1.0"
+        }
+      }
+    }
+  },
+  "toolsList": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {}
+        }
+      }
+    },
+    "result": {
+      "tools": [
+        {
+          "name": "search_city",
+          "title": "Search city",
+          "description": "Finds up to 5 places by name and returns their coordinates.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 100,
+                "description": "City name, e.g. Ankara"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "annotations": {
+            "openWorldHint": true,
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "get_current_weather",
+          "title": "Current weather",
+          "description": "Current temperature (°C), wind speed (km/h) and WMO weather code at a coordinate.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              }
+            },
+            "required": [
+              "latitude",
+              "longitude"
+            ]
+          },
+          "annotations": {
+            "openWorldHint": true,
+            "readOnlyHint": true
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "temperatureC": {
+                "type": "number"
+              },
+              "windKmh": {
+                "type": "number"
+              },
+              "weatherCode": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "temperatureC",
+              "windKmh",
+              "weatherCode"
+            ]
+          }
+        }
+      ],
+      "resultType": "complete",
+      "ttlMs": 0,
+      "cacheScope": "private",
+      "_meta": {
+        "io.modelcontextprotocol/serverInfo": {
+          "name": "open-meteo",
+          "version": "0.1.0"
+        }
+      }
+    }
+  },
+  "calls": [
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "search_city",
+          "arguments": {
+            "name": "Ankara"
+          },
+          "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {}
+          }
+        }
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[{\"name\":\"Ankara\",\"country\":\"Republic of Türkiye\",\"latitude\":39.91987,\"longitude\":32.85427},{\"name\":\"Krist’esi\",\"country\":\"Georgia\",\"latitude\":42.55768,\"longitude\":43.398},{\"name\":\"Enakara Ambony\",\"country\":\"Madagascar\",\"latitude\":-24.63333,\"longitude\":46.9},{\"name\":\"Ankara\",\"country\":\"Madagascar\",\"latitude\":-25.46667,\"longitude\":45.68333},{\"name\":\"Ankara\",\"country\":\"Madagascar\",\"latitude\":-25.43333,\"longitude\":45.71667}]"
+          }
+        ],
+        "resultType": "complete",
+        "_meta": {
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "open-meteo",
+            "version": "0.1.0"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+          "name": "get_current_weather",
+          "arguments": {
+            "latitude": 39.92,
+            "longitude": 32.85
+          },
+          "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {}
+          }
+        }
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"temperatureC\":21.1,\"windKmh\":5.9,\"weatherCode\":2}"
+          }
+        ],
+        "structuredContent": {
+          "temperatureC": 21.1,
+          "windKmh": 5.9,
+          "weatherCode": 2
+        },
+        "resultType": "complete",
+        "_meta": {
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "open-meteo",
+            "version": "0.1.0"
+          }
+        }
+      }
+    }
+  ],
+  "callsCapturedAt": "2026-10-08T10:52:50.747Z"
+}

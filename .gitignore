@@ -13,3 +13,8 @@ dist-web/
 
 # Local Claude Code settings of whoever works on the repository
 .claude/
+
+# The website build (Hugo)
+site/public/
+site/resources/
+site/.hugo_build.lock

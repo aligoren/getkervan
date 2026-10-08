@@ -53,8 +53,9 @@ cannot do them.
 - [ ] Remove the "**Not published yet.**" notes from the five package READMEs (`packages/*/README.md`)
       and the "before the packages are published" parts of the root README (`pnpm try:new`).
       `guard-publish` refuses to publish while a note is there.
-- [ ] The website: add the repository link (`site/index.html`, "Source code") and deploy it
-      (`docs/DEPLOY-SITE.md`).
+- [ ] The website: set `params.repoURL` in `site/hugo.toml`, set up Cloudflare Pages and deploy
+      it ([The website](#the-website) below). On the day the packages are on npm, follow its
+      release-day list.
 - [ ] Once the site is live, add `# yaml-language-server: $schema=https://getkervan.dev/schema/v1.json`
       to the generated project, the examples and Studio's starter spec.
 - [ ] Mailboxes: `security@`, `hello@` and `conduct@getkervan.dev` must reach a person.
@@ -76,6 +77,82 @@ cannot do them.
 - Write release notes from the git history.
 - It does not create accounts, change repository or npm settings, approve the `release`
   environment, or publish.
+
+## The website
+
+The site is built by Hugo from `site/` ([docs/SITE.md](SITE.md)). It is not deployed yet. These
+steps need the Cloudflare account and the domain.
+
+**Cloudflare Pages**
+
+- [ ] Workers & Pages, Create, Pages, **Connect to Git**: the repository, production branch `main`.
+- [ ] Build settings: framework preset **None** (the command below does what the Hugo preset
+      would, plus the version check), build command
+      `(git fetch --unshallow || true) && node scripts/site/build.mjs`, build output directory
+      `site/public`, root directory empty (the build needs `examples/`, `packages/`, `apps/` and
+      `docs/`, which Hugo mounts).
+      Cloudflare clones shallowly; without the unshallow step every page's `lastmod` in the
+      sitemap would be the latest commit's date.
+- [ ] Environment variables (production and preview): `HUGO_VERSION` = the content of
+      `site/.hugo-version` (0.167.0 today), `NODE_VERSION` = `24`, `SKIP_DEPENDENCY_INSTALL` = `1`
+      (the build needs no npm packages; installing the workspace would build native modules for
+      nothing).
+- [ ] Check the first build's log: `hugo v0.167.0` and no warnings (the build fails on any).
+- [ ] `_headers` and `_redirects` from `site/static/` are applied by Pages without settings.
+      Preview deployments (`*.pages.dev`) get `X-Robots-Tag: noindex` from `_headers`; the
+      production domain never does (check:site fails otherwise).
+
+**Domain**
+
+- [ ] Custom domains: add `getkervan.dev`; Cloudflare shows the DNS record. Leave the `MX`
+      records of the email forwarding as they are.
+- [ ] `www.getkervan.dev`: add it as a custom domain too, then a **Bulk Redirect** (Rules,
+      Redirect Rules, Bulk Redirects) `www.getkervan.dev` → `https://getkervan.dev`, 301, with
+      "preserve path suffix" and "preserve query string". `_redirects` cannot match a host name.
+- [ ] SSL/TLS, Edge Certificates: **Always Use HTTPS** on (http → https). HSTS comes from
+      `_headers` (one year, no preload yet; preloading is a separate, slow-to-undo decision).
+- [ ] After the first deploy, from any machine:
+
+```sh
+curl -sI https://getkervan.dev/ | grep -i -E "content-security-policy|strict-transport|x-robots"
+curl -sI https://www.getkervan.dev/docs/ | grep -i location    # https://getkervan.dev/docs/
+curl -sI http://getkervan.dev/ | grep -i location             # https://getkervan.dev/
+curl -so /dev/null -w "%{http_code}\n" https://getkervan.dev/nothing/   # 404
+curl -s https://getkervan.dev/.well-known/security.txt
+curl -s https://getkervan.dev/schema/v1.json | head -3          # "$id": "https://getkervan.dev/schema/v1.json"
+curl -s https://getkervan.dev/robots.txt                         # Sitemap: https://getkervan.dev/sitemap.xml
+```
+
+  (`X-Robots-Tag` must not appear on the production domain.)
+
+**Search engines** (after the first production deploy)
+
+- [ ] Google Search Console: add a **Domain property** for `getkervan.dev`, verify it with the
+      DNS TXT record Search Console shows (`google-site-verification=...`; it goes into DNS, not
+      into the repository). Submit `https://getkervan.dev/sitemap.xml`. Use URL Inspection on
+      `/` and `/docs/framework/quickstart/` and request indexing.
+- [ ] Bing Webmaster Tools: import from Search Console, or verify with its DNS record; submit the
+      sitemap.
+- [ ] A week later: `site:getkervan.dev` in both search engines; Search Console's Pages report
+      for pages "Discovered, not indexed" or excluded, and Core Web Vitals once there is data.
+
+**Release day (the packages are on npm)**
+
+- [ ] `site/hugo.toml`: `params.published = true`; `params.repoURL` set (if not yet).
+- [ ] Search `site/content` for `check="source"` and `check="clone"` blocks: the install steps
+      now read `npm create kervan@latest`; turn the from-source steps that remain useful into a
+      "from source" section, and mark the npm ones `published`.
+- [ ] Changelog: replace "0.1 in preparation" with the release notes and date.
+- [ ] `pnpm site:verify --examples --network` and `pnpm check:site --strict` pass (strict fails
+      while the repository URL is a placeholder or an npm command is shown unpublished).
+- [ ] Add `# yaml-language-server: $schema=https://getkervan.dev/schema/v1.json` where noted above.
+- [ ] Deploy (merge to `main`), then check a page's `og:image` and canonical URL in the HTML and
+      with a link preview (a chat app or the social networks' preview tools).
+- [ ] Mailboxes: `hello@`, `security@` and `conduct@getkervan.dev` reach a person
+      (`conduct@` is new with the site's footer and CODE_OF_CONDUCT.md: add its forwarding).
+
+**Every year:** renew `Expires` in `site/static/.well-known/security.txt` (check:site warns 30
+days ahead; `site-check.yml` fails then).
 
 ## How a release runs
 

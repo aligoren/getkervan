@@ -1,0 +1,44 @@
+{{ define "main" }}
+{{- $index := slice -}}
+{{- range where site.RegularPages "Params.excludeFromSearch" "!=" true -}}
+  {{- $index = $index | append (dict "title" .Title "url" .RelPermalink "description" .Description "text" (.Plain | truncate 4000)) -}}
+{{- end -}}
+{{- range site.Sections -}}
+  {{- $index = $index | append (dict "title" .Title "url" .RelPermalink "description" .Description "text" (.Plain | truncate 4000)) -}}
+  {{- range .Sections }}{{ $index = $index | append (dict "title" .Title "url" .RelPermalink "description" .Description "text" (.Plain | truncate 4000)) }}{{ end -}}
+{{- end -}}
+{{- $json := $index | jsonify | resources.FromString "search/index.json" | minify | fingerprint "sha256" -}}
+{{- $js := resources.Get "js/search.js" | minify | fingerprint "sha256" -}}
+<div class="wrap">
+  <div class="prose page-pad">
+    {{ partial "breadcrumb.html" . }}
+    <h1>{{ .Title }}</h1>
+    <p class="page-lead">{{ .Description }}</p>
+    <form class="search-box" role="search" data-index="{{ $json.RelPermalink }}" hidden>
+      <label for="search-input">Search the documentation and guides</label>
+      <input id="search-input" type="search" name="q" autocomplete="off" spellcheck="false">
+    </form>
+    <p id="search-status" class="note" aria-live="polite"></p>
+    <ol class="search-results" id="search-results"></ol>
+    <h2 id="all-pages">All pages</h2>
+    {{- range slice "/docs/framework/" "/guides/" "/docs/studio/" }}
+    {{- with site.GetPage . }}
+    {{- $book := partial "book.html" . }}
+    <h3>{{ .Title }}</h3>
+    <ul>
+      {{- range $book.pages }}
+      <li><a href="{{ .RelPermalink }}">{{ .Title }}</a>: {{ .Description }}</li>
+      {{- end }}
+    </ul>
+    {{- end }}
+    {{- end }}
+    <h3>Project</h3>
+    <ul>
+      <li><a href="/">Home</a></li>
+      <li><a href="/docs/">Documentation overview</a></li>
+      <li><a href="/changelog/">Changelog</a></li>
+    </ul>
+  </div>
+</div>
+<script src="{{ $js.RelPermalink }}" integrity="{{ $js.Data.Integrity }}" defer></script>
+{{ end }}

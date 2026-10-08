@@ -1,0 +1,5 @@
+{{- /* {{< callout title="..." tone="warning" >}}Markdown{{< /callout >}} */ -}}
+<div class="callout{{ with .Get "tone" }} callout-{{ . }}{{ end }}"{{ if eq (.Get "tone") "warning" }} role="note"{{ end }}>
+{{- with .Get "title" }}<strong>{{ . }}</strong>{{ end }}
+{{ .Inner | .Page.RenderString (dict "display" "block") }}
+</div>

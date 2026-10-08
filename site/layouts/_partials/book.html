@@ -1,0 +1,6 @@
+{{- /* The book a page belongs to: its section page (framework, studio, guides) and its pages in order. */ -}}
+{{- $book := . -}}
+{{- if not .IsSection }}{{ $book = .CurrentSection }}{{ end -}}
+{{- $pages := slice $book -}}
+{{- range $book.Pages.ByWeight }}{{ $pages = $pages | append . }}{{ end -}}
+{{- return (dict "book" $book "pages" $pages) -}}

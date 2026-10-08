@@ -1,0 +1,9 @@
+# Cloudflare Pages redirects (https://developers.cloudflare.com/pages/configuration/redirects/).
+#
+# www.getkervan.dev -> getkervan.dev and http -> https cannot be written here: `_redirects`
+# cannot match a host name. They are set in Cloudflare instead (docs/RELEASING.md, "Website"):
+# a Bulk Redirect `www.getkervan.dev` -> `https://getkervan.dev` (301, path and query kept), and
+# "Always Use HTTPS" on the zone.
+#
+# Paths that moved: the earlier single-page site had no other paths, so there is nothing to
+# redirect yet. Add `/old-path /new-path/ 301` lines here when a page moves.

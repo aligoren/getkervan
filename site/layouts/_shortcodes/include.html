@@ -1,0 +1,87 @@
+{{- /*
+  Includes Markdown from the repository (mounted under assets/repo, see hugo.toml), so a document
+  has one source. Use with {{% %}} so the headings join the page's table of contents.
+
+  file:    path under the repository root, e.g. "apps/studio/README.md"
+  section: the heading text to start at (the heading itself is left out); without it, the whole
+           file without its first-level title
+  until:   a heading text to stop before (optional)
+  fromLine, untilLine: within the section, start at / stop before the first line that begins with
+           this text (to split one section between two pages without repeating it)
+  shift:   how many levels to move headings down (default: so the section's subheadings become h2)
+
+  Relative links to repository files become links to the source repository; "Not published yet"
+  notes are left out (the site says that itself, from params.published).
+*/ -}}
+{{- $file := .Get "file" -}}
+{{- $section := .Get "section" -}}
+{{- $until := .Get "until" -}}
+{{- $fromLine := .Get "fromLine" -}}
+{{- $untilLine := .Get "untilLine" -}}
+{{- $started := not $fromLine -}}
+{{- $res := resources.Get (printf "repo/%s" $file) -}}
+{{- if not $res }}{{ errorf "include: %s is not mounted (see hugo.toml)" $file }}{{ end -}}
+{{- $lines := split ($res.Content | replaceRE "\r\n" "\n") "\n" -}}
+{{- $out := slice -}}
+{{- $inside := not $section -}}
+{{- $level := 1 -}}
+{{- $found := not $section -}}
+{{- $inFence := false -}}
+{{- range $lines -}}
+  {{- $line := . -}}
+  {{- $isFence := hasPrefix (strings.TrimLeft " " $line) "```" -}}
+  {{- $heading := and (not $inFence) (findRESubmatch `^(#{1,6}) (.+)$` $line 1) -}}
+  {{- if $heading -}}
+    {{- $hl := len (index (index $heading 0) 1) -}}
+    {{- $htext := index (index $heading 0) 2 -}}
+    {{- if and $section (eq $htext $section) -}}
+      {{- $inside = true -}}{{- $found = true -}}{{- $level = $hl -}}
+      {{- continue -}}
+    {{- else if and $inside $section (le $hl $level) -}}
+      {{- $inside = false -}}
+    {{- end -}}
+    {{- if and $until (eq $htext $until) }}{{ $inside = false }}{{ end -}}
+    {{- if and (not $section) (eq $hl 1) }}{{ continue }}{{ end -}}
+  {{- end -}}
+  {{- if $isFence }}{{ $inFence = not $inFence }}{{ end -}}
+  {{- if and $inside $untilLine (hasPrefix $line $untilLine) }}{{ $inside = false }}{{ end -}}
+  {{- if and $inside (not $started) $fromLine (hasPrefix $line $fromLine) }}{{ $started = true }}{{ end -}}
+  {{- if and $inside $started }}{{ $out = $out | append $line }}{{ end -}}
+{{- end -}}
+{{- if not $found }}{{ errorf "include: section %q not found in %s" $section $file }}{{ end -}}
+{{- $md := delimit $out "\n" -}}
+{{- /* Headings: the section's own subheadings become h2 (or shift as given). */ -}}
+{{- $shift := int (.Get "shift" | default (sub 2 (add $level 1))) -}}
+{{- if ne $shift 0 -}}
+  {{- $new := slice -}}
+  {{- $inFence = false -}}
+  {{- range split $md "\n" -}}
+    {{- $line := . -}}
+    {{- if hasPrefix (strings.TrimLeft " " $line) "```" }}{{ $inFence = not $inFence }}{{ end -}}
+    {{- $m := and (not $inFence) (findRESubmatch `^(#{1,6}) (.+)$` $line 1) -}}
+    {{- if $m -}}
+      {{- $n := add (len (index (index $m 0) 1)) $shift -}}
+      {{- if lt $n 2 }}{{ $n = 2 }}{{ end }}{{ if gt $n 6 }}{{ $n = 6 }}{{ end -}}
+      {{- $line = printf "%s %s" (strings.Repeat $n "#") (index (index $m 0) 2) -}}
+    {{- end -}}
+    {{- $new = $new | append $line -}}
+  {{- end -}}
+  {{- $md = delimit $new "\n" -}}
+{{- end -}}
+{{- /* Leave out "Not published yet" notes (a blockquote starting with that sentence). */ -}}
+{{- $md = replaceRE `(?m)^> \*\*Not published yet\.\*\*.*\n(>.*\n)*` "" $md -}}
+{{- /* Before the packages are on npm, `npx kervan` cannot work: show the from-source command. */ -}}
+{{- if not site.Params.published -}}
+  {{- $md = replace $md "npx kervan " "node /path/to/kervan/packages/cli/bin/kervan.js " -}}
+{{- end -}}
+{{- /* Relative links to repository files: to the source repository. */ -}}
+{{- $dir := path.Dir $file -}}
+{{- range findRESubmatch `\]\(([^)#:\s]+)(#[^)\s]*)?\)` $md -}}
+  {{- $target := index . 1 -}}
+  {{- if not (hasPrefix $target "/") -}}
+    {{- $resolved := path.Join $dir $target -}}
+    {{- $url := printf "%s/blob/main/%s%s" site.Params.repoURL $resolved (index . 2) -}}
+    {{- $md = replace $md (index . 0) (printf "](%s)" $url) -}}
+  {{- end -}}
+{{- end -}}
+{{ $md | safeHTML }}

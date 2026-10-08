@@ -1,0 +1,41 @@
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <nav aria-labelledby="footer-docs">
+        <h2 id="footer-docs">Documentation</h2>
+        <ul>
+          <li><a href="/docs/framework/quickstart/">Quickstart</a></li>
+          <li><a href="/docs/framework/spec-reference/">kervan.yaml reference</a></li>
+          <li><a href="/docs/framework/cli/">CLI reference</a></li>
+          <li><a href="/docs/studio/">Kervan Studio documentation</a></li>
+        </ul>
+      </nav>
+      <nav aria-labelledby="footer-guides">
+        <h2 id="footer-guides">Guides</h2>
+        <ul>
+          <li><a href="/guides/what-is-mcp/">What MCP is, and what Kervan adds</a></li>
+          <li><a href="/guides/mcp-server-from-yaml/">An MCP server from a YAML file</a></li>
+          <li><a href="/guides/connect-claude-code/">Connect a server to Claude Code</a></li>
+        </ul>
+      </nav>
+      <nav aria-labelledby="footer-project">
+        <h2 id="footer-project">Project</h2>
+        <ul>
+          <li><a href="{{ site.Params.repoURL }}" rel="noopener noreferrer">Source code (MIT license)</a></li>
+          <li><a href="/changelog/">Changelog</a></li>
+          <li><a href="/docs/framework/security/">Security model</a></li>
+          <li><a href="/.well-known/security.txt">security.txt</a></li>
+        </ul>
+      </nav>
+      <div>
+        <h2>Contact</h2>
+        <ul>
+          <li>Questions: <a href="mailto:{{ site.Params.hello }}">{{ site.Params.hello }}</a></li>
+          <li>Vulnerabilities: <a href="mailto:{{ site.Params.security }}">{{ site.Params.security }}</a></li>
+          <li>Code of conduct: <a href="mailto:{{ site.Params.conduct }}">{{ site.Params.conduct }}</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine">Kervan is open source under the MIT license. It is in development and not published yet. Kervan is not affiliated with Anthropic or the Model Context Protocol project.</p>
+  </div>
+</footer>

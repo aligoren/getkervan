@@ -1,0 +1,28 @@
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">K</span>Kervan</a>
+    <nav class="site-nav" aria-label="Main">
+      <ul>
+        {{- $here := .RelPermalink }}
+        {{- range slice
+          (dict "url" "/docs/framework/" "name" "Docs")
+          (dict "url" "/guides/" "name" "Guides")
+          (dict "url" "/docs/studio/" "name" "Studio")
+          (dict "url" "/changelog/" "name" "Changelog")
+        }}
+        <li><a href="{{ .url }}"{{ if hasPrefix $here .url }} aria-current="page"{{ end }}>{{ .name }}</a></li>
+        {{- end }}
+        <li><a href="{{ site.Params.repoURL }}" rel="noopener noreferrer">Source</a></li>
+      </ul>
+    </nav>
+    <div class="header-end">
+      <a href="/search/">Search</a>
+      <fieldset class="theme-switch">
+        <legend>Color theme</legend>
+        <input type="radio" name="theme" id="theme-system" value="system" checked><label for="theme-system">Auto</label>
+        <input type="radio" name="theme" id="theme-light" value="light"><label for="theme-light">Light</label>
+        <input type="radio" name="theme" id="theme-dark" value="dark"><label for="theme-dark">Dark</label>
+      </fieldset>
+    </div>
+  </div>
+</header>

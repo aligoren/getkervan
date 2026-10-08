@@ -39,9 +39,14 @@ pnpm lint         # Biome: formatting and lint rules (`pnpm exec biome check --w
 pnpm typecheck
 pnpm test         # Vitest: unit, integration (real MCP clients, real HTTP) and review tests
 pnpm check:pack   # what the npm packages contain, and their types
-pnpm check:site   # the website's dates and schema copy
+pnpm check:site   # the website's dates and schema copy (and its pages, after pnpm site:build)
 pnpm e2e          # Studio in a browser (Playwright; needs Chromium) when the UI changes
+pnpm site:verify  # the website in a browser, when site/ or the docs it includes change (needs Hugo)
 ```
+
+The website (`site/`, Hugo) includes the package READMEs, `docs/API.md`, Studio's README and
+threat model, and the example spec. A change to those shows on the site too: their code blocks
+carry a `{check="..."}` attribute saying how they are verified (see [docs/SITE.md](docs/SITE.md)).
 
 ## Writing changes
 

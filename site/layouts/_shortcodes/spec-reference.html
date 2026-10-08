@@ -1,0 +1,37 @@
+{{- /*
+  Every field of kervan.yaml, generated at build time from the editor schema
+  (packages/spec-runtime/schema/kervan.schema.json, mounted). Nothing here is written by hand.
+*/ -}}
+{{- $schema := resources.Get "repo/schema/kervan.schema.json" | transform.Unmarshal -}}
+{{- $rows := partial "schema-rows.html" (dict "node" $schema "path" "" "required" false) -}}
+<p>Generated from the editor schema, <code>{{ $schema.title }}</code> (<code>{{ index $schema "$id" }}</code>), when this site was built.</p>
+<table class="ref-table" tabindex="0" aria-label="kervan.yaml fields">
+  <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Description and limits</th></tr></thead>
+  <tbody>
+  {{- range $rows }}
+  {{- $n := .node }}
+  {{- if ne .path "$schema" }}
+  <tr id="{{ .path | replaceRE `[^A-Za-z0-9]+` "-" | strings.Trim "-" | lower }}">
+    <td><code>{{ .path }}</code>{{ if .required }}<br><small>required</small>{{ end }}</td>
+    <td>{{ partial "schema-type.html" $n }}</td>
+    <td>
+      {{- with $n.description }}{{ . | markdownify }}{{ end -}}
+      {{- $limits := slice -}}
+      {{- with $n.enum }}{{ $limits = $limits | append (printf "one of %s" (delimit . ", ")) }}{{ end -}}
+      {{- with $n.default }}{{ $limits = $limits | append (printf "default %v" .) }}{{ end -}}
+      {{- if isset $n "minimum" }}{{ $limits = $limits | append (printf "at least %v" $n.minimum) }}{{ end -}}
+      {{- if isset $n "maximum" }}{{ $limits = $limits | append (printf "at most %v" $n.maximum) }}{{ end -}}
+      {{- if isset $n "minLength" }}{{ $limits = $limits | append (printf "%v+ characters" $n.minLength) }}{{ end -}}
+      {{- if isset $n "maxLength" }}{{ $limits = $limits | append (printf "up to %v characters" $n.maxLength) }}{{ end -}}
+      {{- if isset $n "minItems" }}{{ $limits = $limits | append (printf "%v+ items" $n.minItems) }}{{ end -}}
+      {{- if isset $n "maxItems" }}{{ $limits = $limits | append (printf "up to %v items" $n.maxItems) }}{{ end -}}
+      {{- with $n.pattern }}{{ $limits = $limits | append (printf "pattern <code>%s</code>" (. | htmlEscape)) }}{{ end -}}
+      {{- range $n.anyOf }}{{ with .pattern }}{{ $limits = $limits | append (printf "as a name: pattern <code>%s</code>" (. | htmlEscape)) }}{{ end }}{{ end -}}
+      {{- with $n.items }}{{ with .pattern }}{{ $limits = $limits | append (printf "each: pattern <code>%s</code>" (. | htmlEscape)) }}{{ end }}{{ range .anyOf }}{{ with .pattern }}{{ $limits = $limits | append (printf "a name: pattern <code>%s</code>" (. | htmlEscape)) }}{{ end }}{{ end }}{{ end -}}
+      {{- with $limits }}{{ if $n.description }}<br>{{ end }}<small>{{ delimit . "; " | safeHTML }}</small>{{ end -}}
+    </td>
+  </tr>
+  {{- end }}
+  {{- end }}
+  </tbody>
+</table>

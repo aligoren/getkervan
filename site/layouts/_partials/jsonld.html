@@ -1,0 +1,44 @@
+{{- /*
+  Structured data (schema.org), only with what the page says and what can be checked: no ratings,
+  reviews, prices or counts. The organization has a name, a URL, a logo and a contact address.
+*/ -}}
+{{- $org := dict "@type" "Organization" "@id" (print site.BaseURL "#organization") "name" "Kervan" "url" site.BaseURL "logo" (absURL "/favicon.svg") "email" site.Params.hello -}}
+{{- $website := dict "@type" "WebSite" "@id" (print site.BaseURL "#website") "name" "Kervan" "url" site.BaseURL "inLanguage" "en" "publisher" (dict "@id" (print site.BaseURL "#organization")) -}}
+{{- $graph := slice $website $org -}}
+{{- $description := partial "page-description.html" . -}}
+{{- if .IsHome -}}
+  {{- $graph = $graph | append (dict
+    "@type" "SoftwareApplication"
+    "name" "Kervan"
+    "applicationCategory" "DeveloperApplication"
+    "operatingSystem" "Windows, macOS, Linux (Node.js)"
+    "description" $description
+    "url" site.BaseURL
+    "license" "https://opensource.org/license/mit"
+    "softwareRequirements" "Node.js 22.23.3 or a later 22.x, or 24.21.0 or later"
+    "publisher" (dict "@id" (print site.BaseURL "#organization"))) -}}
+{{- else if ne .Kind "404" -}}
+  {{- $crumbs := slice (dict "@type" "ListItem" "position" 1 "name" "Home" "item" site.BaseURL) -}}
+  {{- $position := 2 -}}
+  {{- range .Ancestors.Reverse -}}
+    {{- if not .IsHome -}}
+      {{- $crumbs = $crumbs | append (dict "@type" "ListItem" "position" $position "name" .Title "item" .Permalink) -}}
+      {{- $position = add $position 1 -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $crumbs = $crumbs | append (dict "@type" "ListItem" "position" $position "name" .Title "item" .Permalink) -}}
+  {{- $graph = $graph | append (dict "@type" "BreadcrumbList" "itemListElement" $crumbs) -}}
+  {{- if .IsPage -}}
+    {{- $article := dict
+      "@type" "TechArticle"
+      "headline" .Title
+      "description" $description
+      "url" .Permalink
+      "inLanguage" "en"
+      "isPartOf" (dict "@id" (print site.BaseURL "#website"))
+      "publisher" (dict "@id" (print site.BaseURL "#organization")) -}}
+    {{- with .GitInfo }}{{ $article = merge $article (dict "dateModified" (.AuthorDate.UTC.Format "2006-01-02T15:04:05Z")) }}{{ end -}}
+    {{- $graph = $graph | append $article -}}
+  {{- end -}}
+{{- end -}}
+<script type="application/ld+json">{{ dict "@context" "https://schema.org" "@graph" $graph | jsonify | safeJS }}</script>

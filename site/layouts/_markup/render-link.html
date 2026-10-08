@@ -1,0 +1,5 @@
+{{- /* External links open normally, with rel="noopener noreferrer"; internal ones are checked by check:site. */ -}}
+{{- $url := urls.Parse .Destination -}}
+{{- $external := and $url.IsAbs (ne $url.Host "getkervan.dev") (ne $url.Scheme "mailto") -}}
+<a href="{{ .Destination | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}{{ if $external }} rel="noopener noreferrer"{{ end }}>{{ .Text }}</a>
+{{- /* */ -}}
