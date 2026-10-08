@@ -102,7 +102,7 @@ role change, deactivation, sign-out, reset and second password change; playgroun
 renewed session; a sign-in in flight across a promotion or demotion; the pool's limit, queue
 timeouts, reply ids, cancellation and prototype keys in upstream data; every slug the server
 accepts is safe in the connect commands; a `git.exe` planted in Studio's working directory is not
-run.
+run. (That last one was wrong, and the first CI run showed it: see "First CI run" below.)
 
 | Suspicion | Why not proven | Status and next step |
 | --- | --- | --- |
@@ -207,6 +207,44 @@ were clean. Fixed:
 Accepted: `pack-check.mjs` quotes arguments for cmd.exe and rejects `"` and `%`, but not `!`,
 which matters only with delayed expansion turned on in the registry; its inputs are temporary
 folder paths, not user input.
+
+## First CI run (GitHub, private repository)
+
+**A planted git.exe ran on Windows.** Both Windows jobs failed the review 3 test "a git.exe in
+Studio's working directory is not the git the start-up check runs": the check reported the
+database as tracked, which is what the planted program (a copy of cmd.exe, exit code 0) answers.
+The cause is not the runner's 8.3 temporary path (`RUNNER~1`): with a short path the test still
+passes, and every path form (short, lower case, `/` separators) gets the right answer. The cause is
+that Node (libuv) looks a bare program name up in the current directory first on Windows unless
+`NoDefaultCurrentDirectoryInExePath` is set in the spawning process. The development machine sets
+it, so the test passed there; GitHub's runners do not. Fixed in the product:
+
+- Studio runs git by its full path, from PATH's absolute folders only (`gitProgram`); empty, `.`,
+  relative and drive-relative entries are skipped, on POSIX too.
+- `kervan dev` runs `%SystemRoot%\System32\taskkill.exe` by its full path.
+- `kervan create` gives the install's cmd.exe `NoDefaultCurrentDirectoryInExePath=1` (the folder
+  is new and empty, so this is defence in depth).
+- The tests remove the variable for their child processes, so they are not blind on a machine that
+  sets it, and print git's view of the repository (ls-files, status, four config keys, the platform,
+  the temporary folder's real path) when they fail. Each fix is mutation-tested.
+
+A fresh-context review found no way around the fix. Accepted: with `SystemRoot` unset or relative,
+`taskkill` falls back to `C:\Windows`; on a Windows installed elsewhere the kill then fails and the
+server is left running (Windows always sets `SystemRoot`). Without `ComSpec`, Node starts the
+install's shell as `cmd.exe` by name; the same lookup applies, in the new empty folder.
+
+**Skipped tests.** CI skipped 71 tests on Windows and 75 on Linux, the development machine 11:
+
+| Tests | Skipped where | Why | Run in CI by |
+| --- | --- | --- | --- |
+| 60 built-site tests (`site-build.test.ts`) | CI `test` jobs (no Hugo) | Need Hugo at the pinned version | the `site` job (`KERVAN_REQUIRE_HUGO=1` fails if Hugo is missing) |
+| 6 POSIX-only (file modes, symbolic links, another owner, the loopback overlap) | Windows | Not meaningful on Windows | the Linux jobs |
+| 6 Windows-only in the first run (planted git.exe, UNC paths, `cmd.exe` quoting, mixed `\` and `/`); 11 with this round's tests (planted taskkill.exe and npm.cmd, `Path` rules, short paths) | Linux | Windows behaviour | the Windows jobs |
+| 5 zsh connect-command tests | everywhere (no zsh on Windows or, by the counts, on the Ubuntu image) | zsh not installed | **none until now**: CI installs zsh on Linux, and `KERVAN_REQUIRE_SHELLS` makes a missing shell fail |
+| 4 PowerShell connect-command tests | Linux (no `pwsh`) | PowerShell not installed | the Windows jobs (Windows PowerShell) |
+
+So the difference to the development machine is Hugo (60). No security test was skipped
+everywhere except the zsh quoting tests, which now run on Linux.
 
 ## Still open at the feature freeze
 
