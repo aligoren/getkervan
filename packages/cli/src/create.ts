@@ -10,7 +10,7 @@ const templatesDir = fileURLToPath(new URL("../templates/", import.meta.url))
 /** Versions written into new projects, next to the CLI's own version for the Kervan packages. */
 export const TEMPLATE_VERSIONS = {
   mcpClientVersion: "^2.3.1",
-  typesNodeVersion: "^24.0.0",
+  typesNodeVersion: "^22.20.5",
   typescriptVersion: "^7.0.2",
   vitestVersion: "^5.0.3",
 } as const

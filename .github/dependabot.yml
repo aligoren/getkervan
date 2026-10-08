@@ -21,8 +21,8 @@ updates:
       # (its createWebWorker API changed). Update both together, by hand, and check the editor.
       - dependency-name: monaco-editor
       - dependency-name: monaco-yaml
-      # No major updates: a newer major describes APIs that the supported Node.js lines (22, 24)
-      # do not have. The types stay at 24 for now; moving them to 22 is a separate decision.
+      # No major updates: the types stay at the oldest supported Node.js major (22), so the type
+      # check catches an API that Node.js 22 does not have (scripts/test/node-versions.test.ts).
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
     groups:

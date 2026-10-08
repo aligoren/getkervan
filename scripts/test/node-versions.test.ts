@@ -26,6 +26,25 @@ describe("the supported Node.js range", () => {
     expect(PHRASE).toBe("22.23.3 or a later 22.x, or 24.21.0 or later")
   })
 
+  it("sets the Node.js types: @types/node is the oldest supported major everywhere", () => {
+    const oldest = /^\^(\d+)\./.exec(RANGE)?.[1]
+    expect(oldest).toBe("22")
+    const major = (range: string | undefined) => /^\^(\d+)\.\d+\.\d+$/.exec(range ?? "")?.[1]
+    const rootManifest = JSON.parse(read("package.json")) as {
+      devDependencies: Record<string, string>
+    }
+    expect(major(rootManifest.devDependencies["@types/node"]), "package.json").toBe(oldest)
+    // The override keeps type packages that accept any version from pulling in a newer one.
+    const override = /^ {2}'@types\/node': (\S+)$/m.exec(read("pnpm-workspace.yaml"))?.[1]
+    expect(major(override), "pnpm-workspace.yaml overrides").toBe(oldest)
+    // A generated project gets the same major (packages/cli/src/create.ts, TEMPLATE_VERSIONS).
+    const template = /typesNodeVersion: "([^"]+)"/.exec(read("packages/cli/src/create.ts"))?.[1]
+    expect(major(template), "TEMPLATE_VERSIONS.typesNodeVersion").toBe(oldest)
+    // The one installed: no second, newer copy in the lockfile.
+    const locked = [...read("pnpm-lock.yaml").matchAll(/^ {2}'@types\/node@(\d+)\.[^']*':$/gm)]
+    expect(new Set(locked.map((match) => match[1]))).toEqual(new Set([oldest]))
+  })
+
   it("is every runtime package's engines; the libraries keep >=22", () => {
     for (const file of [
       "apps/studio/package.json",
