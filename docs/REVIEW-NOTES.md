@@ -108,8 +108,8 @@ run.
 | **An IPv6 public URL in the connect command** (`http://[::1]:4310/...`) is not quoted, so zsh treats the brackets as a glob and the command fails. | Robustness, not injection: it fails closed. | **Open.** Next step: quote the URL in the generated commands. |
 
 Not separately mutation-tested on Windows (the tests that cover them run only on POSIX): the
-symbolic-link and ownership conditions of the git check. They were mutation-tested in the Linux
-container (see the round's report).
+symbolic-link and ownership conditions of the git check. Each was mutation-tested in a Linux
+container (Node 24.21, as an unprivileged user): removing it made its test fail.
 
 ## Accepted risks (threat model, "Known limits")
 
