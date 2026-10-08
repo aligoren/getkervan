@@ -367,24 +367,41 @@ describe("the Node.js version", () => {
 describe("hidden terminal input", () => {
   const key = (code: number) => String.fromCodePoint(code)
 
+  /** A fake raw terminal: what a read puts back is delivered first to the next one. */
   function terminal() {
     const listeners = { data: [] as ((chunk: string) => void)[], end: [] as (() => void)[] }
     const modes: boolean[] = []
+    const pending: string[] = []
+    const type = (text: string) => {
+      for (const listener of [...listeners.data]) listener(text)
+    }
     const input: TerminalInput = {
       setRawMode: (mode: boolean) => modes.push(mode),
-      resume: () => {},
+      resume: () => {
+        for (const chunk of pending.splice(0)) type(chunk)
+      },
       pause: () => {},
+      unshift: (chunk: Buffer) => pending.push(chunk.toString("utf8")),
       on: (event: "data" | "end", listener: never) => listeners[event].push(listener),
       off: (event: "data" | "end", listener: never) => {
         listeners[event] = listeners[event].filter((each) => each !== listener) as never
       },
     }
     const written: string[] = []
-    const type = (text: string) => {
-      for (const listener of [...listeners.data]) listener(text)
-    }
     return { input, written, output: { write: (t: string) => written.push(t) }, type, modes }
   }
+
+  it("keeps what came after the Enter for the next read (typed ahead or pasted)", async () => {
+    const t = terminal()
+    const first = readHiddenLine("Password: ", t.input, t.output)
+    t.type("one passphrase\rtwo passphrase\r\nthree")
+    expect(await first).toBe("one passphrase")
+    expect(await readHiddenLine("Again: ", t.input, t.output)).toBe("two passphrase")
+    const third = readHiddenLine("Third: ", t.input, t.output)
+    t.type("\r")
+    expect(await third).toBe("three")
+    expect(t.written).toEqual(["Password: ", "\n", "Again: ", "\n", "Third: ", "\n"])
+  })
 
   it("reads a line without echoing it, with backspace, ignoring escape sequences", async () => {
     const t = terminal()
