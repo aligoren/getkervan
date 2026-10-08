@@ -25,6 +25,10 @@ Lines marked **Verify on release day** come from npm's and GitHub's documentatio
   the repository and runs smoke tests: `kervan --help`, `kervan run --help`, a tool call through
   `createApp` and `createTestClient`, `kervan run` on the example spec answering `tools/list`, and a
   project made by `create-kervan` passing its own tests. CI and `release.yml` run it.
+- **`pnpm verify:published [--tag next]`** (`scripts/verify-published.mjs`), after a release:
+  compares the registry's metadata for the five packages with the repository's, checks each
+  tarball's sha512 and contents, and runs the smoke tests on the packages installed by the tag. It
+  reads from the registry and publishes nothing.
 - **`release.yml`** runs only by hand, only from `main`, one run at a time, behind the `release`
   environment; it runs the whole chain and `test:pack`, refuses a pre-release under `latest`, runs
   the guard for every package, and skips a version already on npm (so a run that stopped halfway
@@ -79,22 +83,22 @@ repository is public. So: push while private, make it public, then publish.
       (`npm view kervan`, `npm view create-kervan`: E404) and register them with the same account.
 - [ ] Two-factor authentication for every maintainer, and required on the organization.
 
-### 4. The release pull request (content)
+### 4. Two branches: `release/0.1.0-rc.1` before, `post-publish/0.1.0-rc.1` after
 
-- [ ] Remove the "**Not published yet.**" notes from the five package READMEs
-      (`packages/*/README.md`) and the "before the packages are published" parts of the root
-      README (`pnpm try:new`). `guard-publish` refuses while a note is there, and the README in a
-      tarball is part of that version forever.
-- [ ] During the release candidate, install commands name the tag: `npm create kervan@next
-      my-server`, `npm install @kervan/core@next`. Plain `npm install @kervan/core` installs
-      `latest`, and `npm create kervan@latest` asks for `latest` by name. The README files and the
-      site say `@latest` today: change them in this pull request, or after checking what `latest`
-      points to (step 7).
-- [ ] The website's release-day list ([The website](#the-website)): `params.published`, the
-      install steps, the changelog.
+- [ ] **`release/0.1.0-rc.1`** (pull request into `main`, merged **before** publishing): removes
+      the "**Not published yet.**" notes from the five package READMEs (`packages/*/README.md`),
+      nothing else. `guard-publish` refuses while a note is there, and the README in a tarball is
+      part of that version forever. The site and the root README still say "not on npm yet",
+      which stays true until the packages are published.
+- [ ] **`post-publish/0.1.0-rc.1`** (built on the release branch; pull request into `main`, merged
+      only **after** `0.1.0-rc.1` is on npm and checked, step 7): the site's `params.published`
+      becomes true, the install commands name the tag (`npm create kervan@next my-server`,
+      `npm install @kervan/core@next`; plain `npm install` installs `latest`), and the root README
+      and the site's "not on npm yet" notes become "0.1 release candidate".
 - [ ] Read [`docs/REVIEW-NOTES.md`](REVIEW-NOTES.md): decide for each **open** item whether it
       waits or blocks the release.
-- [ ] CI green on the pull request; `pnpm test:pack` passes locally on Windows and Linux; merge.
+- [ ] CI green on the release pull request; `pnpm test:pack` passes locally on Windows and Linux;
+      merge it.
 
 ### 5. Before anything is published: the website is live
 
@@ -112,25 +116,7 @@ from the maintainer's machine, with a short-lived **granular access token** limi
 packages (or an interactive `npm login` with two-factor authentication). That version has **no
 provenance**; the next one (`rc.2` or `0.1.0`) goes through `release.yml` with provenance.
 
-`npm publish <tarball>` does not run `prepublishOnly`, so the guard runs by hand. Work from a fresh
-clone of `main`: an old checkout's `dist` may hold files whose sources were deleted. In bash (Git
-Bash on Windows):
-
-```sh
-git clone https://github.com/aligoren/getkervan.git kervan-release && cd kervan-release
-corepack enable && pnpm install --frozen-lockfile
-pnpm test:pack                          # builds, checks the tarballs, installs them, smoke tests
-for dir in packages/*/; do (cd "$dir" && KERVAN_ALLOW_PUBLISH=1 node ../../scripts/guard-publish.mjs) || exit 1; done
-out="$(cd .. && pwd)/kervan-tarballs" && mkdir "$out"
-pnpm -r --filter "./packages/*" pack --pack-destination "$out"
-cd "$out"
-for name in kervan-core kervan-transport kervan-spec-runtime kervan create-kervan; do
-  npm publish "./$(ls "$name"-[0-9]*.tgz)" --access public --tag next || break
-done
-```
-
-Dependencies go first; if one fails, fix the cause and publish the rest (a version already on npm
-cannot be published again). Revoke the token right after.
+The commands, for PowerShell and for bash: [rc.1: step by step](#rc1-step-by-step).
 
 Then, for each of the five packages, add the **trusted publisher** (package settings on npmjs.com):
 GitHub Actions, repository `aligoren/getkervan`, workflow `release.yml`, environment `release`.
@@ -167,6 +153,211 @@ npm already) and publish nothing.
 **Published metadata cannot change.** The `package.json` and the README of a published version
 are fixed: a wrong description, link or note needs a new version. Only the dist-tags, the
 deprecation message and the package's settings on npmjs.com can change afterwards.
+
+## rc.1: step by step
+
+The maintainer runs these on their own machine, after the `release/0.1.0-rc.1` pull request is
+merged and before the `post-publish/0.1.0-rc.1` one is. Each step has a PowerShell block (Windows)
+and a bash block (Linux, macOS, Git Bash); run one of them. Lines marked **Verify on release day**
+come from npm's documentation as read on 2026-10-08 and could not be tried before a real publish.
+
+Sources: [npm init / npm create](https://docs.npmjs.com/cli/v11/commands/npm-init),
+[npm publish](https://docs.npmjs.com/cli/v11/commands/npm-publish),
+[npm 11.0.0: a pre-release needs an explicit `--tag`](https://github.com/npm/cli/releases/tag/v11.0.0),
+[trusted publishing](https://docs.npmjs.com/trusted-publishers),
+[two-factor authentication for publishing](https://docs.npmjs.com/requiring-2fa-for-package-publishing-and-settings-modification),
+[unpublish policy](https://docs.npmjs.com/policies/unpublish).
+
+### 1. Before
+
+- An npm account that owns the `@kervan` organization, with two-factor authentication (a passkey
+  or security key works).
+- Signed in to npm on this machine: `npm login` (it opens the browser), then `npm whoami` prints
+  the account's name.
+- The unscoped names are still free: `npm view kervan` and `npm view create-kervan` end with
+  `E404`.
+- The release pull request is merged and CI on `main` is green.
+
+### 2. A fresh clone of `main`, built and checked
+
+A fresh clone, because an old checkout's `dist` can hold files whose sources were deleted
+(`test:pack` refuses them too).
+
+```powershell
+git clone https://github.com/aligoren/getkervan.git kervan-release
+Set-Location kervan-release
+git log -1 --format="%h %s"     # the merge of release/0.1.0-rc.1
+git status --porcelain          # prints nothing
+node --version                  # v22.23.3 or a later 22.x, or v24.21.0 or later
+npm --version                   # 11.x
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+pnpm test
+pnpm test:pack                  # ends with "test:pack passed."
+```
+
+```sh
+git clone https://github.com/aligoren/getkervan.git kervan-release
+cd kervan-release
+git log -1 --format="%h %s"     # the merge of release/0.1.0-rc.1
+git status --porcelain          # prints nothing
+node --version                  # v22.23.3 or a later 22.x, or v24.21.0 or later
+npm --version                   # 11.x
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+pnpm test
+pnpm test:pack                  # ends with "test:pack passed."
+```
+
+### 3. The guard, for every package
+
+`npm publish <tarball>` does not run `prepublishOnly`, so the guard runs by hand: it refuses
+without `KERVAN_ALLOW_PUBLISH=1`, and while a package README still says "Not published yet".
+Nothing is printed when it passes.
+
+```powershell
+$env:KERVAN_ALLOW_PUBLISH = "1"
+try {
+  foreach ($dir in Get-ChildItem packages -Directory) {
+    Push-Location $dir.FullName
+    node ../../scripts/guard-publish.mjs
+    $ok = $LASTEXITCODE -eq 0
+    Pop-Location
+    if (-not $ok) { throw "The guard refused $($dir.Name)." }
+  }
+} finally {
+  Remove-Item Env:KERVAN_ALLOW_PUBLISH
+}
+```
+
+```sh
+for dir in packages/*/; do
+  (cd "$dir" && KERVAN_ALLOW_PUBLISH=1 node ../../scripts/guard-publish.mjs) || { echo "The guard refused $dir"; break; }
+done
+```
+
+### 4. Pack
+
+`pnpm pack` writes the real versions (`^0.1.0-rc.1`) in place of the `workspace:^` dependencies;
+`npm publish` run inside a package folder would publish `workspace:^` as it is, and no npm client
+could install it. `pnpm publish` would convert them too, but it was never tried with npm's
+browser sign-in; `npm publish <tarball>` publishes exactly what `pnpm pack` made, the files
+`test:pack` checked.
+
+```powershell
+$out = Join-Path (Resolve-Path ..) "kervan-tarballs"
+New-Item -ItemType Directory $out | Out-Null
+pnpm -r --filter "./packages/*" pack --pack-destination $out
+Get-ChildItem $out -Name        # five .tgz files, each ending in -0.1.0-rc.1.tgz
+```
+
+```sh
+out="$(cd .. && pwd)/kervan-tarballs"
+mkdir "$out"
+pnpm -r --filter "./packages/*" pack --pack-destination "$out"
+ls "$out"                       # five .tgz files, each ending in -0.1.0-rc.1.tgz
+```
+
+### 5. Publish, dependencies first
+
+`@kervan/core`, then `@kervan/transport`, `@kervan/spec-runtime`, `kervan` and `create-kervan`, so
+no package is ever on npm without its dependencies. `--tag next`: npm 11 refuses a pre-release
+without an explicit tag, and `next` keeps it away from a plain `npm install`. `--access public`:
+scoped packages are private by default. A version already on npm is skipped, so after an
+interruption (a failed sign-in, the network) the same block simply runs again. **Verify on release
+day:** with a passkey, npm may open the browser to confirm every publish, so up to five times.
+
+```powershell
+Set-Location $out
+$version = "0.1.0-rc.1"
+$packages = [ordered]@{
+  "kervan-core"         = "@kervan/core"
+  "kervan-transport"    = "@kervan/transport"
+  "kervan-spec-runtime" = "@kervan/spec-runtime"
+  "kervan"              = "kervan"
+  "create-kervan"       = "create-kervan"
+}
+foreach ($file in $packages.Keys) {
+  $name = $packages[$file]
+  npm view "$name@$version" version 2>$null | Out-Null
+  if ($LASTEXITCODE -eq 0) { "$name@$version is on npm already: skipped"; continue }
+  npm publish "./$file-$version.tgz" --tag next --access public
+  if ($LASTEXITCODE -ne 0) { throw "npm publish stopped at $name." }
+}
+```
+
+```sh
+cd "$out"
+version=0.1.0-rc.1
+for entry in kervan-core:@kervan/core kervan-transport:@kervan/transport \
+             kervan-spec-runtime:@kervan/spec-runtime kervan:kervan create-kervan:create-kervan; do
+  name=${entry#*:}
+  if npm view "$name@$version" version >/dev/null 2>&1; then
+    echo "$name@$version is on npm already: skipped"
+    continue
+  fi
+  npm publish "./${entry%%:*}-$version.tgz" --tag next --access public || { echo "npm publish stopped at $name"; break; }
+done
+```
+
+### 6. Check, then tag
+
+Back in the clone (`Set-Location ../kervan-release` or `cd ../kervan-release`):
+
+```powershell
+foreach ($name in "@kervan/core", "@kervan/transport", "@kervan/spec-runtime", "kervan", "create-kervan") {
+  npm view $name dist-tags
+}
+pnpm verify:published           # ends with "verify:published passed: 0.1.0-rc.1 under next."
+git tag -a v0.1.0-rc.1 -m "0.1.0-rc.1"
+git push origin v0.1.0-rc.1
+```
+
+```sh
+for name in @kervan/core @kervan/transport @kervan/spec-runtime kervan create-kervan; do
+  npm view "$name" dist-tags
+done
+pnpm verify:published           # ends with "verify:published passed: 0.1.0-rc.1 under next."
+git tag -a v0.1.0-rc.1 -m "0.1.0-rc.1"
+git push origin v0.1.0-rc.1
+```
+
+- Every package shows `next: '0.1.0-rc.1'`. **Verify on release day** what `latest` shows: npm's
+  documentation does not say whether the first version of a new package gets `latest` too when it
+  is published with `--tag next`. If `latest` is `0.1.0-rc.1`, leave it: it is the only version,
+  and `0.1.0` moves it. If there is no `latest`, plain `npm install @kervan/core` fails until
+  `0.1.0`; the post-publish branch says `@next` everywhere, so nothing needs changing. Adding
+  `latest` by hand (`npm dist-tag add @kervan/core@0.1.0-rc.1 latest`) would hand the release
+  candidate to everyone; not recommended.
+- `pnpm verify:published` installs the five packages by `@next` from the registry outside the
+  repository, compares the registry's metadata with the repository's (version, dist-tag, license,
+  engines, repository), checks each tarball's sha512 and contents, and runs the smoke tests. It
+  publishes nothing.
+- Publish a GitHub **pre-release** for the tag, with the notes.
+- Merge the `post-publish/0.1.0-rc.1` pull request (the site then shows the npm commands).
+
+### 7. Trusted publishing, for the next version
+
+Configured per package on npmjs.com (Settings, Trusted publishing): GitHub Actions, repository
+`aligoren/getkervan`, workflow `release.yml`, environment `release`. **Verify on release day:**
+tick **`npm publish`** under the allowed actions (a configuration created after 2026-09-03 allows
+only `npm stage publish` by default), and add it only when the next version (`0.1.0-rc.2` or
+`0.1.0`) is about to go through `release.yml`: a configuration expires if no publish succeeds
+through it within two days. After that first workflow release, "Require two-factor authentication
+and disallow tokens" in each package's settings.
+
+### 8. If something is wrong
+
+- A broken rc.1: publish `0.1.0-rc.2` with the fix, then for each package
+  `npm deprecate "@kervan/core@0.1.0-rc.1" "Broken: use 0.1.0-rc.2"` (an empty message, `""`,
+  undoes it).
+- Published by mistake: within 72 hours, and in reverse order (`create-kervan` first, `@kervan/core`
+  last, because the packages depend on each other), `npm unpublish <name>@0.1.0-rc.1`. It is each
+  package's only version, so npm asks for `--force`, which removes the whole package; its name
+  cannot be published again for 24 hours, and the version number never again. Rules:
+  [When a release goes wrong](#when-a-release-goes-wrong).
 
 ## The website
 
