@@ -1,17 +1,87 @@
+# Kervan: files that never belong in the repository.
+# A path here must not match any tracked file (scripts/test/gitignore.test.ts checks this, and
+# that the secret and data patterns below really match).
+
+# --- Dependencies and package managers -----------------------------------------------------------
 node_modules/
-dist/
-*.tsbuildinfo
+.pnpm-store/
+.npm/
+.yarn/
 *.tgz
+.kervan-tarballs/
+
+# --- Build output --------------------------------------------------------------------------------
+dist/
+dist-web/
+build/
+*.tsbuildinfo
 coverage/
-.DS_Store
+
+# --- Test output ---------------------------------------------------------------------------------
+test-results/
+playwright-report/
+blob-report/
+.vitest/
+.vite/
+
+# --- Kervan Studio data (a SQLite database with users, sessions and encrypted secrets) ------------
+.kervan-studio/
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# --- Secrets and local configuration ------------------------------------------------------------
+# Environment files hold API keys and Studio's master key; only documented examples are shared.
 .env
 .env.*
 !.env.example
-dist-web/
-.kervan-studio/
+*.env
+.env.studio
+master.key
+*.master-key
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
 
-
-# The website build (Hugo)
+# --- The website build (Hugo) --------------------------------------------------------------------
 site/public/
 site/resources/
 site/.hugo_build.lock
+
+# --- Temporary and generated files --------------------------------------------------------------
+tmp/
+temp/
+*.tmp
+*.log
+*.pid
+# Projects that `kervan create` or `pnpm try:new` made inside the repository by mistake.
+/anything/
+/my-server/
+# Screenshot and mutation-run leftovers.
+screenshots-tmp/
+*.orig
+*.rej
+
+# --- Operating systems ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- Editors (personal settings; shared editor settings would be added on purpose) ----------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
