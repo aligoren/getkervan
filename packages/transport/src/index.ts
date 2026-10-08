@@ -57,7 +57,7 @@ export interface FetchHandlerOptions {
 }
 
 export interface KervanHttpHandler {
-  /** Web-standard fetch handler: `export default handler` works on Workers, Deno and Bun. */
+  /** A Fetch API handler (`Request` in, `Response` out), the shape fetch runtimes expect. Tested on Node. */
   fetch: (request: Request, env?: unknown, executionCtx?: unknown) => Response | Promise<Response>
   /** The underlying Hono app, for mounting extra routes or middleware. */
   hono: Hono

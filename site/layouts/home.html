@@ -137,7 +137,7 @@
     <ul class="grid">
       <li class="card"><h3>stdio</h3><p>The client starts your server as a process; nothing listens on the network. <code>kervan run kervan.yaml</code>, or <code>serve(app)</code> in code.</p></li>
       <li class="card"><h3>Stateless Streamable HTTP</h3><p>No sessions: every request carries its own context. <code>Host</code> and <code>Origin</code> are checked against <code>allowedHosts</code> and <code>allowedOrigins</code>.</p></li>
-      <li class="card"><h3>Fetch runtimes</h3><p>The same app as a fetch handler for Cloudflare Workers, Deno and Bun: <code>toFetchHandler(app)</code>.</p></li>
+      <li class="card"><h3>A fetch handler</h3><p>The same app as a standard Fetch API handler: <code>toFetchHandler(app)</code>. Tested on Node.</p></li>
       <li class="card"><h3>MCP 2026-07-28, and 2025 clients</h3><p>The stateless revision with <code>server/discover</code>, and clients of the 2025 revisions from the same app. Over HTTP, 2025 clients get no change notifications (<a href="/docs/framework/protocol/#list_changed">why</a>).</p></li>
     </ul>
     <p>Any MCP client can connect. With Claude Code, the example spec over stdio:</p>

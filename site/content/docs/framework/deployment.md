@@ -21,8 +21,8 @@ Windows (a libuv bug), and Node.js 22.0 to 22.12 name the permission model the `
 relies on differently and were never tested. The libraries alone declare Node.js 22 or newer.
 
 Spec tools need Node.js (they pin DNS with `node:dns` and `node:http`). Tools written in code can
-also run on Workers, Deno and Bun through `toFetchHandler`; see
-[transports](/docs/framework/transports/#fetch-runtimes).
+also be served by `toFetchHandler`, a standard fetch handler; it is tested on Node only, not on
+Workers, Deno or Bun. See [transports](/docs/framework/transports/#a-fetch-handler).
 
 ## A container (draft)
 

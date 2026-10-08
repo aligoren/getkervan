@@ -12,7 +12,7 @@
 - { name: KervanDefinitionError, url: /docs/framework/errors/ }
 - { name: jsonSchema, url: "/docs/framework/code/#json-schema-and-raw-results-experimental" }
 - { name: rawResult, url: "/docs/framework/code/#json-schema-and-raw-results-experimental" }
-- { name: toFetchHandler, url: "/docs/framework/transports/#fetch-runtimes" }
+- { name: toFetchHandler, url: "/docs/framework/transports/#a-fetch-handler" }
 - { name: serve, url: /docs/framework/transports/ }
 - { name: serveStdio, url: /docs/framework/transports/ }
 - { name: serveHttp, url: /docs/framework/transports/ }

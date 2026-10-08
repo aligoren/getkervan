@@ -79,7 +79,7 @@ claude mcp add weather -- npx kervan run /absolute/path/to/kervan.yaml
 | Package | |
 | --- | --- |
 | [`@kervan/core`](packages/core) | `createApp`, tools, the tool context (`ctx.signal`, `ctx.progress`, `ctx.log`, `ctx.auth`), middleware, the tool registry. No transport, database or UI code. |
-| [`@kervan/transport`](packages/transport) | stdio and Streamable HTTP on Node, a fetch handler for Workers/Deno/Bun, multi-tenant `resolveServer`, and `createTestClient`. |
+| [`@kervan/transport`](packages/transport) | stdio and Streamable HTTP on Node, a standard fetch handler (tested on Node), multi-tenant `resolveServer`, and `createTestClient`. |
 | [`@kervan/spec-runtime`](packages/spec-runtime) | `kervan.yaml` specs: HTTP tools with templates, JMESPath output selection, SSRF protection and secret redaction. |
 | [`kervan`](packages/cli) | The CLI: `kervan create`, `kervan dev` (hot reload, REPL), `kervan run`. |
 | [`create-kervan`](packages/create-kervan) | `npm create kervan` (once published). |
@@ -123,7 +123,7 @@ public issue.
 | --- | --- |
 | Node.js | 22.23.3 or a later 22.x, or 24.21.0 or later for the CLI, generated projects and Studio: the oldest releases the whole test suite has passed on (earlier 24.x releases crash on Windows with a libuv bug). The libraries declare 22 or newer. |
 | MCP | 2026-07-28 (stateless) and the 2025 revisions up to 2025-11-25, from the same server. Over HTTP, 2025-era clients are served statelessly and receive `list_changed` only on their next `tools/list`. |
-| Runtimes | Node for everything; the fetch handler also runs on Workers, Deno and Bun. Spec tools need Node. |
+| Runtimes | Node. `toFetchHandler` is a standard Fetch API handler, tested on Node only (not on Workers, Deno or Bun). Spec tools need Node. |
 
 ## How Kervan compares
 

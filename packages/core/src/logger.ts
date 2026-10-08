@@ -16,8 +16,8 @@ export interface ConsoleLoggerOptions {
 }
 
 /**
- * Logger that writes every level through `console.error`, which is stderr on Node
- * and the platform log on Workers/Deno/Bun.
+ * Logger that writes every level through `console.error`: stderr on Node, and usually the
+ * platform's log elsewhere.
  */
 export function createConsoleLogger(options: ConsoleLoggerOptions = {}): Logger {
   const min = order[options.level ?? "info"]

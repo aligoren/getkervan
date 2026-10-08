@@ -1,8 +1,8 @@
 ---
 title: Transports and authentication
 seoTitle: 'MCP over stdio and Streamable HTTP with Kervan'
-description: 'Serve a Kervan MCP server over stdio or stateless Streamable HTTP, on Node or fetch runtimes, with Host and Origin checks and authentication.'
-lead: The same app serves stdio and Streamable HTTP, on Node or on fetch runtimes (Workers, Deno, Bun), for clients of both protocol eras.
+description: 'Serve a Kervan MCP server over stdio or stateless Streamable HTTP, on Node or as a standard fetch handler, with Host and Origin checks and authentication.'
+lead: The same app serves stdio and Streamable HTTP, on Node or as a standard fetch handler (tested on Node), for clients of both protocol eras.
 weight: 70
 group: Run and operate
 fits: 'Run and operate. How clients reach the tools you built in [YAML](/docs/framework/spec-reference/) or [TypeScript](/docs/framework/code/).'
@@ -27,9 +27,9 @@ defaults to stdio.
 
 {{% include file="packages/transport/README.md" section="Node: `@kervan/transport/node`" %}}
 
-## Fetch runtimes
+## A fetch handler
 
-{{% include file="packages/transport/README.md" section="Fetch runtimes: `@kervan/transport`" %}}
+{{% include file="packages/transport/README.md" section="A fetch handler: `@kervan/transport`" %}}
 
 ## Host and Origin checks
 

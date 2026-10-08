@@ -30,10 +30,13 @@ const server = await serveHttp(app, { port: 3000 }) // server.url, server.close(
 | `rateLimit` | `{ windowMs: 60000, max: 300 }` | Per client, in memory, `429` with `Retry-After`. `false` disables it. |
 | `rateLimit.keyGenerator` | socket address | `X-Forwarded-For` is **not** trusted. Behind a proxy, derive the key yourself. |
 
-The rate limiter only exists in `serveHttp`. With `toFetchHandler` (Workers, Deno, Bun), use your
-platform's rate limiting.
+The rate limiter only exists in `serveHttp`. With `toFetchHandler`, use your platform's rate
+limiting.
 
-## Fetch runtimes: `@kervan/transport`
+## A fetch handler: `@kervan/transport`
+
+`toFetchHandler` turns the app into a standard Fetch API handler (`Request` in, `Response` out).
+It is tested on Node only; Cloudflare Workers, Deno and Bun are not tested.
 
 ```ts {check="ts-syntax"}
 import { toFetchHandler } from "@kervan/transport"

@@ -266,7 +266,7 @@ Every claim on the landing page, and what backs it. When a claim changes, change
 | `serveHttp` limits requests per minute (300 by default) | `packages/transport/src/node.ts`, `rate-limit.ts` (`DEFAULT_RATE_LIMIT`) |
 | The package diagram: spec-runtime and transport build on core; the CLI uses both; create-kervan runs `kervan create` | `packages/*/package.json` dependencies; `packages/cli/src/run.ts`; `packages/create-kervan/bin/create-kervan.js` |
 | `list_changed` once per batch, only on a real change; none for 2025-era HTTP clients | `packages/transport/test/dynamic.test.ts`; the registry page's example runs in `site:verify --examples` |
-| Fetch runtimes (Workers, Deno, Bun) via `toFetchHandler`; `allowedHosts`/`allowedOrigins` | `packages/transport/src/index.ts`; transport tests |
+| A standard fetch handler via `toFetchHandler`, tested on Node only (Workers, Deno and Bun are not claimed); `allowedHosts`/`allowedOrigins` | `packages/transport/src/index.ts`; transport tests (Node) |
 | Timeouts, size limits, rate limits (spec tools), Host and Origin checks by default | `limits.toolTimeoutMs` (core, 30 s), `HTTP_DEFAULTS`, `SPEC_LIMITS` and the per-tool rate limit (spec-runtime), `allowedHosts` (transport); their tests |
 | SSRF: public addresses only, DNS resolved once and pinned, redirects refused unless allowed then rechecked, metadata always refused | `packages/spec-runtime/src/network.ts`; network tests, mutation-tested during development |
 | Secret redaction in every encoding Kervan knows | `SecretVault` (raw, URL, form, JSON, number forms) and its tests |
@@ -298,7 +298,7 @@ a search intent:
 | `/docs/framework/select/` | JMESPath `select` syntax and limits |
 | `/docs/framework/secrets/` | Pass API keys to a spec safely |
 | `/docs/framework/code/` | Write MCP tools in TypeScript with Zod |
-| `/docs/framework/transports/` | stdio vs Streamable HTTP, Host checks, fetch runtimes |
+| `/docs/framework/transports/` | stdio vs Streamable HTTP, Host checks, the fetch handler |
 | `/docs/framework/protocol/` | What MCP 2026-07-28 changes for a server |
 | `/docs/framework/how-kervan-works/` | How an MCP framework is put together; what happens to a tool call |
 | `/docs/framework/yaml-or-typescript/` | "MCP tool in YAML or code": which to choose, the same tool both ways |

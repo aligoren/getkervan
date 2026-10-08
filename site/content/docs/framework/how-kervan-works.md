@@ -23,7 +23,7 @@ next:
 | Package | Responsibility | Depends on |
 | --- | --- | --- |
 | `@kervan/core` | `createApp`, tool definitions, input and output validation, timeouts, error masking, middleware, the tool registry and its change notifications. No transport, no network, no files. | the official MCP SDK (`@modelcontextprotocol/server`) |
-| `@kervan/transport` | Serves an app: stdio and Streamable HTTP on Node, a fetch handler for Workers, Deno and Bun, Host and Origin checks, `authenticate` and `resolveServer`, and `createTestClient` for tests. | `@kervan/core` |
+| `@kervan/transport` | Serves an app: stdio and Streamable HTTP on Node, a standard fetch handler (tested on Node), Host and Origin checks, `authenticate` and `resolveServer`, and `createTestClient` for tests. | `@kervan/core` |
 | `@kervan/spec-runtime` | Reads a `kervan.yaml` and turns each entry into an ordinary tool definition that makes an HTTP request: templates, SSRF protection, secret redaction, `select` in a separate process, a rate limit per tool. | `@kervan/core` |
 | `kervan` | The command line: `kervan create` (a new project), `kervan dev` (hot reload and a terminal inspector) and `kervan run` (serve a spec). | the three libraries |
 | `create-kervan` | What `npm create kervan` runs: it calls `kervan create`. | `kervan` |
