@@ -26,7 +26,7 @@ described in `docs/THREAT-MODEL-STUDIO.md`.
 - **Threat model**, "Known limits" (and T19's limit): the accepted risks, including those from
   earlier phases.
 - **Not available:** the independent reviews at the end of phases 4a and 4c also had findings
-  that were fixed (recorded in `CLAUDE.md` and the threat model), but **no record** of what else
+  that were fixed (recorded in the threat model), but **no record** of what else
   they suspected without proof was kept. Nothing from them is listed below.
 
 Status: **open** (nothing done yet), **accepted** (a known limit, with the reason),

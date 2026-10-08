@@ -1,28 +1,26 @@
 // The project's domain is for people (docs, contact details, the website) and for naming the editor
 // schema. Code never talks to it: no telemetry, no update checks, no remote schemas. This test keeps
 // the domain out of every place it could turn into a network request.
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import { existsSync, readFileSync, statSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
 const DOMAIN = "getkervan.dev"
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
-const SKIP = new Set(["node_modules", ".git", "dist", "dist-web", "coverage", ".playwright-mcp"])
-// The website's build output and Hugo's cache and lock (gitignored; the lock is held during a build).
-const SKIP_PATHS = new Set(
-  ["site/public", "site/resources", "site/.hugo_build.lock"].map((p) => path.join(root, p)),
-)
-
+/** The repository's files: tracked, or new and not ignored (what a commit would add). */
 function files(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    if (SKIP.has(name)) return []
-    const full = path.join(dir, name)
-    if (SKIP_PATHS.has(full)) return []
-    const stat = statSync(full)
-    if (stat.isDirectory()) return files(full)
-    return stat.size < 4_000_000 ? [full] : []
-  })
+  const listed = execFileSync(
+    "git",
+    ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+    { cwd: dir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  )
+  return listed
+    .split("\0")
+    .filter(Boolean)
+    .map((file) => path.join(dir, file))
+    .filter((full) => existsSync(full) && statSync(full).size < 4_000_000)
 }
 
 const mentions = files(root)

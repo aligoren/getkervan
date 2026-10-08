@@ -8,11 +8,8 @@ coverage/
 .env.*
 !.env.example
 dist-web/
-.playwright-mcp/
 .kervan-studio/
 
-# Local Claude Code settings of whoever works on the repository
-.claude/
 
 # The website build (Hugo)
 site/public/

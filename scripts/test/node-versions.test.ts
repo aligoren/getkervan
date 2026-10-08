@@ -4,7 +4,8 @@
 // needs 22.18 in the framework's tests, and 24.x before 24.21 crashes on Windows). The libraries
 // keep `>=22` on purpose: who uses them chooses their own Node.js (docs/REVIEW-NOTES.md).
 // This test keeps every package.json, the version checks and the documents on that range.
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
@@ -70,15 +71,14 @@ describe("the supported Node.js range", () => {
   })
 })
 
-const SKIP = new Set(["node_modules", ".git", "dist", "dist-web", "coverage", ".playwright-mcp"])
-
+/** The repository's Markdown files: tracked, or new and not ignored (what a commit would add). */
 function markdown(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    if (SKIP.has(name)) return []
-    const full = path.join(dir, name)
-    if (statSync(full).isDirectory()) return markdown(full)
-    return name.endsWith(".md") ? [path.relative(root, full).split(path.sep).join("/")] : []
-  })
+  const listed = execFileSync(
+    "git",
+    ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.md"],
+    { cwd: dir, encoding: "utf8" },
+  )
+  return listed.split("\0").filter((file) => file && existsSync(path.join(dir, file)))
 }
 
 describe("documents", () => {
@@ -94,8 +94,7 @@ describe("documents", () => {
   })
 
   it('name no other minimum ("22.18+", "24.15.0 or later", ...)', () => {
-    // CLAUDE.md is the project's decision log: it keeps older values as history.
-    const files = markdown(root).filter((file) => file !== "CLAUDE.md")
+    const files = markdown(root)
     const allowed = new Set(["22.23.3", "24.21.0", "24.21"])
     const stale: string[] = []
     for (const file of files) {

@@ -268,7 +268,7 @@ Every claim on the landing page, and what backs it. When a claim changes, change
 | `list_changed` once per batch, only on a real change; none for 2025-era HTTP clients | `packages/transport/test/dynamic.test.ts`; the registry page's example runs in `site:verify --examples` |
 | Fetch runtimes (Workers, Deno, Bun) via `toFetchHandler`; `allowedHosts`/`allowedOrigins` | `packages/transport/src/index.ts`; transport tests |
 | Timeouts, size limits, rate limits (spec tools), Host and Origin checks by default | `limits.toolTimeoutMs` (core, 30 s), `HTTP_DEFAULTS`, `SPEC_LIMITS` and the per-tool rate limit (spec-runtime), `allowedHosts` (transport); their tests |
-| SSRF: public addresses only, DNS resolved once and pinned, redirects refused unless allowed then rechecked, metadata always refused | `packages/spec-runtime/src/network.ts`; network tests with mutation runs (CLAUDE.md, Aşama 3) |
+| SSRF: public addresses only, DNS resolved once and pinned, redirects refused unless allowed then rechecked, metadata always refused | `packages/spec-runtime/src/network.ts`; network tests, mutation-tested during development |
 | Secret redaction in every encoding Kervan knows | `SecretVault` (raw, URL, form, JSON, number forms) and its tests |
 | Studio: AES-256-GCM under a master key you keep | `apps/studio/src/vault.ts`; vault tests |
 | Users and roles; sessions end on password and role changes; throttled sign-ins; admin's password for sensitive changes | `apps/studio/src/accounts.ts` (`deleteSessionsOf` on password, role and disable), `limiter.ts`; Studio tests |
@@ -276,7 +276,7 @@ Every claim on the landing page, and what backs it. When a claim changes, change
 | `select` in a separate process: empty environment, memory limit, timeout, no network, no file writes, no child processes | `packages/spec-runtime/src/select-child.ts` and `selectProcess()` in `select.ts` (Node permission model, network closed in the child); its tests |
 | Audit log the database refuses to change or delete; never a password, key or secret value | database triggers refusing UPDATE and DELETE (`apps/studio/drizzle/0001_immutable.sql`, `0002_integrity.sql`); `test/audit-catalogue.test.ts` |
 | Every server exports as `kervan.yaml` and runs with `kervan run` | `apps/studio/src/export.ts`; `apps/studio/test/export.test.ts` |
-| "Implemented and covered by tests"; "mutation-tested" | the tests named above; the mutation runs (each check broken on purpose, a test had to fail) were done by hand and are recorded in CLAUDE.md, for SSRF, redaction, origin checks and this site's rules |
+| "Implemented and covered by tests"; "mutation-tested" | the tests named above; the mutation runs (each check broken on purpose, a test had to fail) were done by hand during development, for SSRF, redaction, origin checks and this site's rules |
 | The `tools/list` and call output shown | `site/data/generated/example.json` from a real run; `site-data.test.ts` checks it against today's server |
 
 There are no customer names, testimonials, download counts, benchmarks or competitor comparisons

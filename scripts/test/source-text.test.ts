@@ -1,13 +1,13 @@
 // No source file may contain invisible or text-direction characters: a bidi override or a
 // zero-width character in code can make it read differently from what runs ("Trojan Source").
 // Tests and code that need such characters build them from code points.
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import { existsSync, readFileSync, statSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
-const SKIP = new Set(["node_modules", ".git", "dist", "dist-web", "coverage", ".playwright-mcp"])
 const TEXT = /\.(ts|tsx|mts|mjs|js|json|md|css|html|ya?ml|txt|sql)$/
 
 // The same classes as apps/studio/src/display-text.ts: controls other than tab, line feed and
@@ -18,14 +18,18 @@ const INVISIBLE = new RegExp(
   "u",
 )
 
+/** The repository's text files: tracked, or new and not ignored (what a commit would add). */
 function files(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    if (SKIP.has(name)) return []
-    const full = path.join(dir, name)
-    const stat = statSync(full)
-    if (stat.isDirectory()) return files(full)
-    return TEXT.test(name) && stat.size < 4_000_000 ? [full] : []
-  })
+  const listed = execFileSync(
+    "git",
+    ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+    { cwd: dir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  )
+  return listed
+    .split("\0")
+    .filter((file) => TEXT.test(file))
+    .map((file) => path.join(dir, file))
+    .filter((full) => existsSync(full) && statSync(full).size < 4_000_000)
 }
 
 describe("source files", () => {

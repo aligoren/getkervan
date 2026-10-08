@@ -9,8 +9,7 @@ repository exists; the weekly site check (`site-check.yml`) on its schedule; pub
 
 ## First release: what the maintainer does
 
-These need an account, a payment method, a legal decision or a person's approval; Claude Code
-cannot do them.
+These need an account, a payment method, a legal decision or a person's approval.
 
 **GitHub**
 
@@ -65,18 +64,18 @@ cannot do them.
 - [ ] Set the variable `KERVAN_ALLOW_PUBLISH` to `1` on the `release` environment, only when
       ready to publish (and back to empty afterwards, if you like the extra step).
 
-## What Claude Code can do
+## What can be prepared without those accounts
 
-- Prepare the content changes above as a pull request: the `repository`/`bugs`/`homepage` fields,
+- The content changes above, as a pull request: the `repository`/`bugs`/`homepage` fields,
   removing the "Not published yet" notes, the site link and `yaml-language-server` lines, the
   version bump, CODEOWNERS and the issue template link once the names are known.
-- Run the whole check chain locally, clean clones on Node 22 and 24 and on Linux in Docker, and
-  `pnpm try:new` against locally packed tarballs, and report the results.
-- Dry runs: `pnpm -r --filter "./packages/*" pack` and inspect the tarballs; publishing to a local
+- The whole check chain locally, clean clones on Node 22 and 24 and on Linux in Docker, and
+  `pnpm try:new` against locally packed tarballs.
+- Dry runs: `pnpm -r --filter "./packages/*" pack` and the tarballs inspected; publishing to a local
   registry (Verdaccio) and installing from it, as before 0.1.
-- Write release notes from the git history.
-- It does not create accounts, change repository or npm settings, approve the `release`
-  environment, or publish.
+- Release notes from the git history.
+- Not without the maintainer: creating accounts, changing repository or npm settings, approving the
+  `release` environment, publishing.
 
 ## The website
 
