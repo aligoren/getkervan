@@ -324,6 +324,7 @@ export function Users(props: { currentUserId?: string; currentUserEmail?: string
       {pending?.kind === "role" ? (
         <RoleDialog
           user={pending.user}
+          self={pending.user.id === props.currentUserId}
           adminEmail={adminEmail}
           onClose={close}
           onConfirm={async (role, adminPassword) => {
@@ -455,6 +456,8 @@ function EmailDialog(props: {
 
 function RoleDialog(props: {
   user: User
+  /** The signed-in admin's own account: changing it signs them out. */
+  self?: boolean
   adminEmail: string
   onClose: () => void
   onConfirm: (role: Role, adminPassword: string) => Promise<void>
@@ -465,6 +468,11 @@ function RoleDialog(props: {
   return (
     <FormDialog
       title={`Change the role of ${props.user.email}`}
+      description={
+        props.self
+          ? "You will be signed out everywhere, and sign in again with the new role."
+          : "They are signed out everywhere, and sign in again with the new role."
+      }
       submitLabel={`Make ${role}`}
       onClose={props.onClose}
       onSubmit={async () => {

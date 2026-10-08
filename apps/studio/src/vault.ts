@@ -122,8 +122,9 @@ export class DbSecretStore implements WritableSecretStore {
    * rows written under an older key version with the current one. Returns how many it rewrapped.
    * Throws if any row cannot be read: Studio must not run with secrets it cannot use or protect.
    */
-  verifyAndRewrap(now = Date.now()): number {
+  verifyAndRewrap(now = Date.now(), options: { rewrap?: boolean } = {}): number {
     const current = this.#keys.current()
+    const rewrap = options.rewrap ?? true
     let rewrapped = 0
     for (const row of this.#db.select().from(secrets).all()) {
       const scope = { workspaceId: row.workspaceId } as WorkspaceScope
@@ -137,7 +138,7 @@ export class DbSecretStore implements WritableSecretStore {
             "KERVAN_STUDIO_PREVIOUS_MASTER_KEYS for older versions).",
         )
       }
-      if (row.keyVersion !== current.version) {
+      if (rewrap && row.keyVersion !== current.version) {
         const sealed = this.#seal(scope, row.serverId, row.name, value)
         this.#db
           .update(secrets)

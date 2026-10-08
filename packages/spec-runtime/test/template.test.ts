@@ -1,6 +1,6 @@
 import { createApp, InMemoryToolRegistry } from "@kervan/core"
 import { describe, expect, it } from "vitest"
-import { applySpec, loadSpec, SecretVault } from "../src/index.js"
+import { applySpec, loadSpec, SecretError, SecretVault } from "../src/index.js"
 import { parseTemplate, TemplateError } from "../src/template.js"
 
 describe("template grammar", () => {
@@ -52,6 +52,17 @@ describe("SecretVault", () => {
 
   it("rejects values shorter than 8 characters", () => {
     expect(() => new SecretVault().add("S", "1234567")).toThrow(/shorter than 8/)
+  })
+
+  // Its URL-encoded form does not exist (encodeURIComponent throws): a clear error, not a crash.
+  it("rejects values with an unpaired surrogate, by name", () => {
+    const value = `long-enough-${String.fromCodePoint(0xdc00)}`
+    expect(() => new SecretVault().add("S", value)).toThrow(SecretError)
+    expect(() => new SecretVault().add("S", value)).toThrow(/Secret S is not valid Unicode text/)
+    // A pair is a character like any other.
+    const vault = new SecretVault()
+    vault.add("S", `long-enough-${String.fromCodePoint(0x1f511)}`)
+    expect(vault.redact(`x long-enough-${String.fromCodePoint(0x1f511)} y`)).toBe("x [redacted] y")
   })
 })
 

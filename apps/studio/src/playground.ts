@@ -37,6 +37,9 @@ export class PlaygroundTokens {
     if (!payload || !signature || extra !== undefined) return undefined
     const expected = Buffer.from(this.#sign(payload), "base64url")
     const actual = Buffer.from(signature, "base64url")
+    // Base64url decoding is lenient (unused bits, stray characters): only the one canonical
+    // spelling of a signature is accepted, so a token has exactly one form.
+    if (actual.toString("base64url") !== signature) return undefined
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return undefined
     try {
       const grant = JSON.parse(

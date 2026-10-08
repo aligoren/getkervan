@@ -8,7 +8,7 @@ import { type OpenedDatabase, openDatabase } from "./db/open.js"
 import { purgeCalls } from "./db/repos/call-logs.js"
 import { deleteExpiredSessions } from "./db/repos/sessions.js"
 import { issueSetupToken, SETUP_TOKEN_TTL_MS } from "./db/repos/tokens.js"
-import { listAdmins } from "./db/repos/users.js"
+import { anyAdminExists, listAdmins } from "./db/repos/users.js"
 import { defaultWorkspace } from "./db/repos/workspaces.js"
 import { createStudioHttp } from "./http.js"
 import { envKeyProvider, type KeyProvider } from "./keys.js"
@@ -24,6 +24,9 @@ import { Studio } from "./studio.js"
 import { DbSecretStore } from "./vault.js"
 
 export const DATABASE_FILE = "studio.db"
+
+/** How often Studio, while it has no admin, looks for one made by `create-admin`. */
+export const ADMIN_WATCH_MS = 1000
 
 export interface StartOptions {
   /** Where messages for the operator go (setup token, listening address). Default: stderr. */
@@ -131,33 +134,50 @@ export async function startStudio(
     }
 
     const host = bindHost(config, hasAdmin)
+    let adminSeen = hasAdmin
+    // Until now Studio listened on loopback only; with an admin it may serve its real host.
+    const adminCreated = () => {
+      if (adminSeen) return
+      adminSeen = true
+      clearInterval(adminWatch)
+      if (host === config.host) return
+      // After the setup response is out: stop accepting on loopback (open connections finish),
+      // then listen on the real host. Both may cover the same port (0.0.0.0 includes loopback).
+      setTimeout(() => {
+        for (const listening of servers.splice(0)) {
+          listening.close()
+          closing.push(listening)
+        }
+        void rebind(config.host).then(
+          () => print(`The first admin exists: now listening on ${config.host}.`),
+          async (error: unknown) => {
+            // Never end up listening nowhere: go back to loopback and say so.
+            print(
+              `Could not listen on ${config.host} (${(error as Error).message}); still ` +
+                `listening on ${host}. Fix KERVAN_STUDIO_HOST and restart Studio.`,
+            )
+            await rebind(host).catch((fallback: unknown) =>
+              print(`Could not listen on ${host} either: ${(fallback as Error).message}`),
+            )
+          },
+        )
+      }, 0)
+    }
+    // An admin made by `kervan-studio create-admin`, in another process, counts too.
+    const adminWatch = setInterval(() => {
+      try {
+        if (!anyAdminExists(database.db)) return
+      } catch {
+        return
+      }
+      if (!adminSeen) print("An admin was created from the command line.")
+      adminCreated()
+    }, ADMIN_WATCH_MS)
+    adminWatch.unref()
+    if (hasAdmin) clearInterval(adminWatch)
     const http = createStudioHttp(studio, config, {
       ...(options.webRoot ? { webRoot: options.webRoot } : {}),
-      // Until now Studio listened on loopback only; with an admin it may serve its real host.
-      onAdminCreated: () => {
-        if (host === config.host) return
-        // After the setup response is out: stop accepting on loopback (open connections finish),
-        // then listen on the real host. Both may cover the same port (0.0.0.0 includes loopback).
-        setTimeout(() => {
-          for (const listening of servers.splice(0)) {
-            listening.close()
-            closing.push(listening)
-          }
-          void rebind(config.host).then(
-            () => print(`The first admin exists: now listening on ${config.host}.`),
-            async (error: unknown) => {
-              // Never end up listening nowhere: go back to loopback and say so.
-              print(
-                `Could not listen on ${config.host} (${(error as Error).message}); still ` +
-                  `listening on ${host}. Fix KERVAN_STUDIO_HOST and restart Studio.`,
-              )
-              await rebind(host).catch((fallback: unknown) =>
-                print(`Could not listen on ${host} either: ${(fallback as Error).message}`),
-              )
-            },
-          )
-        }, 0)
-      },
+      onAdminCreated: adminCreated,
     })
     const server = await listen(host)
     const address = server.address() as AddressInfo
@@ -200,6 +220,7 @@ export async function startStudio(
       database,
       close: async () => {
         clearInterval(purgeTimer)
+        clearInterval(adminWatch)
         await studio.close()
         for (const listening of closing) {
           if ("closeAllConnections" in listening) listening.closeAllConnections()

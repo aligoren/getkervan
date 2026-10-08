@@ -150,7 +150,8 @@ describe("sessions", () => {
       body: { role: "member", adminPassword: PASSWORD },
     })
     expect(change.status).toBe(200)
-    expect((await s.request("GET", "/api/users", session)).status).toBe(403)
+    // Since the hardening round a role change ends the user's sessions: not even signed in.
+    expect((await s.request("GET", "/api/users", session)).status).toBe(401)
   })
 
   it("a user who must change their password gets no playground token or server list", async () => {

@@ -47,6 +47,7 @@ const BUSY_TIMEOUT_MS = 5_000
  *
  * On POSIX systems the data directory is made owner-only (0700) and the database files 0600;
  * on Windows they inherit the directory's ACL (keep the data directory in a private location).
+ * Temporary data stays in memory (`temp_store = MEMORY`), never in the system's temp folder.
  */
 export function openDatabase(
   file: string,
@@ -68,6 +69,9 @@ export function openDatabase(
     sqlite.pragma(`busy_timeout = ${BUSY_TIMEOUT_MS}`)
     sqlite.pragma("foreign_keys = ON")
     sqlite.pragma("synchronous = NORMAL")
+    // Sorts and temporary tables stay in memory: SQLite's temporary files would otherwise land in
+    // the system's temp folder, outside the data directory and its permissions.
+    sqlite.pragma("temp_store = MEMORY")
     const db = drizzle(sqlite, { schema })
     const migrationsFolder = options.migrationsFolder ?? MIGRATIONS_FOLDER
     try {

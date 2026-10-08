@@ -83,6 +83,10 @@ export function checkSecretInput(name: string, value: string): void {
   if (Buffer.byteLength(value) > MAX_SECRET_BYTES) {
     throw new SecretInputError(`A secret value can be at most ${MAX_SECRET_BYTES} bytes.`)
   }
+  // Stored as UTF-8, an unpaired surrogate would come back as another character.
+  if (/\p{Cs}/u.test(value)) {
+    throw new SecretInputError("A secret value must be valid Unicode text (no unpaired surrogate).")
+  }
 }
 
 /**

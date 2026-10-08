@@ -21,9 +21,56 @@ export function ignoreNewDataDirectory(dir: string): void {
   }
 }
 
+/** Git for Windows reads "/dev/null" as NUL (it refuses Windows' own name for it). */
+const DEV_NULL = "/dev/null"
+
+/**
+ * Settings that make git run a program: a repository's own `.git/config` can set them, and the
+ * data directory may sit in a tree someone else prepared (an extracted archive). Turned off on the
+ * command line, which overrides every config file.
+ */
+const NO_PROGRAMS = [
+  "core.fsmonitor=false",
+  `core.hooksPath=${DEV_NULL}`,
+  "core.askPass=",
+  "credential.helper=",
+  "diff.external=",
+  "protocol.allow=never",
+]
+
+/** Variables git needs to start (Windows needs its system folders); every `GIT_*` one is dropped. */
+const KEPT_ENV = ["PATH", "Path", "SYSTEMROOT", "SystemRoot", "WINDIR", "TEMP", "TMP", "LANG"]
+
+/**
+ * The environment git runs with: no variable that changes what git does (`GIT_DIR`,
+ * `GIT_CONFIG_*`, `GIT_EXTERNAL_DIFF`, ...), no system or global config file (so no
+ * `safe.directory` exception from them either: a repository owned by another user is refused, and
+ * the check is skipped), no prompts and no optional locks (read-only).
+ */
+export function gitEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const clean: NodeJS.ProcessEnv = {}
+  for (const name of KEPT_ENV) if (env[name] !== undefined) clean[name] = env[name]
+  return {
+    ...clean,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: DEV_NULL,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_OPTIONAL_LOCKS: "0",
+  }
+}
+
+/** The arguments of a read-only git command, with every program-running setting off. */
+export function gitArguments(dir: string, args: string[]): string[] {
+  return [...NO_PROGRAMS.flatMap((setting) => ["-c", setting]), "-C", dir, ...args]
+}
+
 function git(dir: string, args: string[]): boolean | undefined {
   try {
-    execFileSync("git", ["-C", dir, ...args], { stdio: "ignore", timeout: 5000 })
+    execFileSync("git", gitArguments(dir, args), {
+      stdio: "ignore",
+      timeout: 5000,
+      env: gitEnvironment(),
+    })
     return true
   } catch (error) {
     // No git at all, or it could not run: nothing to say.

@@ -666,7 +666,11 @@ export function createApi(studio: Studio, options: ApiOptions): Hono<ApiEnv> {
     const body = await parse(c, roleBody)
     const refused = await confirmAdmin(c, body.adminPassword)
     if (refused) return refused
-    return c.json({ user: setUserRole(db, scopeOf(c), c.req.param("id"), body.role, actor(c)) })
+    const before = getUser(db, scopeOf(c), c.req.param("id"))
+    const user = setUserRole(db, scopeOf(c), c.req.param("id"), body.role, actor(c))
+    // Their sessions ended with the change; their open playground streams end here.
+    if (before?.role !== user.role) studio.gateway.endPlayground(user.id)
+    return c.json({ user })
   })
 
   api.put("/users/:id/email", signedIn("admin"), async (c) => {

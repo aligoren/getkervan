@@ -341,7 +341,8 @@ describe("rule: every change needs the session's CSRF token and Studio's origin,
     expect(find("user.role")).toMatchObject({
       actorId: owner.id,
       targetId: memberUser.id,
-      details: { from: "admin", to: "member" },
+      // The first change (to admin) already ended the member's session.
+      details: { from: "admin", to: "member", sessionsEnded: 0 },
     })
     expect(find("user.email")).toMatchObject({
       targetId: memberUser.id,
@@ -350,7 +351,7 @@ describe("rule: every change needs the session's CSRF token and Studio's origin,
     expect(find("user.password_reset")).toMatchObject({
       actorId: owner.id,
       targetId: memberUser.id,
-      details: { generated: true, sessionsEnded: 1 },
+      details: { generated: true, sessionsEnded: 0 },
     })
     expect(find("user.password_change")).toMatchObject({ actorId: owner.id, targetId: owner.id })
     expect(find("session.end_others")).toMatchObject({ actorId: owner.id })

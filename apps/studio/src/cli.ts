@@ -1,10 +1,12 @@
 import path from "node:path"
 import { parseArgs } from "node:util"
+import { checkEmail, createFirstAdmin } from "./accounts.js"
 import { ConfigError, loadConfig } from "./config.js"
 import { hashPassword, passwordProblem, randomToken } from "./crypto.js"
 import { DatabaseError, openDatabase, storedSecretCount, writeTransaction } from "./db/open.js"
 import { recordAudit } from "./db/repos/audit.js"
 import {
+  anyAdminExists,
   deleteSessionsOf,
   listAdmins,
   normalizeEmail,
@@ -13,8 +15,11 @@ import {
 } from "./db/repos/users.js"
 import { defaultWorkspace } from "./db/repos/workspaces.js"
 import { envKeyProvider, KeyError } from "./keys.js"
+import { nodeVersionProblem } from "./node-version.js"
 import { DATABASE_FILE, startStudio } from "./server.js"
-import { VaultError } from "./vault.js"
+import { StudioError } from "./studio.js"
+import { InputCancelled, readHiddenLine } from "./tty.js"
+import { DbSecretStore, VaultError } from "./vault.js"
 
 export interface StudioCliIo {
   out: (line: string) => void
@@ -23,12 +28,23 @@ export interface StudioCliIo {
   cwd: string
   /** Reads all of stdin (for `--password-stdin`). */
   readStdin: () => Promise<string>
+  /**
+   * Reads a line typed in the terminal without showing it (a password). Left out: the process's
+   * own terminal, when stdin is one. `undefined`: there is no terminal.
+   */
+  readSecret?: ((prompt: string) => Promise<string>) | undefined
+  /** The Node.js version to check (tests). Default: this process's. */
+  nodeVersion?: string
 }
 
 const HELP = `Usage: kervan-studio <command> [options]
 
 Commands:
   start          Start Studio (the default)
+  create-admin   Create the first admin from this shell (no setup token; refused once an admin
+                 exists). The password is typed hidden, or read from stdin; never an argument.
+    --email <e>        The admin's email (required)
+    --password-stdin   Read the password from stdin instead of asking for it
   reset-admin    Set a new password for an admin, sign them out everywhere, and reactivate
                  them if they were deactivated
     --email <e>        Which admin (required when there are several)
@@ -56,7 +72,10 @@ export async function runStudioCli(argv: string[], io: StudioCliIo): Promise<num
       io.out(HELP)
       return 0
     }
+    const unsupported = nodeVersionProblem(io.nodeVersion ?? process.versions.node)
+    if (unsupported) throw new UsageError(unsupported)
     if (command === "start") return await start(rest, io)
+    if (command === "create-admin") return await createAdmin(rest, io)
     if (command === "reset-admin") return await resetAdmin(rest, io)
     io.err(`Unknown command "${command}".\n\n${HELP}`)
     return 1
@@ -127,6 +146,92 @@ function masterKeys(env: NodeJS.ProcessEnv, dataDir: string) {
         "secrets with it.",
     )
   }
+}
+
+const PASSWORD_ARGUMENT =
+  "create-admin does not take the password as an argument (it would be kept in shell history " +
+  "and shown in the process list). Type it when asked, or pipe it with --password-stdin."
+
+const ADMIN_EXISTS =
+  "Studio already has an admin; create-admin only creates the first one. Admins add users in " +
+  "Studio (Users); to recover an admin account, use kervan-studio reset-admin."
+
+/**
+ * Creates the first admin without the browser (a container, where the loopback-only setup page
+ * cannot be reached). Resolves the data directory and the master key like `start`, so a missing
+ * or wrong key is reported here too. A running Studio is not needed; one that is running sees
+ * the new admin within a few seconds and starts listening on its configured host.
+ */
+async function createAdmin(argv: string[], io: StudioCliIo): Promise<number> {
+  if (argv.some((arg) => /^--password(=|$)/.test(arg))) throw new UsageError(PASSWORD_ARGUMENT)
+  const { values } = parse(argv, {
+    email: { type: "string" },
+    "password-stdin": { type: "boolean" },
+  })
+  const email = values.email as string | undefined
+  if (!email) {
+    throw new UsageError("Give the admin's email: kervan-studio create-admin --email <email>")
+  }
+  const config = loadConfig(io.env, io.cwd)
+  const keys = masterKeys(io.env, config.dataDir)
+  const database = openDatabase(path.join(config.dataDir, DATABASE_FILE))
+  try {
+    // Every stored secret must decrypt with the key, as at a start (nothing is re-encrypted here).
+    new DbSecretStore(database.db, keys).verifyAndRewrap(Date.now(), { rewrap: false })
+    // Before asking for a password nobody needs (both checked again when writing). The email is
+    // shown in the prompt, so it must be one people can see as it is.
+    if (anyAdminExists(database.db)) throw new UsageError(ADMIN_EXISTS)
+    checkEmail(email)
+    const password = await newPassword(email, values["password-stdin"] === true, io)
+    const { user, setupTokensRetired } = await createFirstAdmin(database.db, { email, password })
+    io.out(`Created the admin ${user.email}. Sign in at ${config.publicUrl.origin}.`)
+    if (setupTokensRetired > 0) io.out("The setup token Studio printed no longer works.")
+    io.out(
+      "A running Studio starts listening on KERVAN_STUDIO_HOST within a few seconds; " +
+        "otherwise start it now.",
+    )
+    return 0
+  } catch (error) {
+    if (error instanceof StudioError) {
+      throw new UsageError(
+        error.message === "Studio is already set up." ? ADMIN_EXISTS : error.message,
+      )
+    }
+    throw error
+  } finally {
+    database.close()
+  }
+}
+
+/** The new admin's password: from stdin, or typed twice in the terminal, never shown. */
+async function newPassword(email: string, fromStdin: boolean, io: StudioCliIo): Promise<string> {
+  if (fromStdin) return (await io.readStdin()).replace(/\r?\n$/, "")
+  const ask = "readSecret" in io ? io.readSecret : terminalReader()
+  if (!ask) {
+    throw new UsageError(
+      "No terminal to type the password in. Run with a terminal (docker exec -it ...), or pipe " +
+        "the password with --password-stdin.",
+    )
+  }
+  try {
+    const password = await ask(`Password for ${email}: `)
+    const problem = passwordProblem(password)
+    if (problem) throw new UsageError(problem)
+    if ((await ask("Type it again: ")) !== password) {
+      throw new UsageError("The passwords do not match; nothing was changed.")
+    }
+    return password
+  } catch (error) {
+    if (error instanceof InputCancelled) throw new UsageError("Cancelled; nothing was changed.")
+    throw error
+  }
+}
+
+/** Reads hidden input from this process's terminal, when stdin is one. */
+function terminalReader(): ((prompt: string) => Promise<string>) | undefined {
+  const stdin = process.stdin
+  if (!stdin.isTTY) return undefined
+  return (prompt) => readHiddenLine(prompt, stdin, process.stderr)
 }
 
 async function resetAdmin(argv: string[], io: StudioCliIo): Promise<number> {

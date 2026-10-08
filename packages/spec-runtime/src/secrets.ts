@@ -71,6 +71,12 @@ export class SecretVault {
           "cannot be redacted reliably; use a longer secret.",
       )
     }
+    // An unpaired surrogate has no URL or UTF-8 form, so its encoded forms could not be listed.
+    if (/\p{Cs}/u.test(value)) {
+      throw new SecretError(
+        `Secret ${name} is not valid Unicode text (it has an unpaired surrogate).`,
+      )
+    }
     const forms = new Set([
       value,
       encodeURIComponent(value),

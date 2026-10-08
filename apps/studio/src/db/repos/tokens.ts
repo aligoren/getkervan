@@ -13,15 +13,24 @@ export function issueSetupToken(db: Db, now = Date.now()): { token: string; expi
   const token = randomToken(32)
   const expiresAt = now + SETUP_TOKEN_TTL_MS
   writeTransaction(db, (tx) => {
-    tx.update(oneTimeTokens)
-      .set({ usedAt: now })
-      .where(and(eq(oneTimeTokens.purpose, "setup"), isNull(oneTimeTokens.usedAt)))
-      .run()
+    retireSetupTokens(tx, now)
     tx.insert(oneTimeTokens)
       .values({ hash: sha256(token), purpose: "setup", createdAt: now, expiresAt })
       .run()
   })
   return { token, expiresAt }
+}
+
+/**
+ * Marks every unused setup token as used (a new one is issued, or an admin was created another
+ * way). Returns how many there were.
+ */
+export function retireSetupTokens(db: Db, now = Date.now()): number {
+  return db
+    .update(oneTimeTokens)
+    .set({ usedAt: now })
+    .where(and(eq(oneTimeTokens.purpose, "setup"), isNull(oneTimeTokens.usedAt)))
+    .run().changes
 }
 
 /**

@@ -3,7 +3,7 @@ import { type Db, writeTransaction } from "./db/open.js"
 import { listActiveKeysCreatedBy, revokeApiKey } from "./db/repos/api-keys.js"
 import { type Actor, recordAudit } from "./db/repos/audit.js"
 import { deleteOtherSessions, sessionAlive } from "./db/repos/sessions.js"
-import { consumeSetupToken, setupTokenValid } from "./db/repos/tokens.js"
+import { consumeSetupToken, retireSetupTokens, setupTokenValid } from "./db/repos/tokens.js"
 import {
   anyAdminExists,
   countActiveAdmins,
@@ -47,7 +47,7 @@ export function loginTimingPrepared(): boolean {
 }
 
 /** An email people can sign in with, and that shows the same to everyone: no invisible characters. */
-function checkEmail(email: string): void {
+export function checkEmail(email: string): void {
   const unsafe = unsafeTextProblem(email, "The email")
   if (unsafe) throw new StudioError("invalid", unsafe)
   if (!EMAIL.test(email.trim())) throw new StudioError("invalid", "Enter a valid email address.")
@@ -84,11 +84,11 @@ export async function setupAdmin(
 ): Promise<{ scope: WorkspaceScope; user: User }> {
   checkCredentials(input.email, input.password)
   // Checked before the (slow) password hash, and again when the token is used below.
-  if (anyAdminExists(db)) throw new StudioError("conflict", "Studio is already set up.")
+  if (anyAdminExists(db)) throw alreadySetUp()
   if (!setupTokenValid(db, input.token)) throw invalidSetupToken()
   const passwordHash = await hashPassword(input.password)
   return writeTransaction(db, (tx) => {
-    if (anyAdminExists(tx)) throw new StudioError("conflict", "Studio is already set up.")
+    if (anyAdminExists(tx)) throw alreadySetUp()
     if (!consumeSetupToken(tx, input.token)) throw invalidSetupToken()
     const scope = defaultWorkspace(tx)
     const user = createUser(tx, scope, { email: input.email, passwordHash, role: "admin" })
@@ -103,6 +103,51 @@ export async function setupAdmin(
     )
     return { scope, user }
   })
+}
+
+/**
+ * Creates the first admin from the operator's shell (`kervan-studio create-admin`): no setup token,
+ * since only someone who can run commands on Studio's host and read its master key gets here.
+ * The same checks as setup in the browser. Refused once any admin exists, checked again in the
+ * write transaction (BEGIN IMMEDIATE), so a setup in a running Studio and this command cannot both
+ * create one. Every unused setup token is retired in the same transaction: the one a running
+ * Studio printed no longer works.
+ */
+export async function createFirstAdmin(
+  db: Db,
+  input: { email: string; password: string },
+): Promise<{ scope: WorkspaceScope; user: User; setupTokensRetired: number }> {
+  checkCredentials(input.email, input.password)
+  if (anyAdminExists(db)) throw alreadySetUp()
+  const passwordHash = await hashPassword(input.password)
+  try {
+    return writeTransaction(db, (tx) => {
+      if (anyAdminExists(tx)) throw alreadySetUp()
+      const setupTokensRetired = retireSetupTokens(tx)
+      const scope = defaultWorkspace(tx)
+      const user = createUser(tx, scope, { email: input.email, passwordHash, role: "admin" })
+      recordAudit(
+        tx,
+        scope,
+        { type: "cli" },
+        {
+          action: "studio.setup",
+          target: { type: "user", id: user.id },
+          details: { command: "create-admin", setupTokensRetired },
+        },
+      )
+      return { scope, user, setupTokensRetired }
+    })
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new StudioError("conflict", "A user with this email already exists.")
+    }
+    throw error
+  }
+}
+
+function alreadySetUp(): StudioError {
+  return new StudioError("conflict", "Studio is already set up.")
 }
 
 function invalidSetupToken(): StudioError {
@@ -315,7 +360,10 @@ export async function resetPassword(
 
 /**
  * Changes a user's role (admins only). The last active admin cannot become a member, checked in
- * the same transaction as the change, so two concurrent requests cannot both pass.
+ * the same transaction as the change, so two concurrent requests cannot both pass. All of the
+ * user's sessions end (and with them their playground tokens): they sign in again under the new
+ * role, so a session taken before a promotion never becomes an admin's. The caller ends their
+ * open playground streams.
  */
 export function setUserRole(
   db: Db,
@@ -340,10 +388,11 @@ export function setUserRole(
       throw new StudioError("conflict", "The last active admin cannot stop being an admin.")
     }
     updateUser(tx, scope, user.id, { role })
+    const sessionsEnded = deleteSessionsOf(tx, scope, user.id)
     recordAudit(tx, scope, actor, {
       action: "user.role",
       target: { type: "user", id: user.id },
-      details: { from: user.role, to: role },
+      details: { from: user.role, to: role, sessionsEnded },
     })
     return { ...user, role }
   })

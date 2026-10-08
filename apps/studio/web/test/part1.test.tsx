@@ -128,8 +128,9 @@ describe("the users page", () => {
     handler = (method) => (method === "GET" ? json({ users }) : json({ user: users[1] }))
     render(<Users currentUserId="a" currentUserEmail="admin@example.test" />)
     await chooseMenuItem(await actions(), "Change role")
-    // The dialog proposes the other role and says what it means.
+    // The dialog proposes the other role and says what it means, and that it signs them out.
     await screen.findByText(/Make member@example.test an admin\?/)
+    screen.getByText("They are signed out everywhere, and sign in again with the new role.")
     expect(puts()).toHaveLength(0)
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
@@ -179,6 +180,16 @@ describe("the users page", () => {
     fireEvent.keyDown(own, { key: "Enter" })
     await screen.findByRole("menuitem", { name: "Change role" })
     expect(screen.queryByRole("menuitem", { name: "Reset password" })).toBeNull()
+  })
+
+  it("warns an admin changing their own role that they will be signed out", async () => {
+    handler = () => json({ users })
+    render(<Users currentUserId="a" currentUserEmail="admin@example.test" />)
+    const own = await screen.findByRole("button", { name: "Actions for admin@example.test" })
+    await chooseMenuItem(own, "Change role")
+    await screen.findByText(
+      "You will be signed out everywhere, and sign in again with the new role.",
+    )
   })
 
   it("has no native select left anywhere in the web UI", () => {

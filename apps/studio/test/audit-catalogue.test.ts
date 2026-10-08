@@ -5,7 +5,10 @@ import { listAudit } from "../src/db/repos/audit.js"
 import { type ApiStudio, apiStudio, cookieOf, PASSWORD } from "./api-helpers.js"
 import { echoTool, spec } from "./helpers.js"
 
-/** Every action the web API records. (`kervan-studio reset-admin` also records user.password_reset.) */
+/**
+ * Every action the web API records. (`kervan-studio reset-admin` also records user.password_reset,
+ * and `kervan-studio create-admin` studio.setup.)
+ */
 export const AUDITED_ACTIONS = [
   "studio.setup",
   "login.success",

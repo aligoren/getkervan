@@ -78,12 +78,13 @@ describe("check-then-write operations", () => {
     )
     const second = createUser(db, scope, { email: "b@example.test", passwordHash, role: "admin" })
     const member = createUser(db, scope, { email: "m@example.test", passwordHash, role: "member" })
-    const session = createSession(db, scope, member.id)
     used.length = 0
 
     setUserDisabled(db, scope, second.id, true, actor)
     setUserRole(db, scope, member.id, "admin", actor)
     setUserEmail(db, scope, member.id, "renamed@example.test", actor)
+    // After the role change, which ends the user's sessions.
+    const session = createSession(db, scope, member.id)
     await changeOwnPassword(
       db,
       scope,

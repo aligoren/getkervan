@@ -178,7 +178,8 @@ async function runSpecCommand(argv: string[]): Promise<number> {
 
 /**
  * Finds `@kervan/studio`'s CLI module in `dir` or a parent: in a `node_modules` folder, or the
- * Studio package itself. Global folders (`NODE_PATH`) are not searched.
+ * Studio package itself. Global folders (`NODE_PATH`) are not searched. The module must be inside
+ * the package that names it: a `package.json` cannot point the CLI at a file elsewhere.
  */
 function findStudioCli(dir: string): string | undefined {
   for (let current = path.resolve(dir); ; current = path.dirname(current)) {
@@ -186,7 +187,10 @@ function findStudioCli(dir: string): string | undefined {
       try {
         const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"))
         const target = manifest.name === "@kervan/studio" && manifest.exports?.["./cli"]?.default
-        if (typeof target === "string") return path.join(root, target)
+        if (typeof target !== "string") continue
+        const entry = path.resolve(root, target)
+        const inside = path.relative(root, entry)
+        if (inside !== "" && !inside.startsWith("..") && !path.isAbsolute(inside)) return entry
       } catch {
         // No package here.
       }
