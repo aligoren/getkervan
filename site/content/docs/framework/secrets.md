@@ -12,6 +12,7 @@ next:
     note: 'serve the spec'
   - url: /docs/framework/security/
     text: 'Security model'
+menuTitle: Secrets
 ---
 
 ## Declaring and using a secret

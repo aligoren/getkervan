@@ -4,6 +4,7 @@ seoTitle: 'Connect a Kervan MCP server to Claude Code'
 description: Add a Kervan MCP server to Claude Code with claude mcp add, as a local stdio server or over HTTP, check that it connects, and remove it; with Windows notes.
 lead: Claude Code is an MCP client. One command adds a Kervan server to it, as a local process or as a URL.
 weight: 40
+menuTitle: 'Connect Claude Code'
 ---
 
 You need [Claude Code](https://code.claude.com/docs) and Kervan built from a clone

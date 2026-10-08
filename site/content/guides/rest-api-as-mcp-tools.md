@@ -4,6 +4,7 @@ seoTitle: 'Expose a REST API as MCP tools'
 description: 'Turn REST endpoints into MCP tools with Kervan: query strings, path parameters, a JSON POST body, an output schema, and API keys kept out of logs.'
 lead: Three endpoints of a REST API become three MCP tools, with typed inputs, chosen outputs, and room for an API key.
 weight: 30
+menuTitle: 'A REST API as tools'
 ---
 
 This guide uses [JSONPlaceholder](https://jsonplaceholder.typicode.com), a public test API that

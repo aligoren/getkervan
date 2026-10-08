@@ -4,6 +4,8 @@ seoTitle: 'Kervan Studio master key and data directory'
 description: Kervan Studio keeps its data in one SQLite file and encrypts secrets with a master key you hold. Lose the key and stored secrets are gone; back up both, apart.
 lead: Two things make a Studio installation, and you are responsible for keeping both.
 weight: 20
+group: Start
+menuTitle: 'Data and master key'
 ---
 
 {{< callout title="Lose the master key, lose the stored secrets" tone="warning" >}}

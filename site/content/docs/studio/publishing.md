@@ -4,6 +4,8 @@ seoTitle: Publish and roll back MCP servers in Kervan Studio
 description: Publishing a version in Kervan Studio updates the gateway in place; roll back by publishing an older version, or disable a server without deleting anything.
 lead: Publishing changes what MCP clients see, at once and in place.
 weight: 50
+group: Servers
+menuTitle: 'Publish and roll back'
 ---
 
 ## Publish

@@ -97,23 +97,52 @@ run("the built site", () => {
     const nav =
       /<nav class="?docs-nav"?[\s\S]*?<\/nav>/.exec(page("docs/framework/api/index.html"))?.[0] ??
       ""
-    const groups = [...nav.matchAll(/<h3>([^<]+)<\/h3>/g)].map((match) => match[1])
-    expect(groups).toEqual([
+    const groups = [
+      ...nav.matchAll(
+        /<details class="?nav-group"?( open)?>\s*<summary>([^<]+)<\/summary>([\s\S]*?)<\/details>/g,
+      ),
+    ].map((match) => ({ name: match[2], open: Boolean(match[1]), body: match[3] }))
+    expect(groups.map((group) => group.name)).toEqual([
       "Start",
       "Concepts",
       "Build with YAML",
       "Build with TypeScript",
       "Run and operate",
+      "Guides",
+      "More",
     ])
-    const typescript = nav.slice(
-      nav.indexOf("<h3>Build with TypeScript</h3>"),
-      nav.indexOf("<h3>Run and operate</h3>"),
-    )
+    // The current page's group is open, every other one closed (but its links are in the HTML).
+    expect(groups.filter((group) => group.open).map((group) => group.name)).toEqual([
+      "Build with TypeScript",
+    ])
+    const typescript = groups.find((group) => group.name === "Build with TypeScript")?.body ?? ""
     const names = [...typescript.matchAll(/<a [^>]*>([^<]+)<\/a>/g)].map((match) => match[1])
     expect(names.at(-1)).toBe("Programmatic API")
     expect(names).toEqual(
       expect.arrayContaining(["Tools in TypeScript", "Errors", "Middleware", "Testing"]),
     )
+    expect(groups.find((group) => group.name === "Guides")?.body).toMatch(
+      /href="?\/guides\/what-is-mcp\/"?/,
+    )
+  })
+
+  it("groups the Studio book's menu, with the current page's group open", () => {
+    const nav =
+      /<nav class="?docs-nav"?[\s\S]*?<\/nav>/.exec(page("docs/studio/audit/index.html"))?.[0] ?? ""
+    const summaries = [
+      ...nav.matchAll(/<details class="?nav-group"?( open)?>\s*<summary>([^<]+)<\/summary>/g),
+    ]
+    expect(summaries.map((match) => match[2])).toEqual([
+      "Start",
+      "Servers",
+      "People and logs",
+      "Operate",
+      "Guides",
+      "More",
+    ])
+    expect(summaries.filter((match) => match[1]).map((match) => match[2])).toEqual([
+      "People and logs",
+    ])
   })
 
   it("uses Studio's design tokens unchanged, for light, system dark and chosen dark", () => {
@@ -492,6 +521,56 @@ run("each check:site rule catches its problem", () => {
         ),
       }),
       /a <pre> without tabindex="0", a role and an aria-label/,
+    ],
+    [
+      "every menu group open",
+      () => ({
+        "docs/framework/quickstart/index.html": docs().replace(
+          /<details class="?nav-group"?>/g,
+          '<details class="nav-group" open>',
+        ),
+      }),
+      /open group\(s\); exactly the current page's should be/,
+    ],
+    [
+      "the current page's group closed",
+      () => ({
+        "docs/framework/quickstart/index.html": docs().replace(
+          /<details class="?nav-group"? open>/,
+          '<details class="nav-group">',
+        ),
+      }),
+      /0 open group\(s\)/,
+    ],
+    [
+      "an open group on a page the menu does not list",
+      () => ({
+        "docs/index.html": page("docs/index.html").replace(
+          /<details class="?nav-group"?>/,
+          '<details class="nav-group" open>',
+        ),
+      }),
+      /opens a group although this page is not in it/,
+    ],
+    [
+      "two entries marked as the current page",
+      () => ({
+        "docs/framework/quickstart/index.html": docs().replace(
+          /(<a href="?\/docs\/framework\/"?)>/,
+          '$1 aria-current="page">',
+        ),
+      }),
+      /the menu marks 2 entries as the current page/,
+    ],
+    [
+      "a page twice in the menu",
+      () => ({
+        "docs/framework/quickstart/index.html": docs().replace(
+          /(<summary>More<\/summary>\s*<ul>)/,
+          '$1<li><a href="/docs/framework/errors/">Errors</a></li>',
+        ),
+      }),
+      /lists \/docs\/framework\/errors\/ more than once/,
     ],
     [
       "navigation in On this page",

@@ -3,7 +3,9 @@ title: Profile, sessions and theme
 seoTitle: Kervan Studio profile, password, sessions and theme
 description: Each Kervan Studio user's profile; the display name, changing the password, the list of active sessions to sign out, and a light, dark or system theme.
 lead: 'Your own account: a display name, your password, where you are signed in, and the theme.'
-weight: 110
+weight: 95
+group: People and logs
+menuTitle: 'Profile and sessions'
 ---
 
 {{< shot name="profile" alt="The profile page: email and role, the display name, the password form and two active sessions with their device and address." >}}

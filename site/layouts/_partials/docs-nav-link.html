@@ -1,0 +1,4 @@
+{{- /* One menu entry: the page's menu title, marked when it is the current page. */ -}}
+{{- with .page -}}
+<li><a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $.current.RelPermalink }} aria-current="page"{{ end }}>{{ .Params.menuTitle | default (.Params.navTitle | default .LinkTitle) }}</a></li>
+{{- end -}}

@@ -3,7 +3,8 @@ title: Audit log
 seoTitle: Kervan Studio audit log, who changed what and when
 description: Kervan Studio's append-only audit log records sign-ins, user changes, servers, publishes, secrets and API keys; never a password, key or secret value.
 lead: Who did what, to what, from where. The database refuses to change or delete entries, and the log never holds a secret.
-weight: 100
+weight: 105
+group: People and logs
 ---
 
 {{< shot name="audit" alt="The audit log: API keys, secrets and servers created, versions published, sign-ins and a user deactivated, each with the actor and the client address." >}}

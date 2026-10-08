@@ -1,6 +1,6 @@
 ---
 title: A registry that changes at runtime
-menuTitle: Registry and runtime changes
+menuTitle: Registry
 seoTitle: Change MCP tools at runtime with Kervan
 description: Add, replace and remove Kervan MCP tools while clients are connected; the tool registry, list_changed notifications, and custom registries for many tenants.
 lead: The tools an app serves live in its registry, and the registry can change at any time. Connected clients are told.

@@ -4,6 +4,7 @@ seoTitle: 'Kervan Studio secret vault for API keys'
 description: Kervan Studio stores upstream API keys encrypted and write-only, bound to the hosts they may be sent to, and checks every call and redirect against the binding.
 lead: Secrets are encrypted, write-only, and bound to the hosts they may reach. Members use them by name and never see a value.
 weight: 60
+group: Servers
 ---
 
 {{< shot name="secrets" alt="The secrets tab: ISSUES_TOKEN and WEBHOOK_SIGNING_KEY, each with its allowed host and the time it was updated; no value is shown." >}}

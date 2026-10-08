@@ -10,6 +10,7 @@ next:
     note: 'for a server on the network'
   - url: /docs/studio/servers/
     text: 'Create your first server'
+group: Start
 ---
 
 ## Requirements

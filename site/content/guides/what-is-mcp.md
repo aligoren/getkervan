@@ -11,6 +11,7 @@ next:
     text: 'Connect a Kervan server to Claude Code'
   - url: /docs/framework/
     text: 'The framework documentation'
+menuTitle: 'What is MCP?'
 ---
 
 ## MCP in one paragraph

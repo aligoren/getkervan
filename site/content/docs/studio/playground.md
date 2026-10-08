@@ -4,6 +4,7 @@ seoTitle: Test MCP tools in Kervan Studio's playground
 description: Kervan Studio's playground connects a real MCP client to any version of a server, drafts too, through the gateway with a 15-minute token; list and call tools.
 lead: Try any version before clients see it, drafts included, through the same gateway clients use.
 weight: 80
+group: Servers
 ---
 
 {{< shot name="playground" alt="The playground beside the editor: the tool list with Search city selected, the arguments, and the result returned from Open-Meteo." >}}

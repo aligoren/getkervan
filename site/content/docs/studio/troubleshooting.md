@@ -4,6 +4,7 @@ seoTitle: 'Troubleshooting Kervan Studio'
 description: Common Kervan Studio problems; it does not start, the setup page is unreachable, sign-in is locked, clients get 401 or 404, or a publish is refused.
 lead: What the usual messages mean and what to do.
 weight: 160
+group: Operate
 ---
 
 ## Studio does not start

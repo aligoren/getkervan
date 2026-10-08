@@ -7,4 +7,5 @@ weight: 2
 listPages: true
 cascade:
   ogSection: Guide
+menuTitle: Overview
 ---

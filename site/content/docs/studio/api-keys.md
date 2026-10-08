@@ -4,6 +4,8 @@ seoTitle: 'Connect MCP clients to Kervan Studio'
 description: Every published Kervan Studio server is an MCP endpoint at /s/<serverId>/mcp. Create an API key, connect Claude Code with bash, zsh or PowerShell, revoke keys.
 lead: Each published server is served at `/s/<serverId>/mcp`. Clients authenticate with one of that server's API keys.
 weight: 70
+group: Servers
+menuTitle: 'API keys and gateway'
 ---
 
 {{< shot name="keys" alt="The API keys tab: three keys with their names, prefixes, creation and last-use times, and a Revoke button each." >}}

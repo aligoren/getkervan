@@ -11,6 +11,7 @@ next:
   - url: /docs/framework/spec-reference/
     text: 'The kervan.yaml reference'
     note: 'every field'
+menuTitle: 'A server from YAML'
 ---
 
 You need Kervan built from a clone ([quickstart](/docs/framework/quickstart/)); the commands run

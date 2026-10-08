@@ -533,6 +533,28 @@ export function checkBuild(view, params, options = {}) {
         errors.push(`${where}: a <pre> without tabindex="0", a role and an aria-label.`)
     }
 
+    // The docs menu: groups fold, and only the one holding this page is open, so the menu fits the
+    // screen; the page is marked once, inside that group; no page is listed twice.
+    const menu = /<nav class="?docs-nav"?[\s\S]*?<\/nav>/.exec(html)?.[0]
+    if (menu) {
+      const groups = [
+        ...menu.matchAll(/<details class="?nav-group"?( open)?>([\s\S]*?)<\/details>/g),
+      ]
+      const open = groups.filter((group) => group[1])
+      const marked = [...menu.matchAll(/aria-current="?page"?/g)].length
+      if (marked > 1) errors.push(`${where}: the menu marks ${marked} entries as the current page.`)
+      if (marked === 1 && (open.length !== 1 || !/aria-current="?page"?/.test(open[0][2])))
+        errors.push(
+          `${where}: the menu has ${open.length} open group(s); exactly the current page's should be.`,
+        )
+      if (marked === 0 && open.length > 0)
+        errors.push(`${where}: the menu opens a group although this page is not in it.`)
+      const hrefs = tags(menu, "a").map((tag) => tag.attrs.href)
+      const twice = hrefs.filter((href, index) => hrefs.indexOf(href) !== index)
+      if (twice.length > 0)
+        errors.push(`${where}: the menu lists ${[...new Set(twice)].join(", ")} more than once.`)
+    }
+
     // "On this page" lists the page's sections, not navigation ("Next" is a list after the content).
     for (const toc of main.matchAll(/<nav id="?TableOfContents"?>([\s\S]*?)<\/nav>/g)) {
       for (const link of toc[1].matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)) {

@@ -612,25 +612,106 @@ figcaption {
   font-size: 0.92rem;
 }
 
-.docs-nav details > summary {
+.docs-nav .nav-toggle > summary {
   cursor: pointer;
   font-weight: 600;
   padding: 0.5rem 0;
 }
 
-/* Closed by default (phones); always shown on wide screens, without JavaScript. */
+/* The whole menu: closed by default on phones; always shown on wide screens, without JavaScript.
+   There it stays in view while the page scrolls (sticky). It fits the screen because only the
+   current page's group is open; it has no scroll box of its own (a second scroll bar at the left
+   of the page was the bug this replaced), except on very short screens, below. */
 @media (min-width: 60rem) {
-  .docs-nav details > summary {
+  .docs-nav {
+    position: sticky;
+    top: 1rem;
+    align-self: start;
+  }
+
+  .docs-nav .nav-toggle > summary {
     display: none;
   }
 
-  .docs-nav details::details-content {
+  .docs-nav .nav-toggle::details-content {
     content-visibility: visible;
     display: block;
   }
 
-  .docs-nav details > .nav-inner {
+  .docs-nav .nav-toggle > .nav-inner {
     display: block;
+  }
+}
+
+/* A safety net for screens under 600 px tall: the menu scrolls inside itself, with a thin bar at
+   its own right edge. Taller screens never get it. */
+@media (min-width: 60rem) and (max-height: 37.5rem) {
+  .docs-nav {
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--k-border-input) transparent;
+    padding-right: 0.25rem;
+  }
+}
+
+/* Groups fold: each is a <details>; an arrow drawn in CSS shows open or closed. */
+.docs-nav .nav-group {
+  margin: 0.1rem 0;
+}
+
+.docs-nav .nav-group > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--k-fg-muted);
+}
+
+.docs-nav .nav-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.docs-nav .nav-group > summary::after {
+  content: "";
+  flex: none;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-right: 0.15rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.docs-nav .nav-group[open] > summary::after {
+  transform: translateY(-0.12rem) rotate(45deg);
+}
+
+.docs-nav .nav-group > summary:hover {
+  color: var(--k-fg);
+  background: var(--k-subtle);
+}
+
+.docs-nav .nav-group[open] > summary {
+  color: var(--k-fg);
+}
+
+.docs-nav .nav-group > ul {
+  margin: 0.1rem 0 0.4rem 0.5rem;
+  padding-left: 0.4rem;
+  border-left: 1px solid var(--k-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-nav .nav-group > summary::after {
+    transition: none;
   }
 }
 
@@ -639,7 +720,7 @@ figcaption {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--k-fg-subtle);
-  margin: 1.25rem 0 0.4rem;
+  margin: 0 0 0.3rem 0.6rem;
 }
 
 .docs-nav h2:first-child {
@@ -729,6 +810,16 @@ figcaption {
   top: 1rem;
 }
 
+/* The same safety net as the menu's, for very short screens only. */
+@media (max-height: 37.5rem) {
+  .toc .toc-inner {
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--k-border-input) transparent;
+  }
+}
+
 .toc h2 {
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -743,8 +834,10 @@ figcaption {
   padding: 0;
 }
 
+/* The sticky column lists the sections (h2) only, so it fits the screen and stays in view; the
+   inline "On this page" (narrower screens) keeps the subsections too. */
 .toc ul ul {
-  padding-left: 0.75rem;
+  display: none;
 }
 
 .toc a {
@@ -1287,13 +1380,6 @@ figcaption {
 .next-steps ul {
   margin: 0;
   padding-left: 1.1rem;
-}
-
-.docs-nav h3 {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--k-fg-muted);
-  margin: 0.9rem 0 0.25rem 0.6rem;
 }
 
 /* The landing page's showcase: two tabs made of radio buttons, without JavaScript (:has reads the

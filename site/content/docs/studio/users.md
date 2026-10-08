@@ -3,7 +3,8 @@ title: Users and roles
 seoTitle: Kervan Studio users and roles, admins and members
 description: Kervan Studio has admins and members; what each role may do, adding users, role changes, password resets, deactivation and the last-admin rule.
 lead: Two roles. Admins manage people, secrets and keys; members write, publish and test specs.
-weight: 30
+weight: 90
+group: People and logs
 ---
 
 {{< shot name="users" alt="The users page: four accounts with their roles, one deactivated, and an Actions menu per user." >}}

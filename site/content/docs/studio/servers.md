@@ -4,6 +4,7 @@ seoTitle: 'Edit MCP servers in Kervan Studio'
 description: Create a server in Kervan Studio, write its kervan.yaml in the editor with completion and validation, save immutable versions and compare them line by line.
 lead: A server is a slug, a name and a history of `kervan.yaml` versions. One of them is published.
 weight: 40
+group: Servers
 ---
 
 ## Create a server

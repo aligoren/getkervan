@@ -3,7 +3,8 @@ title: Call logs
 seoTitle: Kervan Studio call logs, who called which MCP tool
 description: Kervan Studio logs every tool call through its gateway with tool, caller, status and duration; arguments and results only if an admin enables it, redacted.
 lead: Every call through the gateway is logged. Payloads are logged only when an admin turns them on.
-weight: 90
+weight: 100
+group: People and logs
 ---
 
 {{< shot name="calls" alt="The calls tab: five recent calls of the weather server with time, tool, caller, status, duration and the logged arguments." >}}

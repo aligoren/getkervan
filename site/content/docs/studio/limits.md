@@ -4,6 +4,7 @@ seoTitle: 'Kervan Studio known limits'
 description: 'What Kervan Studio does not do: one process, API keys instead of OAuth, no push to 2025-era HTTP clients, 100 audit entries, no sub-path.'
 lead: Choices and gaps to know before you deploy Studio.
 weight: 150
+group: Operate
 ---
 
 {{% include file="apps/studio/README.md" section="Known limits" %}}

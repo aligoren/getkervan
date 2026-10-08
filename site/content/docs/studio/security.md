@@ -4,6 +4,7 @@ seoTitle: 'Kervan Studio threat model and mitigations'
 description: 'Kervan Studio''s full threat model: actors, assets, the attacks it is designed against, from secret exfiltration and SSRF to CSRF, and known limits.'
 lead: The complete threat model of Studio, the same document the project keeps in its repository. Every mitigation it lists is covered by tests.
 weight: 140
+group: Operate
 ---
 
 In short:

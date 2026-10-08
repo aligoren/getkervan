@@ -7,6 +7,9 @@ lead: An optional, self-hosted web app for teams. It is built on the Kervan fram
 weight: 1
 cascade:
   ogSection: Kervan Studio documentation
+menuTitle: Introduction
+groups: [Start, Servers, People and logs, Operate]
+group: Start
 ---
 
 {{< shot name="servers" alt="Studio's server list: three servers with their publication status, the newest draft's check and the time of the last call." >}}

@@ -3,7 +3,9 @@ title: Leaving Studio, export as kervan.yaml
 seoTitle: 'Export a Studio server as kervan.yaml'
 description: Every Kervan Studio server exports as a kervan.yaml file that runs with kervan run, with its secret bindings and without secret values; nothing is locked in.
 lead: Nothing in Studio is locked in. Any version exports as the `kervan.yaml` it is, and runs with `kervan run`.
-weight: 170
+weight: 85
+group: Servers
+menuTitle: 'Export as kervan.yaml'
 ---
 
 ## Export a version

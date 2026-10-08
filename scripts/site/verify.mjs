@@ -9,6 +9,7 @@
 //    Without JavaScript: the theme switch works, the skip link is the first Tab stop and shows,
 //    the search page lists every page. With it: copy buttons appear and search finds pages.
 //    The home page with the images Chromium loads stays within the budget, measured in the browser.
+//    At 1440x900 and 1280x720 the docs menu fits the screen, has no scroll box, and stays in place.
 // 3. With --examples, runs the documentation's code blocks (scripts/site/run-examples.mjs; also
 //    --network, --claude, --docker).
 //
@@ -36,6 +37,11 @@ const VARIANTS = [
   { name: "desktop-dark", viewport: { width: 1440, height: 900 }, colorScheme: "dark" },
   { name: "phone-light", viewport: { width: 390, height: 844 }, colorScheme: "light" },
   { name: "phone-dark", viewport: { width: 390, height: 844 }, colorScheme: "dark" },
+]
+// Where the docs menu must fit and stay in place (sticky) on wide screens.
+const MENU_VIEWPORTS = [
+  { width: 1440, height: 900 },
+  { width: 1280, height: 720 },
 ]
 const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]
 const SHOT_PAGES = [
@@ -169,6 +175,60 @@ async function browserChecks(origin, pages, shotsDir) {
         }
         await page.close()
       }
+      await context.close()
+    }
+
+    // The docs menu on wide screens: it fits the screen with its open group, never scrolls inside
+    // itself, and stays in place (sticky) while the page scrolls; so does "On this page".
+    for (const viewport of MENU_VIEWPORTS) {
+      const context = await browser.newContext({ viewport, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      let tallest = { height: 0, path: "" }
+      for (const urlPath of pages) {
+        await page.goto(origin + urlPath)
+        const where = `${urlPath} (menu, ${viewport.width}x${viewport.height})`
+        const before = await page.evaluate(() => {
+          const nav = document.querySelector(".docs-nav")
+          if (!nav) return undefined
+          return {
+            height: nav.getBoundingClientRect().height,
+            innerScroll: nav.scrollHeight > nav.clientHeight + 1,
+            room: document.documentElement.scrollHeight - window.innerHeight,
+          }
+        })
+        if (!before) continue
+        if (before.height > tallest.height)
+          tallest = { height: Math.round(before.height), path: urlPath }
+        if (before.height + 16 > viewport.height)
+          fail(where, `the menu is ${Math.round(before.height)}px tall, more than the screen`)
+        if (before.innerScroll) fail(where, "the menu scrolls inside itself")
+        if (before.room < 400) continue // too short a page to scroll
+        // Scroll until the end of the docs column reaches the bottom of the screen: sticky boxes
+        // stay at their place up to there (past it, the column's end pushes them up, as it should).
+        const scrolled = await page.evaluate(() => {
+          const layout = document.querySelector(".docs-layout")?.getBoundingClientRect()
+          if (!layout) return 0
+          const y = Math.max(0, window.scrollY + layout.bottom - window.innerHeight)
+          window.scrollTo(0, y)
+          return y
+        })
+        if (scrolled < 300) continue
+        const after = await page.evaluate(() => {
+          const top = (selector) => {
+            const element = document.querySelector(selector)
+            const box = element?.getBoundingClientRect()
+            return box && box.height > 0 ? box.top : undefined
+          }
+          return { nav: top(".docs-nav"), toc: top(".toc .toc-inner") }
+        })
+        if (after.nav === undefined || Math.abs(after.nav - 16) > 2)
+          fail(where, `the menu does not stay in place (top ${after.nav}px after scrolling)`)
+        if (after.toc !== undefined && Math.abs(after.toc - 16) > 2)
+          fail(where, `"On this page" does not stay in place (top ${after.toc}px after scrolling)`)
+      }
+      console.log(
+        `menu at ${viewport.width}x${viewport.height}: tallest ${tallest.height}px (${tallest.path})`,
+      )
       await context.close()
     }
 

@@ -4,6 +4,7 @@ seoTitle: 'Configure Kervan Studio: settings and env'
 description: 'Kervan Studio''s settings page and environment variables: public URL, host, port, data directory, master keys, proxies and log retention.'
 lead: The settings page holds per-user choices; the installation is configured with environment variables.
 weight: 120
+group: Operate
 ---
 
 ## The settings page

@@ -1,6 +1,14 @@
+{{- /*
+  The documentation menu. The book the page is in shows its title and its groups (`groups` on the
+  book's section page, `group` on each page); every group is a <details>, and only the one holding
+  the current page is open (decided at build time, no JavaScript). Other books and "More" are one
+  closed group each. Closed groups keep their links in the HTML.
+
+  Below 960 px the whole menu sits in one more <details> (.nav-toggle), closed by default.
+*/ -}}
 {{- $current := . -}}
 <nav class="docs-nav" aria-label="Documentation menu">
-  <details>
+  <details class="nav-toggle">
     <summary>Documentation menu</summary>
     <div class="nav-inner">
       {{- /* Each book shows its own pages and the guides; the guides and other pages show all. */}}
@@ -10,28 +18,43 @@
       {{- range $books }}
       {{- with site.GetPage . }}
       {{- $book := partial "book.html" . }}
-      <h2>{{ .Params.navTitle | default .Title }}</h2>
-      {{- /* A book with groups (the framework) lists each group under its own name. */}}
-      {{- $groups := .Params.groups | default (slice "") }}
-      {{- if .Params.groups }}{{ range $book.pages }}{{ if not (in $groups .Params.group) }}{{ errorf "%s: group %q is not one of the book's groups" .RelPermalink .Params.group }}{{ end }}{{ end }}{{ end }}
+      {{- $title := .Params.navTitle | default .Title }}
+      {{- $here := hasPrefix $current.RelPermalink .RelPermalink }}
+      {{- $groups := .Params.groups }}
+      {{- if $groups }}{{ range $book.pages }}{{ if not (in $groups .Params.group) }}{{ errorf "%s: group %q is not one of the book's groups" .RelPermalink .Params.group }}{{ end }}{{ end }}{{ end }}
+      {{- if and $here $groups }}
+      <h2>{{ $title }}</h2>
       {{- range $groups }}
       {{- $group := . }}
-      {{- with $group }}<h3>{{ . }}</h3>{{ end }}
-      <ul>
-        {{- range $book.pages }}
-        {{- if or (eq $group "") (eq .Params.group $group) }}
-        <li><a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $current.RelPermalink }} aria-current="page"{{ end }}>{{ .Params.menuTitle | default (.Params.navTitle | default .LinkTitle) }}</a></li>
-        {{- end }}
-        {{- end }}
-      </ul>
+      <details class="nav-group"{{ if eq $current.Params.group $group }} open{{ end }}>
+        <summary>{{ $group }}</summary>
+        <ul>
+          {{- range $book.pages }}{{ if eq .Params.group $group }}
+          {{ partial "docs-nav-link.html" (dict "page" . "current" $current) }}
+          {{- end }}{{ end }}
+        </ul>
+      </details>
+      {{- end }}
+      {{- else }}
+      <details class="nav-group"{{ if $here }} open{{ end }}>
+        <summary>{{ $title }}</summary>
+        <ul>
+          {{- range $book.pages }}
+          {{ partial "docs-nav-link.html" (dict "page" . "current" $current) }}
+          {{- end }}
+        </ul>
+      </details>
       {{- end }}
       {{- end }}
       {{- end }}
-      <h2>More</h2>
-      <ul>
-        <li><a href="/changelog/"{{ if eq .RelPermalink "/changelog/" }} aria-current="page"{{ end }}>Changelog</a></li>
-        <li><a href="/search/"{{ if eq .RelPermalink "/search/" }} aria-current="page"{{ end }}>Search and all pages</a></li>
-      </ul>
+      {{- $more := or (eq .RelPermalink "/changelog/") (eq .RelPermalink "/search/") }}
+      <details class="nav-group"{{ if $more }} open{{ end }}>
+        <summary>More</summary>
+        <ul>
+          <li><a href="/changelog/"{{ if eq .RelPermalink "/changelog/" }} aria-current="page"{{ end }}>Changelog</a></li>
+          <li><a href="/search/"{{ if eq .RelPermalink "/search/" }} aria-current="page"{{ end }}>Search and all pages</a></li>
+        </ul>
+      </details>
     </div>
   </details>
 </nav>

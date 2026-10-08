@@ -58,6 +58,14 @@ the documentation links. `/studio/` is Studio's own page, with the gallery.
 
 The framework book's menu has five groups (`groups` in `content/docs/framework/_index.md`; each
 page names its `group`): Start, Concepts, Build with YAML, Build with TypeScript, Run and operate.
+The Studio book has four: Start, Servers, People and logs, Operate. Every group is a `<details>`;
+only the current page's is open (set at build time), other books and "More" are one closed group
+each, and the links of closed groups stay in the HTML. Long page titles get a short `menuTitle`.
+On screens 960 px and wider the menu and the "On this page" column (sections only) are sticky and
+fit the screen: the tallest open menu is 509 px (the "Run and operate" group), so neither scrolls
+on its own. Only below 600 px of height do they get a scroll box, with a thin bar at their own
+right edge. (The menu's old scroll box, always on, drew a second scroll bar at the left of the
+page; that is why the fit, not a scroll box, keeps it in view.)
 Each page has a "Where this fits" line (`fits`) and ends with "Next" links (`next`): a list after
 the content, not a heading, so "On this page" lists only sections. Export names on the
 programmatic API page link to their pages through `data/api-links.yaml`.
@@ -149,6 +157,8 @@ Slow, `pnpm site:verify`:
   lists every page; with it: copy buttons and search work;
 - one vertical scroll bar, the page's: no code block or menu scrolls on its own; no copy button
   covers code;
+- at 1440x900 and 1280x720, on every docs page: the menu fits the screen, has no scroll box, and
+  stays in place while the page scrolls; so does "On this page";
 - the home page, with the images Chromium loads, stays within the budget;
 - `--examples` runs the documentation's code blocks against this working tree (below); `--shots
   <dir>` saves pictures of four pages in each variant for a visual check.
@@ -187,7 +197,9 @@ another site; no iframe, inline script, inline style or event handler attribute;
 with `rel="noopener noreferrer"`; internal links and fragments that exist; images with `alt`,
 `width` and `height`; no page without a link to it; every `<pre>` focusable (`tabindex="0"`) with a
 role and an accessible name, so a long line can be scrolled from the keyboard; "On this page" lists
-sections only (no "Next" or other navigation); no real local path (a drive-letter path other than
+sections only (no "Next" or other navigation); the docs menu opens exactly the group holding the
+current page (none on a page it does not list), marks that page once and lists no page twice; no
+real local path (a drive-letter path other than
 the `C:\path\to\` placeholder, a `/home/<name>` or `/Users/<name>` folder) in any HTML, JSON, XML,
 CSS or script file.
 

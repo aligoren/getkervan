@@ -4,6 +4,7 @@ seoTitle: 'Self-host a multi-user MCP gateway'
 description: 'Run Kervan Studio as a self-hosted MCP gateway for a team: install, master key, first admin, a published server, an API key and Claude Code.'
 lead: One Studio process gives a team a shared set of MCP servers behind one gateway, with users, an encrypted secret vault and an audit log. This guide goes from nothing to a connected client.
 weight: 50
+menuTitle: 'Self-host a gateway'
 ---
 
 Kervan Studio is the optional web app of the Kervan project. The commands below are checked
