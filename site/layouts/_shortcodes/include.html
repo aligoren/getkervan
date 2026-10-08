@@ -76,8 +76,8 @@
   {{- $md = replace $md "npx kervan " "node /path/to/kervan/packages/cli/bin/kervan.js " -}}
 {{- else if ne site.Params.npmTag "latest" -}}
   {{- /* A release candidate is under its own tag: a bare name or @latest would miss it. */ -}}
-  {{- $md = replace $md "npx kervan " (printf "npx kervan@%s " site.Params.npmTag) -}}
-  {{- $md = replace $md "kervan@latest" (printf "kervan@%s" site.Params.npmTag) -}}
+  {{- $md = replaceRE `npx kervan(\s|$)` (printf "npx kervan@%s${1}" site.Params.npmTag) $md -}}
+  {{- $md = replaceRE `(@kervan/[a-z-]+|kervan)@latest\b` (printf "${1}@%s" site.Params.npmTag) $md -}}
 {{- end -}}
 {{- /* Relative links to repository files: to the source repository. */ -}}
 {{- $dir := path.Dir $file -}}

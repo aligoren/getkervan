@@ -127,7 +127,9 @@ GitHub Actions, repository `aligoren/getkervan`, workflow `release.yml`, environ
   refused;
 - a configuration expires if no publish succeeds through it within **two days**: add it only when
   the next workflow release is about to run;
-- letting a trusted publisher change dist-tags is a separate opt-in (announced 2026-09-30);
+- letting a trusted publisher change dist-tags is a separate opt-in (announced 2026-09-30), and
+  npm's documentation names npm 11.21.0 or 12.2.0 as the first versions that can use it (the
+  workflow sets the tag while publishing, which is not that permission);
 - trusted publishing needs at least npm 11.5.1 and Node.js 22.14 (`release.yml` runs Node.js 24
   and stops if its npm is older).
 
@@ -158,8 +160,11 @@ deprecation message and the package's settings on npmjs.com can change afterward
 
 The maintainer runs these on their own machine, after the `release/0.1.0-rc.1` pull request is
 merged and before the `post-publish/0.1.0-rc.1` one is. Each step has a PowerShell block (Windows)
-and a bash block (Linux, macOS, Git Bash); run one of them. Lines marked **Verify on release day**
-come from npm's documentation as read on 2026-10-08 and could not be tried before a real publish.
+and a bash block (Linux, macOS, Git Bash); run one of them, in one terminal, from top to bottom.
+In PowerShell keep the default `$ErrorActionPreference` (`Continue`): the blocks read npm's exit
+codes themselves, and with `Stop` the first "not found" from `npm view` ends step 5 before it
+publishes anything. Lines marked **Verify on release day** come from npm's documentation as read
+on 2026-10-08 and could not be tried before a real publish.
 
 Sources: [npm init / npm create](https://docs.npmjs.com/cli/v11/commands/npm-init),
 [npm publish](https://docs.npmjs.com/cli/v11/commands/npm-publish),
@@ -238,6 +243,10 @@ for dir in packages/*/; do
 done
 ```
 
+If the guard refuses a package, stop here: do not go on to step 4. (A tarball carries no
+`prepublishOnly`, so nothing later runs the guard again. Its `publishConfig.tag` is `next`, so
+even a publish without `--tag` would not land on `latest`.)
+
 ### 4. Pack
 
 `pnpm pack` writes the real versions (`^0.1.0-rc.1`) in place of the `workspace:^` dependencies;
@@ -264,7 +273,8 @@ ls "$out"                       # five .tgz files, each ending in -0.1.0-rc.1.tg
 
 `@kervan/core`, then `@kervan/transport`, `@kervan/spec-runtime`, `kervan` and `create-kervan`, so
 no package is ever on npm without its dependencies. `--tag next`: npm 11 refuses a pre-release
-without an explicit tag, and `next` keeps it away from a plain `npm install`. `--access public`:
+without an explicit tag, and a plain `npm install` asks for `latest` (whether the first publish of
+a new package also sets `latest` is checked in step 6). `--access public`:
 scoped packages are private by default. A version already on npm is skipped, so after an
 interruption (a failed sign-in, the network) the same block simply runs again. **Verify on release
 day:** with a passkey, npm may open the browser to confirm every publish, so up to five times.
@@ -310,7 +320,7 @@ Back in the clone (`Set-Location ../kervan-release` or `cd ../kervan-release`):
 foreach ($name in "@kervan/core", "@kervan/transport", "@kervan/spec-runtime", "kervan", "create-kervan") {
   npm view $name dist-tags
 }
-pnpm verify:published           # ends with "verify:published passed: 0.1.0-rc.1 under next."
+pnpm verify:published --tarballs ../kervan-tarballs   # ends with "verify:published passed: 0.1.0-rc.1 under next."
 git tag -a v0.1.0-rc.1 -m "0.1.0-rc.1"
 git push origin v0.1.0-rc.1
 ```
@@ -319,7 +329,7 @@ git push origin v0.1.0-rc.1
 for name in @kervan/core @kervan/transport @kervan/spec-runtime kervan create-kervan; do
   npm view "$name" dist-tags
 done
-pnpm verify:published           # ends with "verify:published passed: 0.1.0-rc.1 under next."
+pnpm verify:published --tarballs ../kervan-tarballs   # ends with "verify:published passed: 0.1.0-rc.1 under next."
 git tag -a v0.1.0-rc.1 -m "0.1.0-rc.1"
 git push origin v0.1.0-rc.1
 ```
@@ -331,10 +341,12 @@ git push origin v0.1.0-rc.1
   `0.1.0`; the post-publish branch says `@next` everywhere, so nothing needs changing. Adding
   `latest` by hand (`npm dist-tag add @kervan/core@0.1.0-rc.1 latest`) would hand the release
   candidate to everyone; not recommended.
-- `pnpm verify:published` installs the five packages by `@next` from the registry outside the
-  repository, compares the registry's metadata with the repository's (version, dist-tag, license,
-  engines, repository), checks each tarball's sha512 and contents, and runs the smoke tests. It
-  publishes nothing.
+- `pnpm verify:published --tarballs ../kervan-tarballs` asks the public registry (not one npm is
+  configured with) about the five packages: their metadata against the repository's (version,
+  dist-tag, license, engines, repository), each `dist.integrity` against the sha512 of the tarball
+  published in step 5 (the registry serves exactly those bytes), and the downloaded tarball's files
+  against `test:pack`'s allow list. Then it installs the packages by `@next` outside the repository
+  and runs the smoke tests. It publishes nothing.
 - Publish a GitHub **pre-release** for the tag, with the notes.
 - Merge the `post-publish/0.1.0-rc.1` pull request (the site then shows the npm commands).
 
@@ -351,8 +363,8 @@ and disallow tokens" in each package's settings.
 ### 8. If something is wrong
 
 - A broken rc.1: publish `0.1.0-rc.2` with the fix, then for each package
-  `npm deprecate "@kervan/core@0.1.0-rc.1" "Broken: use 0.1.0-rc.2"` (an empty message, `""`,
-  undoes it).
+  `npm deprecate "@kervan/core@0.1.0-rc.1" "Broken: use 0.1.0-rc.2"`. An empty message, `""`,
+  undoes it; Windows PowerShell 5.1 drops an empty argument, so run the undo in cmd or bash.
 - Published by mistake: within 72 hours, and in reverse order (`create-kervan` first, `@kervan/core`
   last, because the packages depend on each other), `npm unpublish <name>@0.1.0-rc.1`. It is each
   package's only version, so npm asks for `--force`, which removes the whole package; its name
@@ -455,6 +467,9 @@ checks by name needs the new names after such a change.
 ## How a release runs
 
 After the first release (above), every release:
+
+0. For `0.1.0` and later stable releases: set `npmTag = "latest"` in `site/hugo.toml` in the same
+   pull request as the post-publish changes (the site's install commands then drop the `@next`).
 
 1. Check [`docs/REVIEW-NOTES.md`](REVIEW-NOTES.md) for open items that should be done first, and
    update it with anything new.

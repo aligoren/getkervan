@@ -8,7 +8,9 @@ export interface ExpectedManifest {
 export declare function parseArgs(
   argv: string[],
   defaultVersion: string | undefined,
-): { tag: string; version: string }
+): { tag: string; version: string; tarballs: string | undefined }
+export declare const REGISTRY: string
+export declare function tarballName(name: string, version: string): string
 export declare function expectedManifests(
   version: string,
   readManifest: (dir: string) => Record<string, unknown> & {

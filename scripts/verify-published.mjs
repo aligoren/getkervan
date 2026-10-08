@@ -11,10 +11,22 @@
 //    --help`, `kervan run` on the example spec answering tools/list, and a project made by
 //    `create-kervan` installing from the registry and passing its tests.
 //
-// It reads from the registry and writes only to its temporary folder: it publishes nothing,
-// changes no dist-tag and touches no file in the repository.
+// With `--tarballs <dir>` (the folder of RELEASING.md's step 4), each registry `dist.integrity`
+// must also be the sha512 of the tarball that was published from there.
+//
+// It reads from the public registry (named on every npm command) and writes to its temporary
+// folder and npm's own cache and logs: it publishes nothing, changes no dist-tag and touches no
+// file in the repository.
 import { createHash } from "node:crypto"
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -34,15 +46,23 @@ const TAG = /^[a-z][a-z0-9-]{0,31}$/
 /** A semantic version, with an optional pre-release part. */
 const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/
 
-/** `--tag <tag>` (default `next`) and `--version <version>` (default: the repository's). */
+/** The public registry, named on every npm command: a configured one (a local Verdaccio) is not it. */
+export const REGISTRY = "https://registry.npmjs.org/"
+
+/**
+ * `--tag <tag>` (default `next`), `--version <version>` (default: the repository's) and
+ * `--tarballs <dir>`: the folder of the tarballs that were published (RELEASING.md, step 4).
+ */
 export function parseArgs(argv, defaultVersion) {
-  const options = { tag: "next", version: defaultVersion }
+  const options = { tag: "next", version: defaultVersion, tarballs: undefined }
   for (let i = 0; i < argv.length; i++) {
     const [flag, value] = [argv[i], argv[i + 1]]
-    if (flag !== "--tag" && flag !== "--version") throw new Error(`Unknown argument: ${flag}`)
+    if (!["--tag", "--version", "--tarballs"].includes(flag))
+      throw new Error(`Unknown argument: ${flag}`)
     if (value === undefined) throw new Error(`${flag} needs a value.`)
     if (flag === "--tag") options.tag = value
-    else options.version = value
+    else if (flag === "--version") options.version = value
+    else options.tarballs = path.resolve(value)
     i++
   }
   if (!TAG.test(options.tag)) throw new Error(`Not a dist-tag: ${JSON.stringify(options.tag)}`)
@@ -94,7 +114,17 @@ export function viewProblems(expected, viewed, tag) {
   return problems
 }
 
-/** Problems with a downloaded tarball's bytes against the registry's `dist.integrity`. */
+/** The file `pnpm pack` writes for a package: `@kervan/core` 1.0.0 is `kervan-core-1.0.0.tgz`. */
+export function tarballName(name, version) {
+  return `${name.replace(/^@/, "").replace("/", "-")}-${version}.tgz`
+}
+
+/**
+ * Problems with a tarball's bytes against the registry's `dist.integrity`. For the tarballs that
+ * were published (`--tarballs`) this is the check that matters: the registry serves exactly the
+ * bytes that were built and checked. (npm itself checks a download against the same registry's
+ * integrity, which says nothing about where the bytes came from.)
+ */
 export function integrityProblems(name, bytes, integrity) {
   const actual = `sha512-${createHash("sha512").update(bytes).digest("base64")}`
   return actual === integrity ? [] : [`${name}: the tarball's sha512 is not dist.integrity.`]
@@ -103,7 +133,7 @@ export function integrityProblems(name, bytes, integrity) {
 /** `npm view <spec> --json`, or undefined when the registry has no such package or version. */
 function view(spec, cwd) {
   try {
-    return JSON.parse(run("npm", ["view", spec, "--json"], { cwd }))
+    return JSON.parse(run("npm", ["view", spec, "--json", "--registry", REGISTRY], { cwd }))
   } catch (error) {
     if (/E404/.test(String(error.message))) return undefined
     throw error
@@ -114,7 +144,11 @@ async function main() {
   const repoVersion = JSON.parse(
     readFileSync(path.join(root, PACKAGES[0].dir, "package.json"), "utf8"),
   ).version
-  const { tag, version } = parseArgs(process.argv.slice(2), repoVersion)
+  const { tag, version, tarballs: published } = parseArgs(process.argv.slice(2), repoVersion)
+  if (published === undefined)
+    console.warn(
+      "warning: without --tarballs, nothing shows that the registry serves the tarballs that were built and checked.",
+    )
   const expected = expectedManifests(version, (dir) =>
     JSON.parse(readFileSync(path.join(root, dir, "package.json"), "utf8")),
   )
@@ -130,14 +164,37 @@ async function main() {
       const problems = viewProblems(want, viewed, tag)
       if (viewed) {
         const before = new Set(readdirSync(tarballs))
-        run("npm", ["pack", `${pkg.name}@${version}`, "--pack-destination", tarballs], {
-          cwd: work,
-        })
+        run(
+          "npm",
+          [
+            "pack",
+            `${pkg.name}@${version}`,
+            "--pack-destination",
+            tarballs,
+            "--registry",
+            REGISTRY,
+          ],
+          {
+            cwd: work,
+          },
+        )
         const file = readdirSync(tarballs).find((name) => !before.has(name))
         if (!file) problems.push(`${pkg.name}: npm pack downloaded nothing.`)
         else {
           const bytes = readFileSync(path.join(tarballs, file))
           problems.push(...integrityProblems(pkg.name, bytes, viewed.dist?.integrity))
+          if (published !== undefined) {
+            const local = path.join(published, tarballName(pkg.name, version))
+            if (!existsSync(local)) problems.push(`${pkg.name}: ${local} is missing.`)
+            else
+              problems.push(
+                ...integrityProblems(
+                  `${pkg.name} (the published tarball, ${path.basename(local)})`,
+                  readFileSync(local),
+                  viewed.dist?.integrity,
+                ),
+              )
+          }
           const packed = readTarball(path.join(tarballs, file))
           problems.push(...contentProblems(pkg, packed.files, packed.size))
         }
@@ -154,9 +211,20 @@ async function main() {
       path.join(app, "package.json"),
       JSON.stringify({ name: "verify-published", private: true, type: "module" }),
     )
-    run("npm", ["install", "--no-audit", "--no-fund", ...PACKAGES.map((p) => `${p.name}@${tag}`)], {
-      cwd: app,
-    })
+    run(
+      "npm",
+      [
+        "install",
+        "--no-audit",
+        "--no-fund",
+        "--registry",
+        REGISTRY,
+        ...PACKAGES.map((p) => `${p.name}@${tag}`),
+      ],
+      {
+        cwd: app,
+      },
+    )
     for (const pkg of PACKAGES) {
       const installed = JSON.parse(
         readFileSync(
@@ -189,7 +257,7 @@ async function main() {
       if (name.startsWith("@kervan/") && range !== `^${version}`)
         failures.push(`create-kervan wrote ${name}@${range}, expected ^${version}.`)
     }
-    run("npm", ["install", "--no-audit", "--no-fund"], { cwd: made })
+    run("npm", ["install", "--no-audit", "--no-fund", "--registry", REGISTRY], { cwd: made })
     run("npm", ["test"], { cwd: made })
     console.log("ok   create-kervan: a new project installs from the registry and its tests pass")
   } finally {

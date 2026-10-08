@@ -246,6 +246,37 @@ install's shell as `cmd.exe` by name; the same lookup applies, in the new empty 
 So the difference to the development machine is Hugo (60). No security test was skipped
 everywhere except the zsh quoting tests, which now run on Linux.
 
+## rc.1 preparation: independent review
+
+A fresh-context reviewer checked RELEASING.md's "rc.1: step by step", `verify:published` and the
+post-publish branch's guard. Nothing could put a pre-release under `latest`, publish twice, or
+publish from `verify:published`. Fixed:
+
+- **`verify:published`'s sha512 check proved nothing:** `npm pack` already checks a download
+  against the same registry's integrity. With `--tarballs <dir>` it now compares each registry
+  `dist.integrity` with the tarball that was published from step 4's folder, and every npm command
+  names the public registry (a configured one, such as a local Verdaccio, is not used).
+- RELEASING.md: "`next` keeps it away from a plain `npm install`" was stated as fact; it now
+  points to step 6, where what `latest` shows is checked. The guard step says to stop when it
+  refuses; the PowerShell blocks need the default `$ErrorActionPreference`; undoing a deprecation
+  (`""`) does not work in Windows PowerShell 5.1 (it drops the empty argument). After 0.1.0,
+  `npmTag` becomes `latest` (How a release runs).
+- The site's `include` rewrite now also tags `npx kervan` at a line's end and
+  `@kervan/<name>@latest`; the root README's `npx kervan run` on the post-publish branch names the
+  tag.
+
+Accepted:
+
+- `check:site` checks npm commands in code blocks only, not inline code.
+- When the registry cannot be reached, `check:site` warns: CI (without `--strict`) passes, the
+  Cloudflare Pages build (with it) fails. A 404 is an error everywhere.
+- The guard is a manual step for a hand publish (a tarball has no `prepublishOnly`); every
+  tarball's `publishConfig.tag` is `next`, so a publish without `--tag` still misses `latest`.
+- The five package READMEs that ship in rc.1 say `npm create kervan@latest` and `npx kervan`
+  (no tag). If the first publish does not set `latest`, those commands fail with "No matching
+  version" until 0.1.0; they cannot install anything else. The site and the root README name
+  `@next`.
+
 ## Still open at the feature freeze
 
 Nothing below blocks a release candidate on its own; each needs a decision in

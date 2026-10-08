@@ -11,6 +11,8 @@ import {
   expectedManifests,
   integrityProblems,
   parseArgs,
+  REGISTRY,
+  tarballName,
   viewProblems,
 } from "../verify-published.mjs"
 
@@ -107,13 +109,33 @@ describe("a downloaded tarball", () => {
   })
 })
 
+describe("the published tarballs (--tarballs)", () => {
+  it("are found by the names pnpm pack gives them", () => {
+    expect(expected.map((each) => tarballName(each.name, VERSION))).toEqual([
+      "kervan-core-0.1.0-rc.1.tgz",
+      "kervan-transport-0.1.0-rc.1.tgz",
+      "kervan-spec-runtime-0.1.0-rc.1.tgz",
+      "kervan-0.1.0-rc.1.tgz",
+      "create-kervan-0.1.0-rc.1.tgz",
+    ])
+  })
+
+  it("are compared on every npm command with the public registry, not a configured one", () => {
+    expect(REGISTRY).toBe("https://registry.npmjs.org/")
+    const source = readFileSync(path.join(root, "scripts/verify-published.mjs"), "utf8")
+    const npmCalls = [...source.matchAll(/run\(\s*"npm",\s*\[([^\]]*)\]/g)].map((m) => m[1] ?? "")
+    expect(npmCalls.length).toBeGreaterThanOrEqual(4)
+    for (const args of npmCalls.filter((each) => !/"test"/.test(each)))
+      expect(args, args).toMatch(/"--registry",\s*REGISTRY/)
+  })
+})
+
 describe("the arguments", () => {
   it("default to the repository's version under next", () => {
-    expect(parseArgs([], VERSION)).toEqual({ tag: "next", version: VERSION })
-    expect(parseArgs(["--tag", "latest", "--version", "0.1.0"], VERSION)).toEqual({
-      tag: "latest",
-      version: "0.1.0",
-    })
+    expect(parseArgs([], VERSION)).toEqual({ tag: "next", version: VERSION, tarballs: undefined })
+    expect(
+      parseArgs(["--tag", "latest", "--version", "0.1.0", "--tarballs", "out"], VERSION),
+    ).toEqual({ tag: "latest", version: "0.1.0", tarballs: path.resolve("out") })
   })
 
   it.each([
