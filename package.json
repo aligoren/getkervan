@@ -38,7 +38,7 @@
     "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "^2.5.15",
     "@playwright/test": "1.63.0",
-    "@types/node": "^24.19.1",
+    "@types/node": "^26.6.3",
     "axe-core": "4.13.0",
     "publint": "^0.3.25",
     "typescript": "^7.0.2",
