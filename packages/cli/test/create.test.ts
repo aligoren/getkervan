@@ -5,7 +5,12 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, describe, expect, it } from "vitest"
-import { CreateError, createProject, detectPackageManager } from "../src/create.js"
+import {
+  CreateError,
+  createProject,
+  detectPackageManager,
+  installEnvironment,
+} from "../src/create.js"
 
 /** The CLI's own version: generated projects depend on it, `kervan --version` prints it. */
 const VERSION = (
@@ -132,6 +137,36 @@ function runBin(script: string, args: string[], cwd: string, env: NodeJS.Process
     env: { ...base, ...env },
   })
 }
+
+describe("the install step", () => {
+  it("tells cmd.exe not to look in the project folder on Windows, and changes nothing elsewhere", () => {
+    expect(installEnvironment({ PATH: "x" }, "win32")).toEqual({
+      PATH: "x",
+      NoDefaultCurrentDirectoryInExePath: "1",
+    })
+    const env = { PATH: "x" }
+    expect(installEnvironment(env, "linux")).toBe(env)
+  })
+
+  // cmd.exe reads the variable from its own environment; without it, an npm.cmd in the project
+  // folder would run instead of the real npm.
+  it.runIf(process.platform === "win32")(
+    "runs the real npm, not an npm.cmd planted in the project folder",
+    async () => {
+      const cwd = await mkdtemp(path.join(os.tmpdir(), "kervan-create-plant-"))
+      temps.push(cwd)
+      await writeFile(path.join(cwd, "npm.cmd"), "@echo planted\r\n")
+      const base = { ...process.env }
+      for (const name of Object.keys(base)) {
+        if (name.toLowerCase() === "nodefaultcurrentdirectoryinexepath") delete base[name]
+      }
+      const run = (env: NodeJS.ProcessEnv) =>
+        spawnSync("npm --version", { cwd, env, shell: true, encoding: "utf8" }).stdout.trim()
+      expect(run(base)).toBe("planted") // the hazard is real
+      expect(run(installEnvironment(base, "win32"))).toMatch(/^\d+\.\d+\.\d+$/)
+    },
+  )
+})
 
 describe("command line", () => {
   it("kervan create works with a path containing spaces", async () => {

@@ -141,13 +141,24 @@ export function detectPackageManager(
   return name === "pnpm" || name === "yarn" || name === "bun" ? name : "npm"
 }
 
+/**
+ * The install's environment on Windows: cmd.exe looks a bare command name up in the current
+ * directory (the new project) before PATH, unless NoDefaultCurrentDirectoryInExePath is set.
+ */
+export function installEnvironment(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv {
+  return platform === "win32" ? { ...env, NoDefaultCurrentDirectoryInExePath: "1" } : env
+}
+
 function runInstall(pm: PackageManager, cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
     // Package managers are .cmd shims on Windows, which need a shell. The command is one fixed
     // string (pm comes from a closed list), so nothing user-controlled reaches the shell.
     const windows = process.platform === "win32"
     const child = windows
-      ? spawn(`${pm} install`, { cwd, stdio: "inherit", shell: true })
+      ? spawn(`${pm} install`, { cwd, stdio: "inherit", shell: true, env: installEnvironment() })
       : spawn(pm, ["install"], { cwd, stdio: "inherit" })
     child.on("error", reject)
     child.on("exit", (code) =>
