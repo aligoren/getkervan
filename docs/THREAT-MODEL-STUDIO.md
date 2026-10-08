@@ -57,7 +57,9 @@ fresh context and proved findings with failing tests. Their fixes are marked "re
 below; their tests are kept in the `test/review` folders of `apps/studio`, `apps/studio/web`,
 `packages/spec-runtime` and `packages/cli`. `docs/TEXT-SURFACES.md` maps every user-supplied
 string to the places it is shown. `docs/REVIEW-NOTES.md` lists what the reviewers suspected but did not
-prove, and every accepted risk, with its status.
+prove, and every accepted risk, with its status. After the hardening rounds, one more reviewer
+(review 3) checked the code they added; its tests are in `apps/studio/test/review3` and
+`packages/spec-runtime/test/review/*-r3*`, and its fixes are marked "independent review" below.
 
 ### T1: Secret exfiltration through a spec (4a)
 
@@ -337,6 +339,9 @@ prove, and every accepted risk, with its status.
   - every unused setup token is retired in the same transaction: the token Studio printed stops
     working;
   - audited as `studio.setup` with the actor `cli`, never with the password;
+  - Studio's commands never repeat a refused argument in their errors (a password typed as a plain
+    argument by mistake would otherwise be printed, and a container's stderr is its log;
+    independent review); an unknown command is named only when it looks like one;
   - a running Studio checks every second, while it has no admin, whether one exists, and then
     moves from loopback to `KERVAN_STUDIO_HOST` as after a browser setup.
 
@@ -492,6 +497,10 @@ prove, and every accepted risk, with its status.
   on the 22 line, or than 24.15.0), before it loads anything (hardening round). Node.js 22.0 to
   22.12 name the permission flag differently (`--experimental-permission`) and were never tested
   with this sandbox. The framework's own minimum stays `>=22` (and `kervan run` needs 22.18).
+- A process that cannot start (EAGAIN, EMFILE: Node then reports only an error, never an exit),
+  or a `fork` that throws, fails its call at once with a clear message instead of leaving it to
+  its timeout with one that blames the expression (independent review). Replies are used only when
+  well formed, for the job the process runs, and within the job's size limit.
 - Limit: one slow expression holds one of the two processes until its timeout, so calls of other
   tools may wait (their wait counts against their own timeout). Rate limits bound how often a
   key can do this.
@@ -562,13 +571,22 @@ prove, and every accepted risk, with its status.
   left alone), the repository ignores `.kervan-studio/`, and Studio warns at start when the
   database, or its `-wal` or `-shm` file, is inside a git working tree and tracked or not
   ignored (a rule like `*.db` covers the database but not those; release review).
-- That start-up check runs only read-only git commands, and git runs no program the repository
-  names (hardening round): a data directory may sit in a tree someone else prepared, whose
-  `.git/config` sets `core.fsmonitor` (which `ls-files` and `check-ignore` run; proven by a test).
-  Program-running settings are turned off on the command line (`core.fsmonitor`, `core.hooksPath`,
-  askpass, credential helpers, external diff, transport protocols), no system or global config
-  file is read (so no `safe.directory` exception from them: a repository owned by another user is
-  refused and the check is skipped), and no `GIT_*` variable of Studio's environment reaches git.
+- That start-up check runs only read-only git commands, and git runs no program and opens no file
+  the repository names (hardening round). A data directory may sit in a tree someone else prepared
+  (an extracted archive), or below a folder another local user can write:
+  - a repository's `core.fsmonitor` was run by `ls-files` and `check-ignore` (proven by a test).
+    Program-running settings are turned off on the command line (`core.fsmonitor`,
+    `core.hooksPath`, askpass, credential helpers, external diff, transport protocols); no system
+    or global config file is read and no `GIT_*` variable of Studio's environment reaches git;
+  - git also opened files the repository named: `include.path`, `core.excludesFile`, and a `.git`
+    *file*'s `gitdir:` in any parent folder (read before git's ownership check). On Windows a
+    `//host/share` path is opened over SMB, which hands the user's NTLM credentials to `host`
+    (proven with a named pipe; independent review). Studio now finds the repository itself (the
+    nearest `.git`, not followed) and runs git, pointed at exactly that repository (`GIT_DIR`,
+    `GIT_WORK_TREE`), only when `.git` is a real directory, owned by this user (POSIX), with no
+    symbolic link among its files, no `commondir`, and no config key that names a file
+    (`include`, `excludesFile`, `attributesFile`, `worktree`). Otherwise git does not run, and
+    Studio warns unless the data directory's own `.gitignore` ignores everything (`*`).
 
 ## Reverse proxies
 

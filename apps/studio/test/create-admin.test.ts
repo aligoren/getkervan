@@ -231,6 +231,27 @@ describe("kervan-studio create-admin", () => {
       expect(await users(dir)).toEqual([])
     })
 
+    it("never repeats what was typed in an error (an unknown option or command)", async () => {
+      const dir = dataDir()
+      for (const args of [
+        ["create-admin", "--email", "a@example.test", `--${PASSWORD.replaceAll(" ", "-")}`],
+        ["create-admin", "--email", "a@example.test", "--password-stdin=yes"],
+        [PASSWORD],
+        ["Hunter2-Passphrase!"],
+      ]) {
+        const cli = io(dir)
+        expect(await runStudioCli(args, cli.io), args.join(" ")).toBe(1)
+        const said = cli.err.join("\n")
+        expect(said).not.toContain(PASSWORD.replaceAll(" ", "-"))
+        expect(said).not.toContain(PASSWORD)
+        expect(said).not.toContain("Hunter2")
+      }
+      const typo = io(dir)
+      expect(await runStudioCli(["create-amdin"], typo.io)).toBe(1)
+      expect(typo.err.join("\n")).toContain('Unknown command "create-amdin"')
+      expect(await users(dir)).toEqual([])
+    })
+
     it("ignores password-like environment variables and asks for a terminal", async () => {
       const dir = dataDir()
       const cli = io(dir, {

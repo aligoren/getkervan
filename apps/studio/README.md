@@ -58,8 +58,9 @@ a tunnel), create the first admin with a command on the host instead:
 node apps/studio/bin/kervan-studio.js create-admin --email admin@example.com
 ```
 
-- It asks for the password twice and does not show it. Without a terminal, pipe it in with
-  `--password-stdin` (one line). The password is never taken from an argument or an environment
+- It asks for the password twice and does not show it (type it after the prompt appears: what
+  is typed before that, the terminal itself shows, as with any password prompt). Without a
+  terminal, pipe it in with `--password-stdin` (one line). The password is never taken from an argument or an environment
   variable: those end up in shell history and process listings.
 - The email and the password get the same checks as the setup page.
 - It needs the same `KERVAN_STUDIO_DATA_DIR` and `KERVAN_STUDIO_MASTER_KEY` as `start` (a missing

@@ -189,7 +189,16 @@ class SelectPool {
   #dispatch(): void {
     while (this.#queue.length > 0) {
       let idle = [...this.#workers].find((worker) => worker.current === undefined)
-      if (!idle && this.#workers.size < PROCESSES) idle = this.#start()
+      if (!idle && this.#workers.size < PROCESSES) {
+        try {
+          idle = this.#start()
+        } catch {
+          // `fork` can throw at once: the next job fails now instead of waiting for its timeout.
+          const pending = this.#queue.shift()
+          if (pending) this.#failToStart(pending)
+          continue
+        }
+      }
       if (!idle) return
       const pending = this.#queue.shift()
       if (!pending) return
@@ -207,7 +216,7 @@ class SelectPool {
     const child = fork(script, args, options)
     const worker: Worker = { child }
     this.#workers.add(worker)
-    child.on("message", (message: Reply) => this.#reply(worker, message))
+    child.on("message", (message: unknown) => this.#reply(worker, message))
     child.on("exit", () => {
       // Out of memory, or killed: the job it was running fails, the next job gets a new process.
       if (!this.#workers.delete(worker)) return
@@ -223,13 +232,30 @@ class SelectPool {
       }
       this.#dispatch()
     })
-    child.on("error", () => this.#discard(worker))
+    // A process that could not start (EAGAIN, EMFILE) or whose channel failed emits only
+    // `error`, never `exit`: its job fails now, not when its timeout ends.
+    child.on("error", () => {
+      if (!this.#workers.has(worker)) return
+      const pending = worker.current
+      this.#discard(worker)
+      if (pending) this.#failToStart(pending)
+      this.#dispatch()
+    })
     return worker
   }
 
-  #reply(worker: Worker, message: Reply): void {
+  #failToStart(pending: Pending): void {
+    if (pending.settled) return
+    this.#settle(pending)
+    pending.reject(
+      new ToolError("output.select could not run: its process did not start. Try again later."),
+    )
+  }
+
+  #reply(worker: Worker, message: unknown): void {
     const pending = worker.current
-    if (!pending || pending.id !== message.id) return
+    // Only a well-formed answer to the job this process runs counts.
+    if (!pending || !wellFormed(message, pending.job.maxChars) || pending.id !== message.id) return
     worker.current = undefined
     this.#idle(worker)
     if (!pending.settled) {
@@ -257,5 +283,19 @@ class SelectPool {
 type Reply =
   | { id: number; ok: true; length: number; text: string }
   | { id: number; ok: false; error: string }
+
+/** Whether a message from a select process has the shape of a reply, within the size limit. */
+function wellFormed(message: unknown, maxChars: number): message is Reply {
+  if (typeof message !== "object" || message === null) return false
+  const reply = message as Record<string, unknown>
+  if (typeof reply.id !== "number") return false
+  if (reply.ok === false) return typeof reply.error === "string"
+  return (
+    reply.ok === true &&
+    typeof reply.text === "string" &&
+    reply.text.length <= maxChars + 1 &&
+    typeof reply.length === "number"
+  )
+}
 
 const pool = new SelectPool()

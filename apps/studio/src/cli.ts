@@ -77,7 +77,9 @@ export async function runStudioCli(argv: string[], io: StudioCliIo): Promise<num
     if (command === "start") return await start(rest, io)
     if (command === "create-admin") return await createAdmin(rest, io)
     if (command === "reset-admin") return await resetAdmin(rest, io)
-    io.err(`Unknown command "${command}".\n\n${HELP}`)
+    // Shown only when it looks like a command name, not whatever was typed (a password?).
+    const shown = /^[a-z][a-z-]{0,30}$/.test(command) ? ` "${command}"` : ""
+    io.err(`Unknown command${shown}.\n\n${HELP}`)
     return 1
   } catch (error) {
     if (
@@ -297,10 +299,22 @@ async function resetAdmin(argv: string[], io: StudioCliIo): Promise<number> {
 
 type Options = Record<string, { type: "string" | "boolean" }>
 
+/**
+ * Parses a command's options. Errors never repeat what was typed: a password given by mistake as
+ * an argument would otherwise end up in the error output (and a container's logs).
+ */
 function parse(argv: string[], options: Options) {
   try {
     return parseArgs({ args: argv, options, allowPositionals: false, strict: true })
   } catch (error) {
-    throw new UsageError((error as Error).message)
+    const code = (error as { code?: unknown }).code
+    throw new UsageError(
+      code === "ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL"
+        ? "This command takes no plain arguments, only the options in --help. (A password is " +
+            "never taken as an argument.)"
+        : code === "ERR_PARSE_ARGS_UNKNOWN_OPTION"
+          ? "Unknown option: see kervan-studio --help for this command's options."
+          : "The options are not valid: see kervan-studio --help.",
+    )
   }
 }

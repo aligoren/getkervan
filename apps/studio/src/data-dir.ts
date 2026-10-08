@@ -1,7 +1,7 @@
 // Studio's data directory holds the database: encrypted secrets, session and key hashes, the audit
 // log. It must never end up in a git repository by accident.
 import { execFileSync } from "node:child_process"
-import { writeFileSync } from "node:fs"
+import { lstatSync, readdirSync, readFileSync, type Stats, writeFileSync } from "node:fs"
 import path from "node:path"
 
 /**
@@ -42,12 +42,15 @@ const NO_PROGRAMS = [
 const KEPT_ENV = ["PATH", "Path", "SYSTEMROOT", "SystemRoot", "WINDIR", "TEMP", "TMP", "LANG"]
 
 /**
- * The environment git runs with: no variable that changes what git does (`GIT_DIR`,
- * `GIT_CONFIG_*`, `GIT_EXTERNAL_DIFF`, ...), no system or global config file (so no
- * `safe.directory` exception from them either: a repository owned by another user is refused, and
- * the check is skipped), no prompts and no optional locks (read-only).
+ * The environment git runs with: no variable of Studio's that changes what git does (`GIT_DIR`,
+ * `GIT_CONFIG_*`, `GIT_EXTERNAL_DIFF`, ...), no system or global config file, no prompts and no
+ * optional locks (read-only). `repository` names the one repository git may use, so git does not
+ * go looking for one (and follow a `.git` file) by itself.
  */
-export function gitEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+export function gitEnvironment(
+  env: NodeJS.ProcessEnv = process.env,
+  repository?: { gitDir: string; workTree: string },
+): NodeJS.ProcessEnv {
   const clean: NodeJS.ProcessEnv = {}
   for (const name of KEPT_ENV) if (env[name] !== undefined) clean[name] = env[name]
   return {
@@ -56,6 +59,7 @@ export function gitEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.Pro
     GIT_CONFIG_GLOBAL: DEV_NULL,
     GIT_TERMINAL_PROMPT: "0",
     GIT_OPTIONAL_LOCKS: "0",
+    ...(repository ? { GIT_DIR: repository.gitDir, GIT_WORK_TREE: repository.workTree } : {}),
   }
 }
 
@@ -64,12 +68,75 @@ export function gitArguments(dir: string, args: string[]): string[] {
   return [...NO_PROGRAMS.flatMap((setting) => ["-c", setting]), "-C", dir, ...args]
 }
 
-function git(dir: string, args: string[]): boolean | undefined {
+interface Repository {
+  workTree: string
+  gitDir: string
+  stat: Stats
+}
+
+/** The nearest folder at or above `dir` with a `.git` entry (not followed, not read). */
+function findRepository(dir: string): Repository | undefined {
+  for (let current = path.resolve(dir); ; current = path.dirname(current)) {
+    const gitDir = path.join(current, ".git")
+    try {
+      return { workTree: current, gitDir, stat: lstatSync(gitDir) }
+    } catch {
+      // Not here.
+    }
+    if (path.dirname(current) === current) return undefined
+  }
+}
+
+/**
+ * Config keys that make git open a file the repository chooses. On Windows a `//host/share` path
+ * is opened over SMB, which hands the user's NTLM credentials to `host`; elsewhere a FIFO can
+ * block git.
+ */
+const NAMES_FILES = /include|excludesfile|attributesfile|worktree/i
+
+/**
+ * Whether git may be run on this repository: a real `.git` directory (a `.git` file points git
+ * anywhere, even across the network, and git opens it before any ownership check), owned by this
+ * user (POSIX), with no symbolic link among its files (`config`, `index`, `info/exclude`, ...) and
+ * no config key that names a file elsewhere (`include.path`, `core.excludesFile`, ...).
+ */
+function safeToInspect(repository: Repository): boolean {
+  const { gitDir, stat } = repository
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return false
+  if (process.getuid && stat.uid !== process.getuid()) return false
+  try {
+    for (const folder of [gitDir, path.join(gitDir, "info")]) {
+      let entries: string[]
+      try {
+        entries = readdirSync(folder)
+      } catch {
+        continue
+      }
+      for (const entry of entries) {
+        if (lstatSync(path.join(folder, entry)).isSymbolicLink()) return false
+      }
+    }
+    // Linked worktrees read the rest of the repository from elsewhere.
+    if (readdirSync(gitDir).includes("commondir")) return false
+    const config = (() => {
+      try {
+        return readFileSync(path.join(gitDir, "config"), "utf8")
+      } catch {
+        return ""
+      }
+    })()
+    return !NAMES_FILES.test(config)
+  } catch {
+    return false
+  }
+}
+
+function git(repository: Repository, dir: string, args: string[]): boolean | undefined {
   try {
     execFileSync("git", gitArguments(dir, args), {
       stdio: "ignore",
       timeout: 5000,
-      env: gitEnvironment(),
+      env: gitEnvironment(process.env, repository),
     })
     return true
   } catch (error) {
@@ -79,24 +146,49 @@ function git(dir: string, args: string[]): boolean | undefined {
   }
 }
 
+/** Whether the data directory's own `.gitignore` ignores everything in it (Studio writes one). */
+function ignoresEverything(dir: string): boolean {
+  try {
+    return readFileSync(path.join(dir, ".gitignore"), "utf8")
+      .split(/\r?\n/)
+      .some((line) => line.trim() === "*")
+  } catch {
+    return false
+  }
+}
+
 /**
  * A warning when the database is inside a git working tree and git would commit it (it is
  * tracked, or not ignored); undefined otherwise, or when git is not available.
+ *
+ * Git runs only on a repository that cannot make it open files elsewhere (`safeToInspect`); for
+ * any other repository Studio does not run git, and warns unless the data directory ignores
+ * everything in it.
  */
 export function dataDirectoryGitWarning(dir: string, file: string): string | undefined {
-  if (git(dir, ["rev-parse", "--is-inside-work-tree"]) !== true) return undefined
+  const repository = findRepository(dir)
+  if (!repository) return undefined
+  if (!safeToInspect(repository)) {
+    if (ignoresEverything(dir)) return undefined
+    return (
+      `Warning: ${file} is inside a git working tree (${repository.workTree}) that Studio does ` +
+      "not inspect (its .git is a file or a link, belongs to another user, or its configuration " +
+      "names other files). Make sure git ignores the data directory (a .gitignore containing * " +
+      "in it), or set KERVAN_STUDIO_DATA_DIR to a folder outside the repository."
+    )
+  }
   const name = path.basename(file)
   // SQLite keeps recent pages in `-wal` next to the database (and an index in `-shm`): an ignore
   // rule like `*.db` covers the database but not those.
   const names = [name, `${name}-wal`, `${name}-shm`]
-  if (names.some((each) => git(dir, ["ls-files", "--error-unmatch", each]) === true)) {
+  if (names.some((each) => git(repository, dir, ["ls-files", "--error-unmatch", each]) === true)) {
     return (
       `Warning: ${file} (or its -wal/-shm file) is tracked by git. It holds encrypted secrets, sessions and the audit ` +
       `log: remove it from the repository (git rm --cached) and set KERVAN_STUDIO_DATA_DIR to a ` +
       "folder outside it."
     )
   }
-  if (names.some((each) => git(dir, ["check-ignore", "-q", each]) === false)) {
+  if (names.some((each) => git(repository, dir, ["check-ignore", "-q", each]) === false)) {
     return (
       `Warning: ${file} (or its -wal/-shm file) is inside a git repository and not ignored, so ` +
       `it could be committed. Add ${path.basename(dir)}/ to .gitignore, or set ` +

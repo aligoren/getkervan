@@ -76,6 +76,41 @@ not to be a problem; the test stays).
 | **The Dockerfile draft's base image is not pinned by digest.** | A draft. | **Open:** pin it before the image is used. |
 | **The workflows have never run;** Dependabot's support for this pnpm version's lockfile, and trusted publishing for a first publish of new names, are not verified. | Nothing may run before the repository exists. | **Open:** check on the first CI run and the first (pre-)release (`docs/RELEASING.md`). |
 
+## Second hardening round: independent review (review 3)
+
+One reviewer with a fresh context reviewed the code added in the two hardening rounds: the select
+process pool, session renewal, the connect-command tabs, `create-admin`, the git check and the role
+change. Its tests are in `apps/studio/test/review3/` and `packages/spec-runtime/test/review/*-r3*`.
+
+Proven and fixed (each with the reviewer's failing test, now passing, and a mutation):
+
+- On Windows, the git check opened SMB paths a repository (or a `.git` file in a parent folder)
+  named, handing NTLM credentials to the host (threat model T14).
+- A select process that failed to start left its call waiting for the tool's whole timeout, with
+  an error that blamed the expression (T19).
+- A password given by mistake as a plain argument to `create-admin` or `reset-admin` was printed
+  back in the error (T9).
+
+Held under attack (passing tests kept, `*-confirmed-r3*`): session renewal against a concurrent
+role change, deactivation, sign-out, reset and second password change; playground tokens of a
+renewed session; a sign-in in flight across a promotion or demotion; the pool's limit, queue
+timeouts, reply ids, cancellation and prototype keys in upstream data; every slug the server
+accepts is safe in the connect commands; a `git.exe` planted in Studio's working directory is not
+run.
+
+| Suspicion | Why not proven | Status and next step |
+| --- | --- | --- |
+| **Admin routes that await do not check the role again:** `deleteSecret` (awaits `loadSpec`), `putSecret` and `deleteServer` complete for an admin demoted while the request was in flight. Only the account writes re-check (`requireActiveAdmin`). | A short window; the request was authorized when it was sent. | **Open.** Next step: re-check the actor inside those writes, as account writes do. |
+| **Session renewal is not one transaction with the password change:** the old session is deleted after the change commits. If that delete hit SQLITE_BUSY (another process holding the write lock past the 5 s busy timeout), the old session would survive the change. | Needs a second process holding the lock. | **Open.** Next step: delete the old session in the change's transaction. |
+| **The parent did not validate select replies** (a `null` message would throw in a listener; an oversized `text` passed). | Only matters with code execution in the child. | **Resolved.** Replies must be well formed, answer the running job and fit its size limit (`packages/spec-runtime/test/select-replies.test.ts`; mutation-tested). |
+| **Process churn:** every timed-out or cancelled select forks a new process; cheap cancelled calls across many tools could fork often, bounded only by rate limits. | Not measured. | **Open.** Next step: measure; if needed, a short pause before forking again after kills. |
+| **A FIFO in the repository could block git** (POSIX): each git call waits for its 5 s timeout. | Not tested on Linux. | **Partly addressed:** a FIFO named by the config (`core.excludesFile`) no longer makes git run at all. A FIFO as an in-tree `.gitignore` remains (bounded by the timeout). |
+| **An IPv6 public URL in the connect command** (`http://[::1]:4310/...`) is not quoted, so zsh treats the brackets as a glob and the command fails. | Robustness, not injection: it fails closed. | **Open.** Next step: quote the URL in the generated commands. |
+
+Not separately mutation-tested on Windows (the tests that cover them run only on POSIX): the
+symbolic-link and ownership conditions of the git check. They were mutation-tested in the Linux
+container (see the round's report).
+
 ## Accepted risks (threat model, "Known limits")
 
 Kept short here; the reason for each is in `docs/THREAT-MODEL-STUDIO.md`.
