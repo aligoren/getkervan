@@ -18,11 +18,11 @@
   },
   "homepage": "https://getkervan.dev",
   "bugs": {
-    "url": "https://github.com/aligoren/getkervan/issues"
+    "url": "https://github.com/orchesta/getkervan/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aligoren/getkervan.git",
+    "url": "git+https://github.com/orchesta/getkervan.git",
     "directory": "packages/spec-runtime"
   },
   "type": "module",

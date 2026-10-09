@@ -23,7 +23,7 @@ disableHugoGeneratorInject = true
   # asks the registry that each package has it.
   npmTag = "next"
   # The source repository. A placeholder until it exists; `pnpm check:site --strict` fails on it.
-  repoURL = "https://github.com/aligoren/getkervan"
+  repoURL = "https://github.com/orchesta/getkervan"
   description = "Kervan turns a kervan.yaml spec into a working MCP server, or lets you write tools in TypeScript on the official MCP SDK. Optional self-hosted Studio."
   # Contact addresses: the same as SECURITY.md and CODE_OF_CONDUCT.md.
   hello = "hello@getkervan.dev"

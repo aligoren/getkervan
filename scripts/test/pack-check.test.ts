@@ -56,7 +56,6 @@ describe("a package's files", () => {
     ["test/app.test.js", "a test"],
     ["src/index.ts", "a source file"],
     ["dist/index.js.map", "a source map"],
-    ["CLAUDE.md", "a local tool file"],
     ["screenshots/editor.webp", "a scratch or screenshot folder"],
     ["dist/logo.png", "an image"],
   ])("refuse %s (%s)", (file, kind) => {

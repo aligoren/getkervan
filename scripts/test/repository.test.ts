@@ -47,7 +47,10 @@ describe("the repository address", () => {
   })
 
   it("names its owner in CODEOWNERS and its reporting form in the issue settings and SECURITY.md", () => {
-    expect(read(".github/CODEOWNERS")).toMatch(new RegExp(`^\\*\\s+@${owner}$`, "m"))
+    // Code owners are people (or teams), not necessarily the repository's owner: the repository
+    // belongs to an organization. Every path still has an owner.
+    expect(owner).toBeDefined()
+    expect(read(".github/CODEOWNERS")).toMatch(/^\*\s+@[\w-]+(\/[\w-]+)?$/m)
     const form = `${repository}/security/advisories/new`
     expect(read(".github/ISSUE_TEMPLATE/config.yml")).toContain(`url: ${form}`)
     expect(read("SECURITY.md")).toContain(form)

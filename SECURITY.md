@@ -17,7 +17,7 @@ and Kervan Studio.
 **Please do not open a public issue, discussion or pull request for a security problem.**
 
 1. **Preferred: GitHub private vulnerability reporting.** Open
-   [github.com/aligoren/getkervan/security/advisories/new](https://github.com/aligoren/getkervan/security/advisories/new)
+   [github.com/orchesta/getkervan/security/advisories/new](https://github.com/orchesta/getkervan/security/advisories/new)
    (or the repository's **Security** tab, **Report a vulnerability**). The report stays private
    between you and the maintainers, and becomes the draft of the security advisory. The form is
    available once the repository is public; until then, use email.

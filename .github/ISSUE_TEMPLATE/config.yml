@@ -3,5 +3,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability (privately)
-    url: https://github.com/aligoren/getkervan/security/advisories/new
+    url: https://github.com/orchesta/getkervan/security/advisories/new
     about: Do not open a public issue for a security problem. See SECURITY.md.

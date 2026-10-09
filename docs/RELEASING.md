@@ -20,11 +20,12 @@ Lines marked **Verify on release day** come from npm's and GitHub's documentatio
   the issue template, SECURITY.md, CONTRIBUTING.md and README.md against it.
 - **`pnpm test:pack`** (`scripts/pack-check.mjs`): packs each package with `pnpm pack` (which
   writes real versions in place of `workspace:`), checks every tarball against its allow list, a
-  deny list (environment files, databases, keys, tests, sources, source maps, local tool files,
-  screenshots), a size budget, source-map references and build output whose source is gone, then installs the tarballs with npm in a temporary folder outside
-  the repository and runs smoke tests: `kervan --help`, `kervan run --help`, a tool call through
-  `createApp` and `createTestClient`, `kervan run` on the example spec answering `tools/list`, and a
-  project made by `create-kervan` passing its own tests. CI and `release.yml` run it.
+  deny list (environment files, databases, keys, tests, sources, source maps, screenshots), a
+  size budget, source-map references and build output whose source is gone, then installs the
+  tarballs with npm in a temporary folder outside the repository and runs smoke tests: `kervan
+  --help`, `kervan run --help`, a tool call through `createApp` and `createTestClient`, `kervan
+  run` on the example spec answering `tools/list`, and a project made by `create-kervan` passing
+  its own tests. CI and `release.yml` run it.
 - **`pnpm verify:published [--tag next]`** (`scripts/verify-published.mjs`), after a release:
   compares the registry's metadata for the five packages with the repository's, checks each
   tarball's sha512 and contents, and runs the smoke tests on the packages installed by the tag. It
@@ -42,12 +43,16 @@ Free, a **private** repository has no branch protection or rulesets and no envir
 rules (required reviewers), so the `release` environment's approval does not exist until the
 repository is public. So: push while private, make it public, then publish.
 
-### 1. GitHub, while the repository is private (the maintainer; Claude Code does none of this)
+### 1. GitHub, while the repository is private (the maintainer)
 
-- [ ] Create an **empty private repository** `aligoren/getkervan`: no README, no license, no
+The repository was first created under the maintainer's personal account and then transferred to
+the `orchesta` organization: it is `orchesta/getkervan` now. GitHub redirects the old address, but
+every setting below is checked again on the organization's repository (step 2).
+
+- [ ] Create an **empty private repository** `orchesta/getkervan`: no README, no license, no
       `.gitignore` (the repository has its own; GitHub's would make the first push conflict).
 - [ ] The first push, from the maintainer's own machine (the local `pre-push` hook runs):
-      `git remote add origin https://github.com/aligoren/getkervan.git`, then
+      `git remote add origin https://github.com/orchesta/getkervan.git`, then
       `git push -u origin main`.
 - [ ] Check that CI runs green. Private repositories on GitHub Free have a monthly quota of
       Actions minutes, and Windows runners use them faster than Linux (check the current
@@ -119,7 +124,7 @@ provenance**; the next one (`rc.2` or `0.1.0`) goes through `release.yml` with p
 The commands, for PowerShell and for bash: [rc.1: step by step](#rc1-step-by-step).
 
 Then, for each of the five packages, add the **trusted publisher** (package settings on npmjs.com):
-GitHub Actions, repository `aligoren/getkervan`, workflow `release.yml`, environment `release`.
+GitHub Actions, repository `orchesta/getkervan`, workflow `release.yml`, environment `release`.
 **Verify on release day** (npm's documentation as read on 2026-10-08):
 
 - a configuration created after 2026-09-03 allows only `npm stage publish` by default: tick
@@ -189,7 +194,7 @@ A fresh clone, because an old checkout's `dist` can hold files whose sources wer
 (`test:pack` refuses them too).
 
 ```powershell
-git clone https://github.com/aligoren/getkervan.git kervan-release
+git clone https://github.com/orchesta/getkervan.git kervan-release
 Set-Location kervan-release
 git log -1 --format="%h %s"     # the merge of release/0.1.0-rc.1
 git status --porcelain          # prints nothing
@@ -203,7 +208,7 @@ pnpm test:pack                  # ends with "test:pack passed."
 ```
 
 ```sh
-git clone https://github.com/aligoren/getkervan.git kervan-release
+git clone https://github.com/orchesta/getkervan.git kervan-release
 cd kervan-release
 git log -1 --format="%h %s"     # the merge of release/0.1.0-rc.1
 git status --porcelain          # prints nothing
@@ -353,7 +358,7 @@ git push origin v0.1.0-rc.1
 ### 7. Trusted publishing, for the next version
 
 Configured per package on npmjs.com (Settings, Trusted publishing): GitHub Actions, repository
-`aligoren/getkervan`, workflow `release.yml`, environment `release`. **Verify on release day:**
+`orchesta/getkervan`, workflow `release.yml`, environment `release`. **Verify on release day:**
 tick **`npm publish`** under the allowed actions (a configuration created after 2026-09-03 allows
 only `npm stage publish` by default), and add it only when the next version (`0.1.0-rc.2` or
 `0.1.0`) is about to go through `release.yml`: a configuration expires if no publish succeeds

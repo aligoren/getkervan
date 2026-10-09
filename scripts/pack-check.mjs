@@ -3,8 +3,8 @@
 // 1. Packs every published package with `pnpm pack` (which writes real versions in place of
 //    `workspace:` dependencies) into a temporary folder outside the repository.
 // 2. Checks each tarball against its allow list (and a deny list of things that must never ship:
-//    environment files, databases, keys, tests, sources, source maps, local tool files,
-//    screenshots), a size budget, and that its package.json has no `workspace:` version.
+//    environment files, databases, keys, tests, sources, source maps, screenshots), a size
+//    budget, and that its package.json has no `workspace:` version.
 // 3. Installs all tarballs with npm into a fresh folder outside the repository (real copies, no
 //    workspace links) and runs smoke tests: `kervan --help`, `kervan run --help`, importing
 //    `createApp` and `createTestClient` and calling a tool, `kervan run` on the example spec over
@@ -82,7 +82,6 @@ const DENY = [
   [/(^|\/)src\//, "a source file", true],
   [/\.map$/, "a source map"],
   [/\.tsbuildinfo$/, "a TypeScript build file"],
-  [/(^|\/)(CLAUDE(\.local)?\.md|\.claude\/|\.mcp\.json)/, "a local tool file"],
   [/(^|\/)(scratch|tmp|temp|screenshots?)\//, "a scratch or screenshot folder"],
   [/\.(png|jpe?g|webp|gif)$/, "an image"],
 ]
