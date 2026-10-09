@@ -1272,6 +1272,60 @@ figcaption {
   background: var(--k-surface);
 }
 
+/* "Built by" and the Orchesta logo. One file is for light backgrounds, one for dark; the dark one
+   shows in exactly the cases the dark colors apply (layouts/_partials/css.html): the system is
+   dark and the visitor did not pick light, or the visitor picked dark (data-theme, or the radio
+   before site.js runs). The hidden image is display: none, so it is not loaded. */
+.built-by {
+  margin: 2rem 0 0;
+}
+
+.built-by a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--k-fg-muted);
+  text-decoration: none;
+}
+
+.built-by a:hover {
+  color: var(--k-fg);
+}
+
+.built-by a:focus-visible {
+  outline: 2px solid var(--k-ring);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.built-by img {
+  display: block;
+}
+
+.built-by .logo-on-dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not(:has(#theme-light:checked)) .built-by .logo-on-light {
+    display: none;
+  }
+
+  :root:not([data-theme="light"]):not(:has(#theme-light:checked)) .built-by .logo-on-dark {
+    display: block;
+  }
+}
+
+:root[data-theme="dark"] .built-by .logo-on-light,
+:root:has(#theme-dark:checked) .built-by .logo-on-light {
+  display: none;
+}
+
+:root[data-theme="dark"] .built-by .logo-on-dark,
+:root:has(#theme-dark:checked) .built-by .logo-on-dark {
+  display: block;
+}
+
 .footer-grid {
   display: grid;
   gap: 1.5rem;

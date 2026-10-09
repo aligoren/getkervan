@@ -35,6 +35,7 @@ Nothing that exists elsewhere in the repository is copied into `site/` by hand. 
 | The home page's one-glance flow | `site/layouts/_partials/flow.html`: two inline SVGs of the same flow (wide and tall), colored by the tokens |
 | "Tools in TypeScript" | `examples/calculator/src/calculator.ts`, a workspace example with its own test (mounted; the `code-file` shortcode shows it) |
 | The package diagram ("How Kervan works") | `site/layouts/_partials/diagram.html`, one inline SVG colored by the tokens |
+| The Orchesta logo in the footer | `site/static/img/orchesta-logo-*.webp` (158x32 and 159x32, shown at 79x16: sharp on 2x screens), one per theme |
 | `tools/list`, `server/discover` and the two tool calls | `site/data/generated/example.json`, written by `pnpm site:generate` from a real `kervan run --http` |
 | The `kervan.yaml` reference | `packages/spec-runtime/schema/kervan.schema.json`, rendered at build time |
 | CLI reference | `site/data/generated/cli-help.json` (the real `--help` output) and `packages/cli/README.md` |
@@ -57,7 +58,9 @@ wide screens, top to bottom below 52rem), "This is all it takes" (a whole spec a
 `kervan dev` prints for it, side by side), three benefits with a small icon each, and one Studio
 card linking to `/studio/`, Studio's own page with the gallery. About 190 words of prose, down from
 about 970 in the version before; what it dropped is in the framework book ("How Kervan works",
-security, transports).
+security, transports). The footer's "Built by" line links to orchesta.io with the logo: the file
+for light backgrounds or the one for dark, in exactly the cases the dark colors apply (system dark
+unless light was picked, or dark picked through `data-theme` or the header's radio).
 
 The framework book's menu has five groups (`groups` in `content/docs/framework/_index.md`; each
 page names its `group`): Start, Concepts, Build with YAML, Build with TypeScript, Run and operate.
@@ -241,7 +244,8 @@ placeholder; a page has no `lastmod` (not committed yet); `security.txt` expires
 | One screenshot | 120 KiB |
 | One HTML page | 150 KiB |
 
-After the simplified home page (no screenshot on it), `site:verify` measures about 89 KiB in the browser with the images it loads, down from about
+After the simplified home page (no screenshot on it; the footer's logo is a lazy-loaded 3 KiB
+WebP), `site:verify` measures about 89 KiB in the browser with the images it loads, down from about
 115 KiB with the earlier landing page (157 KiB before that, 415 KiB with the old gallery).
 
 ## Before the release, and on release day
@@ -276,6 +280,7 @@ Every claim on the landing page, and what backs it. When a claim changes, change
 | YAML or TypeScript, on the official MCP SDK; both get the same checks | the "official MCP SDK" and "Both kinds of tool" rows below |
 | Current MCP: the stateless 2026-07-28 revision, and 2025 clients from the same app | the "MCP 2026-07-28" row below |
 | Studio: a self-hosted web UI to manage servers, secrets, users and logs; the framework works without it | `apps/studio` (the Studio rows below); the framework packages do not depend on it (`apps/studio` is private; no package lists it as a dependency, and the CLI only forwards `kervan studio` to a Studio installed in the project) |
+| Built by Orchesta (the footer) | the repository is `orchesta/getkervan` (root `package.json`); the logo files are Orchesta's own, served from this site |
 | On the official MCP SDK, not a rewrite | `@modelcontextprotocol/server`, `/client`, `/hono` dependencies (`packages/*/package.json`) |
 | MCP 2026-07-28, stateless; `server/discover`; 2025 clients served too | `packages/transport`; both eras in `packages/transport/test` (`http`, `stdio`, `testing`); the landing page's `server/discover` output is a real answer |
 | Both kinds of tool: arguments validated before the handler, masked errors (only `ToolError` messages reach the client), a timeout on every call (30 s by default) and the client's cancellation, results checked against the output schema | `packages/core/src/tool.ts` (`invokeTool`), `app.ts` (`DEFAULT_TOOL_TIMEOUT_MS`), `errors.ts`; core's tests; the errors and testing pages' examples run in `site:verify --examples` |
