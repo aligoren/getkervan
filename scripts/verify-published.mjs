@@ -85,7 +85,22 @@ export function expectedManifests(version, readManifest) {
   })
 }
 
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+/** JSON with every object's keys sorted, recursively: the same data in any key order. */
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value).sort()
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`
+  }
+  return JSON.stringify(value) ?? "undefined"
+}
+
+/**
+ * Whether two values hold the same data. The registry returns `repository` with its keys in
+ * another order than package.json ({ url, type, directory }); every field must still match, and
+ * a missing or an extra field is a difference.
+ */
+export const same = (a, b) => canonical(a) === canonical(b)
 
 /**
  * Problems with what `npm view <name>@<version> --json` returned (`viewed`, or undefined when the

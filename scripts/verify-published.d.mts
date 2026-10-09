@@ -10,6 +10,7 @@ export declare function parseArgs(
   defaultVersion: string | undefined,
 ): { tag: string; version: string; tarballs: string | undefined }
 export declare const REGISTRY: string
+export declare function same(a: unknown, b: unknown): boolean
 export declare function tarballName(name: string, version: string): string
 export declare function expectedManifests(
   version: string,

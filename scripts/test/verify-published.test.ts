@@ -12,6 +12,7 @@ import {
   integrityProblems,
   parseArgs,
   REGISTRY,
+  same,
   tarballName,
   viewProblems,
 } from "../verify-published.mjs"
@@ -53,6 +54,44 @@ describe("the expected metadata", () => {
       engines: ">=22",
       repository: { type: "git", directory: "packages/core" },
     })
+  })
+})
+
+describe("the repository field, as the registry orders its keys", () => {
+  // npm view answers { url, type, directory }; package.json has { type, url, directory }.
+  const fromRegistry = (repository: Record<string, string>) => ({ ...goodView(), repository })
+  const url = core.repository.url
+  const directory = core.repository.directory
+
+  it("passes with the same content in the registry's order", () => {
+    const viewed = fromRegistry({ url, type: "git", directory })
+    expect(Object.keys(viewed.repository)).toEqual(["url", "type", "directory"])
+    expect(viewProblems(core, viewed, "next")).toEqual([])
+  })
+
+  it.each([
+    ["another url", { url: "git+https://github.com/someone/else.git", type: "git", directory }],
+    ["another directory", { url, type: "git", directory: "packages/cli" }],
+    ["another type", { url, type: "svn", directory }],
+    ["a missing field", { url, type: "git" }],
+    ["an extra field", { url, type: "git", directory, web: "https://example.com" }],
+  ])("fails with %s", (_, repository) => {
+    expect(viewProblems(core, fromRegistry(repository), "next")).toEqual([
+      expect.stringMatching(/^@kervan\/core: repository /),
+    ])
+  })
+})
+
+describe("comparing data (same)", () => {
+  it("ignores key order at every depth, nothing else", () => {
+    expect(
+      same({ a: 1, b: { c: [1, { d: 2, e: 3 }] } }, { b: { c: [1, { e: 3, d: 2 }] }, a: 1 }),
+    ).toBe(true)
+    expect(same({ a: 1 }, { a: "1" })).toBe(false)
+    expect(same({ a: [1, 2] }, { a: [2, 1] })).toBe(false)
+    expect(same({ a: undefined }, {})).toBe(false)
+    expect(same(undefined, {})).toBe(false)
+    expect(same(null, {})).toBe(false)
   })
 })
 
