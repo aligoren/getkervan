@@ -200,7 +200,9 @@ with a trailing slash; Open Graph and Twitter tags with a 1200x630 PNG on the si
 block with `WebSite` and `Organization` (`SoftwareApplication` on the home page, `BreadcrumbList`
 and `TechArticle` elsewhere) and no ratings, reviews, prices or awards; nothing loaded from
 another site; no iframe, inline script, inline style or event handler attribute; external links
-with `rel="noopener noreferrer"`; internal links and fragments that exist; images with `alt`,
+with `rel="noopener noreferrer"`, and a link that opens a new tab (`target="_blank"`, the footer's
+outbound links through `_partials/outbound-link.html`) with `noopener` and a visually hidden
+"(opens in a new tab)"; internal links and fragments that exist; images with `alt`,
 `width` and `height`; no page without a link to it; every `<pre>` focusable (`tabindex="0"`) with a
 role and an accessible name, so a long line can be scrolled from the keyboard; "On this page" lists
 sections only (no "Next" or other navigation); the docs menu opens exactly the group holding the

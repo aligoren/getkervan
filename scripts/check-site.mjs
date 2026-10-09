@@ -592,6 +592,18 @@ export function checkBuild(view, params, options = {}) {
         `${where}: shows an npm command (${NPM_COMMANDS.exec(code)?.[0]}) while params.published is false.`,
       )
     }
+    // A link that opens a new tab says so to screen readers, and gives the new page no handle on
+    // this one (layouts/_partials/outbound-link.html).
+    for (const [, opening, inner] of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)) {
+      const attrs = tags(`<a${opening}>`, "a")[0]?.attrs ?? {}
+      if (attrs.target !== "_blank") continue
+      if (!(attrs.rel ?? "").split(/\s+/).includes("noopener"))
+        errors.push(`${where}: ${attrs.href} opens a new tab without rel="noopener".`)
+      if (!textOf(inner).includes("(opens in a new tab)"))
+        errors.push(
+          `${where}: ${attrs.href} opens a new tab without saying so ("(opens in a new tab)").`,
+        )
+    }
     // Line by line: textOf would join a block's lines into one.
     for (const problem of npmCommandProblems(
       [...main.matchAll(/<pre[\s\S]*?<\/pre>/g)]

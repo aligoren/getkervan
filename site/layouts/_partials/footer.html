@@ -23,7 +23,7 @@
       <nav aria-labelledby="footer-project">
         <h2 id="footer-project">Project</h2>
         <ul>
-          <li><a href="{{ site.Params.repoURL }}" rel="noopener noreferrer">Source code (MIT license)</a></li>
+          <li>{{ partial "outbound-link.html" (dict "href" site.Params.repoURL "content" "Source code (MIT license)") }}</li>
           <li><a href="/changelog/">Changelog</a></li>
           <li><a href="/docs/framework/security/">Security model</a></li>
           <li><a href="/.well-known/security.txt">security.txt</a></li>
@@ -39,10 +39,10 @@
       </div>
     </div>
     <p class="built-by">
-      <a href="https://orchesta.io" rel="noopener noreferrer">Built by
+      {{- $logo := `Built by
         <img class="logo-on-light" src="/img/orchesta-logo-dark-ui.webp" alt="Orchesta" width="79" height="16" loading="lazy">
-        <img class="logo-on-dark" src="/img/orchesta-logo-light-ui.webp" alt="Orchesta" width="79" height="16" loading="lazy">
-      </a>
+        <img class="logo-on-dark" src="/img/orchesta-logo-light-ui.webp" alt="Orchesta" width="79" height="16" loading="lazy">` }}
+      {{ partial "outbound-link.html" (dict "href" "https://orchesta.io" "title" "Developed by Orchesta" "content" ($logo | safeHTML)) }}
     </p>
     <p class="fine">Kervan is open source under the MIT license. {{ if not site.Params.published }}It is in development and not published yet.{{ else if ne site.Params.npmTag "latest" }}Version 0.1 is a release candidate.{{ end }} Kervan is not affiliated with Anthropic or the Model Context Protocol project.</p>
   </div>

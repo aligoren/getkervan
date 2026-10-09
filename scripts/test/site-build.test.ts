@@ -598,6 +598,26 @@ run("each check:site rule catches its problem", () => {
       /search\/extra\.json: shows a home folder path/,
     ],
     [
+      "a link that opens a new tab without noopener",
+      () => ({
+        "index.html": home().replace(
+          /(href="?https:\/\/orchesta\.io"? target="?_blank"?) rel="noopener noreferrer"/,
+          "$1 rel=noreferrer",
+        ),
+      }),
+      /orchesta\.io opens a new tab without rel="noopener"/,
+    ],
+    [
+      "a link that opens a new tab without saying so",
+      () => ({
+        "index.html": home().replace(
+          /(href="?https:\/\/orchesta\.io"?[\s\S]*?)<span class="?visually-hidden"?> \(opens in a new tab\)<\/span>/,
+          "$1",
+        ),
+      }),
+      /orchesta\.io opens a new tab without saying so/,
+    ],
+    [
       "a home page example that is no longer replayed (the REPL block lost its check)",
       () => ({ "index.html": home().replace(/data-check="?repl"?/, 'data-example="home-repl"') }),
       /the example is not verified/,
