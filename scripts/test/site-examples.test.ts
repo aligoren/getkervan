@@ -1,9 +1,16 @@
 // How the docs example runner reads a documented command (scripts/site/run-examples.mjs): the
 // placeholders for a clone's location in the published text map to the real clone when it runs.
-import { readFileSync } from "node:fs"
+import { lstatSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
-import { commandLines, runExamples, toProcess, words } from "../site/run-examples.mjs"
+import {
+  commandLines,
+  linkCliDependencies,
+  runExamples,
+  toProcess,
+  words,
+} from "../site/run-examples.mjs"
 
 const tree = path.resolve("/work/kervan")
 const B = String.fromCharCode(92)
@@ -75,6 +82,27 @@ describe("the docs example runner", () => {
       ])
     },
   )
+
+  // A TypeScript example resolves @kervan/* like a project that depends on them. One link per
+  // package, straight to its real folder: a link to the CLI's node_modules failed on GitHub's
+  // Windows runners, where pnpm makes symbolic links (ERR_MODULE_NOT_FOUND from the ESM resolver).
+  it("links each of the CLI's dependencies straight to its real folder", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "kervan-links-"))
+    try {
+      linkCliDependencies(dir)
+      const modules = path.join(dir, "node_modules")
+      expect(lstatSync(modules).isSymbolicLink()).toBe(false)
+      const repo = path.join(import.meta.dirname, "..", "..")
+      for (const name of ["core", "transport", "spec-runtime"]) {
+        const link = path.join(modules, "@kervan", name)
+        const real = realpathSync(path.join(repo, "packages", name))
+        expect(lstatSync(link).isSymbolicLink(), name).toBe(true)
+        expect(path.resolve(dir, readlinkSync(link)).replace(/[\\/]$/, ""), name).toBe(real)
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 
   // The home page's transcript replays against the spec and the TypeScript it names (data-code);
   // before publishing, with the repository's packages. A TypeScript tool that lists differently fails.

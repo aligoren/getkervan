@@ -20,6 +20,8 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -306,6 +308,33 @@ function workdir(blocks, block, line = "") {
   return dir
 }
 
+/**
+ * Gives dir a node_modules with the CLI package's dependencies (@kervan/* among them), like a
+ * project that depends on them: one link per package, straight to its real folder. Not one link
+ * to the CLI's node_modules: pnpm makes symbolic links there where Windows allows them (GitHub's
+ * runners) and junctions where it does not, and Node's ESM resolver does not find a package
+ * through a junction to a folder of symbolic links (ERR_MODULE_NOT_FOUND; CommonJS does).
+ */
+export function linkCliDependencies(dir) {
+  const from = path.join(root, "packages", "cli", "node_modules")
+  const names = readdirSync(from)
+    .filter((name) => !name.startsWith("."))
+    .flatMap((name) =>
+      name.startsWith("@")
+        ? readdirSync(path.join(from, name)).map((inner) => `${name}/${inner}`)
+        : [name],
+    )
+  for (const name of names) {
+    const link = path.join(dir, "node_modules", ...name.split("/"))
+    mkdirSync(path.dirname(link), { recursive: true })
+    symlinkSync(
+      realpathSync(path.join(from, ...name.split("/"))),
+      link,
+      isWindows ? "junction" : "dir",
+    )
+  }
+}
+
 /** Type-checks `file` in dir (strict, Node types), resolving packages from dir's node_modules. */
 function typecheck(dir, file) {
   runToEnd(
@@ -481,11 +510,7 @@ const runners = {
         typecheck(codeDir, `${id}.ts`)
       } else {
         writeFileSync(path.join(codeDir, "package.json"), '{ "type": "module" }\n')
-        symlinkSync(
-          path.join(root, "packages", "cli", "node_modules"),
-          path.join(codeDir, "node_modules"),
-          isWindows ? "junction" : "dir",
-        )
+        linkCliDependencies(codeDir)
       }
       await replay(block, [cli, `${id}.ts`], codeDir)
     } finally {
@@ -496,12 +521,7 @@ const runners = {
   async ts(block) {
     const dir = tempDir("kervan-docs-ts-")
     try {
-      // Resolves @kervan/* from the CLI package, like a project that depends on them.
-      symlinkSync(
-        path.join(root, "packages", "cli", "node_modules"),
-        path.join(dir, "node_modules"),
-        isWindows ? "junction" : "dir",
-      )
+      linkCliDependencies(dir)
       writeFileSync(path.join(dir, "package.json"), '{ "type": "module" }\n')
       writeFileSync(path.join(dir, "example.ts"), codeOf(block))
       typecheck(dir, "example.ts")
