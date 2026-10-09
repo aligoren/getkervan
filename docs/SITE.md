@@ -31,7 +31,7 @@ Nothing that exists elsewhere in the repository is copied into `site/` by hand. 
 
 | Shown on the site | Comes from |
 | --- | --- |
-| The home page's example `kervan.yaml` and its tool list | `site/assets/examples/home.yaml`; the tool line under it is built from the file. `pnpm test` loads the spec and `site:verify --examples` replays `tools` in the real CLI (check:site requires both blocks) |
+| The home page's example (`server.ts` and `kervan.yaml`) and its tool list | `site/assets/examples/home.ts` and `home.yaml`; the tool line under them is built from the YAML file. `pnpm test` loads the spec and parses the TypeScript; `site:verify --examples` type-checks the TypeScript and replays `tools` against both (check:site requires the three blocks and the same tool in both) |
 | The home page's one-glance flow | `site/layouts/_partials/flow.html`: two inline SVGs of the same flow (wide and tall), colored by the tokens |
 | "Tools in TypeScript" | `examples/calculator/src/calculator.ts`, a workspace example with its own test (mounted; the `code-file` shortcode shows it) |
 | The package diagram ("How Kervan works") | `site/layouts/_partials/diagram.html`, one inline SVG colored by the tokens |
@@ -54,8 +54,8 @@ relative links at the source repository, and while `params.published` is false s
 The home page says in one glance what Kervan does, and the details live in the docs. In order:
 the hero (one headline, one line, the install command to copy and the documentation button) with
 the one-glance flow under it (your spec or code, Kervan, MCP tools, an AI client; left to right on
-wide screens, top to bottom below 52rem), "This is all it takes" (a whole spec and the tool list
-`kervan dev` prints for it, side by side), three benefits with a small icon each, and one Studio
+wide screens, top to bottom below 52rem), "This is all it takes" (the same tool in TypeScript and in YAML, as two tabs with TypeScript first,
+and the tool list `kervan dev` prints for either, side by side), three benefits with a small icon each, and one Studio
 card linking to `/studio/`, Studio's own page with the gallery. About 190 words of prose, down from
 about 970 in the version before; what it dropped is in the framework book ("How Kervan works",
 security, transports). The footer's "Built by" line links to orchesta.io with the logo: the file
@@ -160,7 +160,8 @@ Slow, `pnpm site:verify`:
   axe-core finds no WCAG 2.2 A/AA or best-practice violation (contrast included); the CSP blocks
   nothing; no request leaves the local server; nothing logs an error; nothing scrolls sideways;
 - without JavaScript: the theme switch works, the skip link is the first Tab stop, the search page
-  lists every page; with it: copy buttons and search work;
+  lists every page and the home page shows both examples; with it: copy buttons and search work, and
+  the home page's example tabs work from the keyboard (arrow keys, Home, End; one Tab stop);
 - one vertical scroll bar, the page's: no code block or menu scrolls on its own; no copy button
   covers code;
 - at 1440x900 and 1280x720, on every docs page: the menu fits the screen, has no scroll box, and
@@ -216,8 +217,8 @@ For the site: `sitemap.xml` lists exactly the canonical pages, with `lastmod` fr
 headers, HSTS of at least a year, and `noindex` for the `*.pages.dev` preview hosts and only for them;
 no canonical link on the 404 page; the performance budget; the framework
 book never mentions Studio except the one line pointing to its docs, and each of its pages has a
-"Where this fits" line; the home page's example is a spec block and a REPL transcript that runs
-it (so `site:verify --examples` checks the output), no Studio screenshot in its first screen (the
+"Where this fits" line; the home page's example is a TypeScript block, a spec block and a REPL transcript that runs
+both (so `site:verify --examples` checks the output), and both define the tool the transcript lists, no Studio screenshot in its first screen (the
 hero) and at most two Studio screenshots in all.
 
 An npm install command in a code block while `params.published` is false is an error. Once it is
@@ -277,7 +278,7 @@ Every claim on the landing page, and what backs it. When a claim changes, change
 | The hero: describe an HTTP API in YAML or write tools in TypeScript, and Kervan serves them as an MCP server | spec tools: `packages/spec-runtime` (the HTTP executor); code tools: `app.tool` in `packages/core`; serving: `packages/transport` and `kervan run`/`dev`; the home page's example is replayed in `site:verify --examples` |
 | Your AI client, such as Claude Code, can call it; "AI client" in the flow | any MCP client over stdio or Streamable HTTP; Claude Code is connected for real in `site:verify --examples --claude` (the connect guide) |
 | The flow: Kervan checks and limits each call; the tools go out over stdio or HTTP | the "Both kinds of tool" and "Timeouts, size limits, rate limits" rows below; `serve`/`serveHttp`/`toFetchHandler` in `packages/transport` |
-| "This is all it takes": the spec and the tool a client sees | `site/assets/examples/home.yaml`, loaded by `pnpm test`; the `tools` line replayed against the real CLI by `site:verify --examples` |
+| "This is all it takes": the same tool in TypeScript and YAML, and the tool a client sees | `site/assets/examples/home.ts` and `home.yaml`; the spec loaded by `pnpm test`; `site:verify --examples` type-checks the TypeScript and replays the `tools` line against both, the TypeScript with the packages from npm under `params.npmTag` |
 | Safe by default: spec tools reach public addresses only, keep secrets out of results, errors and logs, and every call has a timeout | the SSRF, secret redaction and timeouts rows below |
 | YAML or TypeScript, on the official MCP SDK; both get the same checks | the "official MCP SDK" and "Both kinds of tool" rows below |
 | Current MCP: the stateless 2026-07-28 revision, and 2025 clients from the same app | the "MCP 2026-07-28" row below |

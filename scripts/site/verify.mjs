@@ -7,7 +7,8 @@
 //    - the CSP blocks nothing, no request leaves the local server, nothing logs an error;
 //    - nothing scrolls sideways on a phone.
 //    Without JavaScript: the theme switch works, the skip link is the first Tab stop and shows,
-//    the search page lists every page. With it: copy buttons appear and search finds pages.
+//    the search page lists every page, the home page shows both examples. With it: copy buttons
+//    appear, search finds pages, and the home page's example tabs work from the keyboard.
 //    The home page with the images Chromium loads stays within the budget, measured in the browser.
 //    At 1440x900 and 1280x720 the docs menu fits the screen, has no scroll box, and stays in place.
 // 3. With --examples, runs the documentation's code blocks (scripts/site/run-examples.mjs; also
@@ -269,6 +270,12 @@ async function browserChecks(origin, pages, shotsDir) {
       if (!listed.includes("All pages") || !listed.includes("Quickstart"))
         fail("search (no JavaScript)", "the page list is missing")
       await search.page.close()
+      const home = await open(plain, origin, "/")
+      for (const id of ["example-ts", "example-yaml"]) {
+        if (!(await home.page.locator(`#${id} pre`).isVisible()))
+          fail("home example (no JavaScript)", `#${id} is not shown`)
+      }
+      await home.page.close()
     }
     await plain.close()
 
@@ -288,6 +295,61 @@ async function browserChecks(origin, pages, shotsDir) {
       const hits = await search.page.locator("#search-results a").count()
       if (hits === 0) fail("search", 'no result for "secrets"')
       await search.page.close()
+
+      // The home page's example tabs (the WAI-ARIA tabs pattern), from the keyboard.
+      const home = await open(scripted, origin, "/")
+      const state = () =>
+        home.page.evaluate(() => {
+          const tabs = [...document.querySelectorAll('[role="tablist"] [role="tab"]')]
+          const focused = document.activeElement
+          return {
+            names: tabs.map((tab) => tab.textContent),
+            selected: tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true"),
+            focused: tabs.indexOf(focused),
+            tabStops: tabs.filter((tab) => tab.tabIndex === 0).length,
+            shown: [...document.querySelectorAll('[role="tabpanel"]')]
+              .filter((panel) => !panel.hidden && panel.getBoundingClientRect().height > 0)
+              .map((panel) => panel.getAttribute("aria-labelledby")),
+            outline: focused ? getComputedStyle(focused).outlineStyle : "",
+          }
+        })
+      const expectTabs = (what, actual, selected, focused) => {
+        const ok =
+          actual.selected === selected &&
+          actual.focused === focused &&
+          actual.tabStops === 1 &&
+          actual.shown.length === 1 &&
+          actual.shown[0] === ["example-ts-tab", "example-yaml-tab"][selected]
+        if (!ok) fail("home example tabs", `${what}: ${JSON.stringify(actual)}`)
+      }
+      const first = await state()
+      if (first.names.join() !== "TypeScript,YAML")
+        fail("home example tabs", `tabs are ${JSON.stringify(first.names)}`)
+      expectTabs("on load", first, 0, -1)
+      // Tab from the element before the tab list lands on the selected tab, with a focus ring.
+      await home.page.locator("#example-title").evaluate((title) => {
+        title.tabIndex = -1
+        title.focus()
+      })
+      await home.page.keyboard.press("Tab")
+      const focusedFirst = await state()
+      expectTabs("Tab into the list", focusedFirst, 0, 0)
+      if (focusedFirst.outline === "none")
+        fail("home example tabs", "the focused tab has no visible focus ring")
+      await home.page.keyboard.press("ArrowRight")
+      expectTabs("ArrowRight", await state(), 1, 1)
+      await home.page.keyboard.press("ArrowRight")
+      expectTabs("ArrowRight from the last tab", await state(), 0, 0)
+      await home.page.keyboard.press("ArrowLeft")
+      expectTabs("ArrowLeft from the first tab", await state(), 1, 1)
+      await home.page.keyboard.press("Home")
+      expectTabs("Home", await state(), 0, 0)
+      await home.page.keyboard.press("End")
+      expectTabs("End", await state(), 1, 1)
+      await home.page.keyboard.press("Tab")
+      if ((await state()).focused !== -1)
+        fail("home example tabs", "Tab does not leave the tab list (more than one Tab stop)")
+      await home.page.close()
     }
     await scripted.close()
 
@@ -355,6 +417,7 @@ async function main() {
       claude: flag("--claude"),
       docker: flag("--docker"),
       published: params.published === true,
+      tag: params.npmTag,
     })
     const failed = results.filter((result) => result.status === "failed")
     for (const result of failed) console.error(`\nFAILED ${result.where}\n${result.detail}`)

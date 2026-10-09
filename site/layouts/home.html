@@ -1,10 +1,14 @@
 {{ define "main" }}
-{{- /* The example: a whole spec, and the tool list `kervan dev` prints for it. Both are checked by
-       `pnpm site:verify --examples`: the spec is loaded, and the REPL is replayed against the real
-       CLI (docs/SITE.md, "Code blocks in the documentation"). */ -}}
+{{- /* The example: the same tool in TypeScript and as a spec, and the tool list `kervan dev`
+       prints for it. `pnpm site:verify --examples` type-checks the TypeScript, loads the spec, and
+       replays the REPL against both: the spec with the repository's CLI, the TypeScript with the
+       packages installed from npm (docs/SITE.md, "Code blocks in the documentation"). */ -}}
 {{- $file := resources.Get "examples/home.yaml" -}}
 {{- if not $file }}{{ errorf "site/assets/examples/home.yaml is missing" }}{{ end -}}
+{{- $tsFile := resources.Get "examples/home.ts" -}}
+{{- if not $tsFile }}{{ errorf "site/assets/examples/home.ts is missing" }}{{ end -}}
 {{- $spec := $file.Content | replaceRE "\r\n" "\n" | strings.TrimRight "\n" -}}
+{{- $ts := $tsFile.Content | replaceRE "\r\n" "\n" | strings.TrimRight "\n" -}}
 {{- $tool := index ($spec | transform.Unmarshal).tools 0 -}}
 {{- $repl := printf "kervan> tools\n  %s  %s" $tool.name $tool.description -}}
 {{- $rc := and site.Params.published (ne site.Params.npmTag "latest") -}}
@@ -34,11 +38,20 @@
   <div class="wrap">
     <h2 id="example-title">This is all it takes</h2>
     <div class="split example-split">
-      <div class="panel">
-        {{ partial "code.html" (dict "code" $spec "lang" "yaml" "label" "kervan.yaml" "wrap" true "attrs" (dict "check" "spec" "id" "kervan")) }}
+      {{- /* Without JavaScript both examples show, one under the other, each under its heading;
+             site.js turns them into tabs (TypeScript first). */}}
+      <div class="panel example-tabs" data-tabs>
+        <div class="example-panel" id="example-ts">
+          <h3 class="example-heading">TypeScript</h3>
+          {{ partial "code.html" (dict "code" $ts "lang" "ts" "label" "server.ts" "wrap" true "attrs" (dict "check" "ts" "id" "server")) }}
+        </div>
+        <div class="example-panel" id="example-yaml">
+          <h3 class="example-heading">YAML</h3>
+          {{ partial "code.html" (dict "code" $spec "lang" "yaml" "label" "kervan.yaml" "wrap" true "attrs" (dict "check" "spec" "id" "kervan")) }}
+        </div>
       </div>
       <div class="panel">
-        {{ partial "code.html" (dict "code" $repl "lang" "text" "label" (printf "%s dev kervan.yaml" (cond site.Params.published (printf "npx kervan@%s" site.Params.npmTag) "kervan")) "wrap" true "attrs" (dict "check" "repl" "spec" "kervan")) }}
+        {{ partial "code.html" (dict "code" $repl "lang" "text" "label" (printf "%s dev server.ts (or kervan.yaml)" (cond site.Params.published (printf "npx kervan@%s" site.Params.npmTag) "kervan")) "wrap" true "attrs" (dict "check" "repl" "spec" "kervan" "code" "server")) }}
         <p class="note">The tool an AI client sees. Next: <a href="/docs/framework/quickstart/">the quickstart</a>.</p>
       </div>
     </div>

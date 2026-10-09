@@ -1,5 +1,6 @@
 // How the docs example runner reads a documented command (scripts/site/run-examples.mjs): the
 // placeholders for a clone's location in the published text map to the real clone when it runs.
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { commandLines, runExamples, toProcess, words } from "../site/run-examples.mjs"
@@ -74,4 +75,45 @@ describe("the docs example runner", () => {
       ])
     },
   )
+
+  // The home page's transcript replays against the spec and the TypeScript it names (data-code);
+  // before publishing, with the repository's packages. A TypeScript tool that lists differently fails.
+  describe("a REPL transcript with data-code", () => {
+    const assets = path.join(import.meta.dirname, "..", "..", "site", "assets", "examples")
+    const read = (name: string) =>
+      readFileSync(path.join(assets, name), "utf8").replace(/\r\n/g, "\n")
+    const spec = read("home.yaml")
+    const ts = read("home.ts")
+    const [, name = "", description = ""] = /name: (\S+)\n\s+description: (.+)/.exec(spec) ?? []
+    const blocks = (code: string) => [
+      { page: "/", check: "spec", id: "kervan", raw: spec, attrs: { "data-id": "kervan" } },
+      { page: "/", check: "ts", id: "server", raw: code, attrs: { "data-id": "server" } },
+      {
+        page: "/",
+        check: "repl",
+        raw: `kervan> tools\n  ${name}  ${description}`,
+        attrs: { "data-spec": "kervan", "data-code": "server" },
+      },
+    ]
+    const replay = async (code: string) =>
+      (await runExamples(blocks(code), { log: () => {} })).find((result) =>
+        result.where.includes("repl"),
+      )
+
+    it("passes when the TypeScript lists the same tool", async () => {
+      expect(await replay(ts)).toEqual(expect.objectContaining({ status: "ok" }))
+    }, 120_000)
+
+    it("fails when it does not", async () => {
+      expect(description.length).toBeGreaterThan(10)
+      const other = ts.replace(description, "Something else.")
+      expect(other).not.toBe(ts)
+      expect(await replay(other)).toEqual(
+        expect.objectContaining({
+          status: "failed",
+          detail: expect.stringContaining("did not print (server.ts)"),
+        }),
+      )
+    }, 120_000)
+  })
 })

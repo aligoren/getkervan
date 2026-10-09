@@ -448,6 +448,62 @@ hr {
   margin-bottom: 0.6rem;
 }
 
+/* The example's tabs (site.js builds them; without JavaScript both examples show, each under its
+   heading). */
+.example-heading {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: var(--k-fg-muted);
+}
+
+.example-panel + .example-panel {
+  margin-top: 1rem;
+}
+
+.example-panel[hidden] {
+  display: none;
+}
+
+.example-tablist {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 0.6rem;
+  border-bottom: 1px solid var(--k-border);
+}
+
+.example-tab {
+  font: 600 0.92rem var(--font-sans);
+  color: var(--k-fg-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 0.45rem 0.9rem;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+
+.example-tab:hover {
+  color: var(--k-fg);
+}
+
+.example-tab[aria-selected="true"] {
+  color: var(--k-fg);
+  background: var(--k-surface);
+  border-color: var(--k-border);
+  box-shadow: inset 0 3px 0 var(--k-accent);
+}
+
+.example-tab:focus-visible {
+  outline: 2px solid var(--k-ring);
+  outline-offset: 2px;
+}
+
+/* As tabs, one panel shows: none keeps the gap meant for the second of two stacked examples. */
+.example-tablist ~ .example-panel {
+  margin-top: 0;
+}
+
 .benefits {
   display: grid;
   gap: 1.5rem;

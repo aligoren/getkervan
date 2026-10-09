@@ -897,23 +897,46 @@ export function checkBuild(view, params, options = {}) {
       )
   }
 
-  // The home page's example is verified, not only shown: a spec block, and a REPL transcript that
-  // names it, which `site:verify --examples` replays against the real CLI (docs/SITE.md).
+  // The home page's example is verified, not only shown: the same tool in TypeScript and as a spec,
+  // and a REPL transcript that names both, which `site:verify --examples` replays against each
+  // (docs/SITE.md). Here, without running anything: both define the tool the transcript lists.
   if (view.files.has("index.html")) {
-    const blocks = tags(view.text("index.html"), "div").filter((tag) =>
-      /(^|\s)code(\s|$)/.test(tag.attrs.class ?? ""),
-    )
-    const spec = blocks.find((tag) => tag.attrs["data-check"] === "spec" && tag.attrs["data-id"])
+    const blocks = [
+      ...view.text("index.html").matchAll(/<div class="?code"?((?:\s[^>]*)?)>([\s\S]*?)<\/pre>/g),
+    ].map((match) => ({
+      attrs: tags(`<div ${match[1]}>`, "div")[0]?.attrs ?? {},
+      code: decodeEntities((/<pre[\s\S]*$/.exec(match[2])?.[0] ?? "").replace(/<[^>]+>/g, "")),
+    }))
+    const check = (block, ...kinds) => kinds.includes(block.attrs["data-check"])
+    const spec = blocks.find((block) => check(block, "spec") && block.attrs["data-id"])
+    const ts = blocks.find((block) => check(block, "ts", "ts-run") && block.attrs["data-id"])
     const repl =
       spec &&
+      ts &&
       blocks.find(
-        (tag) =>
-          tag.attrs["data-check"] === "repl" && tag.attrs["data-spec"] === spec.attrs["data-id"],
+        (block) =>
+          check(block, "repl") &&
+          block.attrs["data-spec"] === spec.attrs["data-id"] &&
+          block.attrs["data-code"] === ts.attrs["data-id"],
       )
     if (!repl)
       errors.push(
-        "/: the example is not verified: it needs a spec block and a REPL transcript that runs it.",
+        "/: the example is not verified: it needs a TypeScript block, a spec block, and a REPL transcript that runs both.",
       )
+    else {
+      const [, name, description] =
+        /^kervan> tools\n\s+(\S+)\s+(.+)$/m.exec(repl.code.replace(/\r\n/g, "\n")) ?? []
+      const same =
+        name &&
+        ts.code.includes(`"${name}"`) &&
+        ts.code.includes(description) &&
+        spec.code.includes(`name: ${name}`) &&
+        spec.code.includes(description)
+      if (!same)
+        errors.push(
+          `/: the TypeScript and YAML examples must both define the tool the transcript lists (${name ?? "none"}).`,
+        )
+    }
   }
 
   return { errors, warnings }

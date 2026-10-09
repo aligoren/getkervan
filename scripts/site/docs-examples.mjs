@@ -11,7 +11,8 @@
 //   starts      a long-running command: it must print `ready` within 30 s (then it is stopped);
 //               with each="true" every line is one command that must still be running after 5 s
 //               (cwd: where they run; files: empty files they expect, e.g. an .env)
-//   repl        a kervan dev REPL transcript: the `kervan> ` lines are fed to it
+//   repl        a kervan dev REPL transcript: the `kervan> ` lines are fed to it, run with its spec;
+//               with code="<id>" also with that ts block (from npm once published), same output
 //   ts, ts-run  TypeScript: it must type-check; ts-run must also run and print `expect`
 //   ts-syntax   a TypeScript excerpt that uses names from its surroundings: it must parse
 //   studio-key  writes the master key file; run in a fresh folder before each Studio command
@@ -94,6 +95,12 @@ export function declarationProblems(blocks) {
       .filter((block) => block.check === "spec" && block.id)
       .map((block) => `${block.page}#${block.id}`),
   )
+  // A REPL transcript may also replay against TypeScript (data-code): a ts block on its page.
+  const modules = new Set(
+    blocks
+      .filter((block) => (block.check === "ts" || block.check === "ts-run") && block.id)
+      .map((block) => `${block.page}#${block.id}`),
+  )
   for (const block of blocks) {
     const where = `${block.page} (${block.lang} block "${codeOf(block).split("\n")[0].slice(0, 50)}")`
     const attr = (name) => block.attrs[`data-${name}`]
@@ -114,6 +121,11 @@ export function declarationProblems(blocks) {
       problems.push(`${where}: a REPL transcript names the spec it runs.`)
     if (attr("spec") !== undefined && !specs.has(`${block.page}#${attr("spec")}`)) {
       problems.push(`${where}: no spec block with id "${attr("spec")}" on this page.`)
+    }
+    if (attr("code") !== undefined && block.check !== "repl")
+      problems.push(`${where}: only a REPL transcript replays against code.`)
+    if (attr("code") !== undefined && !modules.has(`${block.page}#${attr("code")}`)) {
+      problems.push(`${where}: no ts block with id "${attr("code")}" on this page.`)
     }
     if (attr("network") !== undefined && attr("network") !== "true")
       problems.push(`${where}: network is "true" or absent.`)

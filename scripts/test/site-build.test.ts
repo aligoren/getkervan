@@ -229,6 +229,20 @@ run("the built site", () => {
       ),
     ).toEqual([expect.stringContaining("needs a reason")])
   })
+
+  it("the declaration rules catch a REPL transcript that names missing code, and code on another kind", () => {
+    const missing = page("index.html").replace(/data-code="?server"?/, 'data-code="other"')
+    expect(declarationProblems(collectBlocks(siteView(dir, { "index.html": missing })))).toEqual([
+      expect.stringContaining('no ts block with id "other" on this page'),
+    ])
+    const onSpec = page("index.html").replace(
+      /data-check="?spec"?/,
+      (match) => `${match} data-code="server"`,
+    )
+    expect(declarationProblems(collectBlocks(siteView(dir, { "index.html": onSpec })))).toEqual([
+      expect.stringContaining("only a REPL transcript replays against code"),
+    ])
+  })
 })
 
 /** Inserts `html` just before `</main>` of a page. */
@@ -626,6 +640,33 @@ run("each check:site rule catches its problem", () => {
       "a home page REPL transcript that names another spec",
       () => ({ "index.html": home().replace(/data-spec="?kervan"?/, 'data-spec="other"') }),
       /the example is not verified/,
+    ],
+    [
+      "a home page TypeScript example that is not checked",
+      () => ({ "index.html": home().replace(/data-check="?ts"?/, 'data-example="home-ts"') }),
+      /the example is not verified/,
+    ],
+    [
+      "a home page REPL transcript that does not replay against the TypeScript",
+      () => ({ "index.html": home().replace(/ data-code="?server"?/, "") }),
+      /the example is not verified/,
+    ],
+    [
+      "a home page TypeScript example that defines another tool",
+      () => ({
+        "index.html": home().replace("&#34;get_current_weather&#34;", "&#34;get_weather&#34;"),
+      }),
+      /must both define the tool the transcript lists \(get_current_weather\)/,
+    ],
+    [
+      "a home page YAML example with another description",
+      () => ({
+        "index.html": home().replace(
+          "<span class=l>Current temperature (°C) and wind speed",
+          "<span class=l>Current temperature (°C) and wind",
+        ),
+      }),
+      /must both define the tool the transcript lists/,
     ],
     [
       "a Studio mention in the framework docs",

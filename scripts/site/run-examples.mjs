@@ -275,6 +275,15 @@ function specFor(blocks, block) {
   )
 }
 
+/** The TypeScript block a REPL transcript also replays against (data-code). */
+function codeFor(blocks, block) {
+  const id = block.attrs["data-code"]
+  return blocks.find(
+    (other) =>
+      other.page === block.page && other.id === id && ["ts", "ts-run"].includes(other.check),
+  )
+}
+
 /** A temporary folder with the block's spec (if any) under the name the command uses. */
 function workdir(blocks, block, line = "") {
   const dir = tempDir("kervan-docs-")
@@ -285,6 +294,66 @@ function workdir(blocks, block, line = "") {
     writeFileSync(path.join(dir, name), codeOf(spec))
   }
   return dir
+}
+
+/** Type-checks `file` in dir (strict, Node types), resolving packages from dir's node_modules. */
+function typecheck(dir, file) {
+  runToEnd(
+    [
+      process.execPath,
+      path.join(root, "node_modules", "typescript", "bin", "tsc"),
+      "--noEmit",
+      "--strict",
+      "--skipLibCheck",
+      "--target",
+      "es2024",
+      "--module",
+      "nodenext",
+      "--moduleResolution",
+      "nodenext",
+      "--types",
+      "node",
+      "--typeRoots",
+      path.join(root, "node_modules", "@types"),
+      file,
+    ],
+    { cwd: dir },
+  )
+}
+
+/**
+ * Feeds a REPL transcript's `kervan> ` lines to `kervan dev <entry>` (cli, entry) in dir and
+ * checks that each prints the lines under it. Its stdin is a pipe, not a terminal: --http --repl
+ * keeps the inspector on.
+ */
+async function replay(block, [cli, entry], dir) {
+  const port = await freePort()
+  const proc = launch(
+    [process.execPath, cli, "dev", entry, "--http", "--repl", "--port", String(port)],
+    { cwd: dir },
+  )
+  try {
+    await proc.waitFor('Type "help"')
+    const transcript = codeOf(block).split("\n")
+    for (let i = 0; i < transcript.length; i++) {
+      if (!transcript[i].startsWith("kervan> ")) continue
+      const expected = []
+      for (let j = i + 1; j < transcript.length && !transcript[j].startsWith("kervan> "); j++)
+        expected.push(transcript[j])
+      const from = proc.output().length
+      proc.child.stdin.write(`${transcript[i].slice("kervan> ".length)}\n`)
+      const end = Date.now() + 20_000
+      while (!expected.every((line) => proc.output().slice(from).includes(line))) {
+        if (Date.now() > end)
+          throw new Error(
+            `"${transcript[i]}" did not print (${entry}):\n${expected.join("\n")}\n--- got:\n${proc.output().slice(from)}`,
+          )
+        await sleep(100)
+      }
+    }
+  } finally {
+    await proc.stop()
+  }
 }
 
 const runners = {
@@ -330,46 +399,60 @@ const runners = {
     }
   },
 
-  async repl(block, blocks) {
+  async repl(block, blocks, options = {}) {
+    // The spec, with the repository's CLI.
     const spec = specFor(blocks, block)
     const dir = workdir(blocks, block)
-    // Its stdin is a pipe, not a terminal: --http --repl keeps the inspector on.
-    const port = await freePort()
-    const proc = launch(
-      [
-        process.execPath,
-        path.join(root, "packages/cli/bin/kervan.js"),
-        "dev",
-        `${spec.id}.yaml`,
-        "--http",
-        "--repl",
-        "--port",
-        String(port),
-      ],
-      { cwd: dir },
-    )
     try {
-      await proc.waitFor('Type "help"')
-      const transcript = codeOf(block).split("\n")
-      for (let i = 0; i < transcript.length; i++) {
-        if (!transcript[i].startsWith("kervan> ")) continue
-        const expected = []
-        for (let j = i + 1; j < transcript.length && !transcript[j].startsWith("kervan> "); j++)
-          expected.push(transcript[j])
-        const from = proc.output().length
-        proc.child.stdin.write(`${transcript[i].slice("kervan> ".length)}\n`)
-        const end = Date.now() + 20_000
-        while (!expected.every((line) => proc.output().slice(from).includes(line))) {
-          if (Date.now() > end)
-            throw new Error(
-              `"${transcript[i]}" did not print:\n${expected.join("\n")}\n--- got:\n${proc.output().slice(from)}`,
-            )
-          await sleep(100)
-        }
-      }
+      await replay(block, [path.join(root, "packages/cli/bin/kervan.js"), `${spec.id}.yaml`], dir)
     } finally {
-      await proc.stop()
       removeTemp(dir)
+    }
+    // And, when the transcript names code (data-code), the same transcript against that TypeScript:
+    // the same tool written in code must answer the same. Once published, with the packages
+    // installed from npm under the site's tag, as a reader would; before, with the repository's.
+    const id = block.attrs["data-code"]
+    if (!id) return
+    const code = codeFor(blocks, block)
+    if (!code) throw new Error(`no ts block with id "${id}" on ${block.page}`)
+    const codeDir = tempDir("kervan-docs-repl-ts-")
+    try {
+      writeFileSync(path.join(codeDir, `${id}.ts`), codeOf(code))
+      let cli = path.join(root, "packages/cli/bin/kervan.js")
+      if (options.published) {
+        const tag = options.tag ?? "latest"
+        writeFileSync(
+          path.join(codeDir, "package.json"),
+          '{ "name": "repl-ts", "private": true, "type": "module" }\n',
+        )
+        runToEnd(
+          [
+            "npm",
+            "install",
+            "--no-audit",
+            "--no-fund",
+            "--registry",
+            "https://registry.npmjs.org/",
+            `@kervan/core@${tag}`,
+            `@kervan/transport@${tag}`,
+            `kervan@${tag}`,
+          ],
+          { cwd: codeDir, timeout: 600_000 },
+        )
+        cli = path.join(codeDir, "node_modules", "kervan", "bin", "kervan.js")
+        // The ts block itself is type-checked against the repository's packages; here against these.
+        typecheck(codeDir, `${id}.ts`)
+      } else {
+        writeFileSync(path.join(codeDir, "package.json"), '{ "type": "module" }\n')
+        symlinkSync(
+          path.join(root, "packages", "cli", "node_modules"),
+          path.join(codeDir, "node_modules"),
+          isWindows ? "junction" : "dir",
+        )
+      }
+      await replay(block, [cli, `${id}.ts`], codeDir)
+    } finally {
+      removeTemp(codeDir)
     }
   },
 
@@ -384,27 +467,7 @@ const runners = {
       )
       writeFileSync(path.join(dir, "package.json"), '{ "type": "module" }\n')
       writeFileSync(path.join(dir, "example.ts"), codeOf(block))
-      runToEnd(
-        [
-          process.execPath,
-          path.join(root, "node_modules", "typescript", "bin", "tsc"),
-          "--noEmit",
-          "--strict",
-          "--skipLibCheck",
-          "--target",
-          "es2024",
-          "--module",
-          "nodenext",
-          "--moduleResolution",
-          "nodenext",
-          "--types",
-          "node",
-          "--typeRoots",
-          path.join(root, "node_modules", "@types"),
-          "example.ts",
-        ],
-        { cwd: dir },
-      )
+      typecheck(dir, "example.ts")
       if (block.check === "ts-run") {
         const output = runToEnd([process.execPath, "example.ts"], { cwd: dir })
         if (!output.includes(block.attrs["data-expect"]))
@@ -646,7 +709,14 @@ const isClaudeInstall = (block) =>
 /** Runs every runnable block; returns [{ where, kind, status: "ok" | "skipped" | "failed", detail }]. */
 export async function runExamples(
   blocks,
-  { network = false, claude = false, docker = false, published = false, log = console.log } = {},
+  {
+    network = false,
+    claude = false,
+    docker = false,
+    published = false,
+    tag = "latest",
+    log = console.log,
+  } = {},
 ) {
   const results = []
   const seen = new Set()
@@ -690,7 +760,7 @@ export async function runExamples(
 
   for (const block of blocks) {
     if (seen.has(block) || block.check === undefined) continue
-    const key = `${block.check}\0${codeOf(block)}\0${block.attrs["data-spec"] ? codeOf(specFor(blocks, block) ?? block) : ""}`
+    const key = `${block.check}\0${codeOf(block)}\0${block.attrs["data-spec"] ? codeOf(specFor(blocks, block) ?? block) : ""}\0${block.attrs["data-code"] ? codeOf(codeFor(blocks, block) ?? block) : ""}`
     if (seen.has(key)) continue
     seen.add(key)
     const needsNetwork =
@@ -726,7 +796,7 @@ export async function runExamples(
       record(block, "failed", `no runner for "${block.check}"`)
       continue
     }
-    await attempt(block, () => runner(block, blocks))
+    await attempt(block, () => runner(block, blocks, { published, tag }))
   }
   return results
 }
