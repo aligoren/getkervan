@@ -1,12 +1,13 @@
 # Releasing Kervan
 
-Nothing is published yet: no public repository, no npm packages, no image. The first release is
-**`0.1.0-rc.1` under the npm dist-tag `next`**; `0.1.0` under `latest` follows a week or two later
-(decision a below). This page is the order of that first release, how a release runs, how to undo
-a bad one, and the decisions still open.
+The first release, **`0.1.0-rc.1` under the npm dist-tag `next`**, was published by hand on
+2026-10-09 (tag `v0.1.0-rc.1`); `0.1.0` under `latest` follows (decision a below). No Docker image
+is published. This page is the order of that first release, what it showed, how a release runs,
+how to undo a bad one, and the decisions still open.
 
 Lines marked **Verify on release day** come from npm's and GitHub's documentation as read on
-2026-10-08 and were not tried (nothing can be, before a real publish). Check them again then.
+2026-10-08 and have not been tried yet (trusted publishing, unpublishing, settings). What the
+first release showed is recorded in [rc.1: step by step](#rc1-step-by-step), as observed.
 
 ## Ready in the repository
 
@@ -143,12 +144,10 @@ npm already) and publish nothing.
 
 ### 7. Check
 
-- [ ] `npm dist-tag ls @kervan/core` (and the other four): `next: 0.1.0-rc.1`. **Verify on
-      release day** what `latest` shows: the npm documentation read on 2026-10-08 does not say
-      whether the first version of a package published with `--tag next` also becomes `latest`.
-      If it did, it stays there until `0.1.0` is published under `latest`; nothing needs fixing.
-      If no `latest` exists, plain `npm install @kervan/core` fails until `0.1.0`: the install
-      commands must say `@next` (step 4).
+- [ ] `npm dist-tag ls @kervan/core` (and the other four): `next: 0.1.0-rc.1`. Observed on
+      2026-10-09: the first publish with `--tag next` also set `latest` to `0.1.0-rc.1` on all
+      five packages (npm sets `latest` on a package's first publish). It stays there until
+      `0.1.0` is published under `latest`; nothing needs fixing.
 - [ ] On a clean machine: `npm create kervan@next my-server`, `npm test` and `npm start` in it.
       A project made from the release candidate depends on `^0.1.0-rc.1`, which also matches
       `0.1.0` later; a plain `^0.1.0` range never matches a pre-release.
@@ -171,6 +170,33 @@ codes themselves, and with `Stop` the first "not found" from `npm view` ends ste
 publishes anything. Lines marked **Verify on release day** come from npm's documentation as read
 on 2026-10-08 and could not be tried before a real publish.
 
+### What the 0.1.0-rc.1 release showed (2026-10-09)
+
+Observed when the five packages were published by hand; the steps below already follow it.
+
+- **`latest`:** the first publish with `--tag next` also set `latest` to `0.1.0-rc.1` on all
+  five packages: npm sets `latest` on a package's first publish. `next` and `latest` both pointed
+  at the release candidate; `0.1.0` moves `latest`.
+- **Sign-in:** npm's web sign-in session expired after a few hours (`npm whoami` answered E401).
+  Run `npm login` again right before publishing.
+- **Two-factor authentication:** a shell that is not interactive (an automation, a background
+  runner) cannot pass npm's browser approval: `npm publish` stops at once with `EOTP` and
+  publishes nothing. The publish loop runs in the maintainer's own terminal.
+- **One approval:** a single browser approval (Windows Hello) covered all five publishes of one
+  run of the loop.
+- **Delay:** `kervan` and `create-kervan` were visible on the registry within a minute; the three
+  scoped packages took about five minutes (`npm view` answered E404 meanwhile, while `npm access
+  get status` already said public). Wait for all five before `verify:published`.
+- **Where they are listed:** the scoped packages show on the `@kervan` organization's page;
+  `kervan` and `create-kervan` show on the maintainer's npm profile and on the organization's
+  page too.
+- **`0.0.0-stage`:** `kervan` and `create-kervan` also have a `0.0.0-stage` placeholder version
+  (it was `latest` before the first publish). It is not installed by any tag.
+- **`verify:published` needs a Node.js the CLI accepts** (22.23.3 or a later 22.x, or 24.21.0 or
+  later): it runs `kervan run` and a new project's tests, and the CLI refuses 24.15 with one line.
+  Publishing itself works on any Node.js with npm 11. A portable Node.js on the `PATH` of that
+  one command is enough.
+
 Sources: [npm init / npm create](https://docs.npmjs.com/cli/v11/commands/npm-init),
 [npm publish](https://docs.npmjs.com/cli/v11/commands/npm-publish),
 [npm 11.0.0: a pre-release needs an explicit `--tag`](https://github.com/npm/cli/releases/tag/v11.0.0),
@@ -182,8 +208,12 @@ Sources: [npm init / npm create](https://docs.npmjs.com/cli/v11/commands/npm-ini
 
 - An npm account that owns the `@kervan` organization, with two-factor authentication (a passkey
   or security key works).
-- Signed in to npm on this machine: `npm login` (it opens the browser), then `npm whoami` prints
-  the account's name.
+- Signed in to npm on this machine, freshly: `npm login` (it opens the browser) shortly before
+  step 5, since the session expires after a few hours; then `npm whoami` prints the account's
+  name.
+- Your own interactive terminal for step 5: npm's browser approval cannot be passed from a shell
+  that is not interactive (`EOTP`).
+- For step 6, a Node.js the CLI accepts (22.23.3 or a later 22.x, or 24.21.0 or later).
 - The unscoped names are still free: `npm view kervan` and `npm view create-kervan` end with
   `E404`.
 - The release pull request is merged and CI on `main` is green.
@@ -281,8 +311,9 @@ no package is ever on npm without its dependencies. `--tag next`: npm 11 refuses
 without an explicit tag, and a plain `npm install` asks for `latest` (whether the first publish of
 a new package also sets `latest` is checked in step 6). `--access public`:
 scoped packages are private by default. A version already on npm is skipped, so after an
-interruption (a failed sign-in, the network) the same block simply runs again. **Verify on release
-day:** with a passkey, npm may open the browser to confirm every publish, so up to five times.
+interruption (a failed sign-in, the network) the same block simply runs again. With a passkey,
+npm opens the browser to confirm; on 2026-10-09 one approval covered all five publishes of the
+run.
 
 ```powershell
 Set-Location $out
@@ -339,13 +370,9 @@ git tag -a v0.1.0-rc.1 -m "0.1.0-rc.1"
 git push origin v0.1.0-rc.1
 ```
 
-- Every package shows `next: '0.1.0-rc.1'`. **Verify on release day** what `latest` shows: npm's
-  documentation does not say whether the first version of a new package gets `latest` too when it
-  is published with `--tag next`. If `latest` is `0.1.0-rc.1`, leave it: it is the only version,
-  and `0.1.0` moves it. If there is no `latest`, plain `npm install @kervan/core` fails until
-  `0.1.0`; the post-publish branch says `@next` everywhere, so nothing needs changing. Adding
-  `latest` by hand (`npm dist-tag add @kervan/core@0.1.0-rc.1 latest`) would hand the release
-  candidate to everyone; not recommended.
+- Every package shows `next: '0.1.0-rc.1'` and, after the first publish, `latest: '0.1.0-rc.1'`
+  too (observed on 2026-10-09; see above). Leave it: `0.1.0` moves it. The scoped packages can
+  take a few minutes to appear; wait until all five answer before `verify:published`.
 - `pnpm verify:published --tarballs ../kervan-tarballs` asks the public registry (not one npm is
   configured with) about the five packages: their metadata against the repository's (version,
   dist-tag, license, engines, repository), each `dist.integrity` against the sha512 of the tarball
