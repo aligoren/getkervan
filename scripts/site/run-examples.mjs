@@ -636,6 +636,13 @@ function discover(port, host) {
   })
 }
 
+/**
+ * A Claude Code command among the install steps (`claude mcp add ...`): from source before the
+ * release, from npm after it. It needs the `claude` CLI, so it runs only with --claude.
+ */
+const isClaudeInstall = (block) =>
+  (block.check === "source" || block.check === "published") && codeOf(block).startsWith("claude ")
+
 /** Runs every runnable block; returns [{ where, kind, status: "ok" | "skipped" | "failed", detail }]. */
 export async function runExamples(
   blocks,
@@ -667,9 +674,7 @@ export async function runExamples(
     const sequence = blocks.filter(
       (block) =>
         block.page === page &&
-        (block.check === "claude" ||
-          block.check === "starts" ||
-          (block.check === "source" && codeOf(block).startsWith("claude "))),
+        (block.check === "claude" || block.check === "starts" || isClaudeInstall(block)),
     )
     for (const block of sequence) seen.add(block)
     if (claude) await attempt(sequence[0], () => runClaudePage(sequence))
@@ -699,7 +704,7 @@ export async function runExamples(
       record(block, "skipped", "needs the network (--network)")
       continue
     }
-    if (block.check === "source" && codeOf(block).startsWith("claude ")) {
+    if (isClaudeInstall(block)) {
       record(block, "skipped", "Claude Code commands run with --claude (connect guide)")
       continue
     }
