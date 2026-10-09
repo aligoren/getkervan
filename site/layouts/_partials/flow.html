@@ -5,12 +5,12 @@
   the theme tokens through the diagram classes (site.css, .dg-*); every step has a label and the
   arrows show the order, so nothing depends on color.
 */ -}}
-{{- $desc := "Your kervan.yaml spec or TypeScript code goes into Kervan, which checks and limits every call and serves the tools over MCP, on stdio or HTTP, to an AI client such as Claude Code or Cursor." -}}
+{{- $desc := "Your kervan.yaml spec or TypeScript code goes into Kervan, which checks and limits every call and serves the tools over MCP, on stdio or HTTP, to your AI client, such as Claude Code." -}}
 {{- $steps := slice
   (dict "title" "Your spec or code" "sub" "kervan.yaml or TypeScript" "accent" false)
   (dict "title" "Kervan" "sub" "checks and limits each call" "accent" true)
   (dict "title" "MCP tools" "sub" "over stdio or HTTP" "accent" false)
-  (dict "title" "AI client" "sub" "such as Claude Code or Cursor" "accent" false)
+  (dict "title" "AI client" "sub" "such as Claude Code" "accent" false)
 -}}
 <figure class="flow">
 <svg class="flow-wide" viewBox="0 0 960 120" role="img" aria-labelledby="flow-wide-title flow-wide-desc" xmlns="http://www.w3.org/2000/svg">

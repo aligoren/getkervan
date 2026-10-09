@@ -12,7 +12,7 @@
   <div class="wrap">
     <span class="eyebrow">Open source &middot; MIT &middot; {{ if not site.Params.published }}pre-release{{ else if $rc }}release candidate{{ else }}version 0.1{{ end }}</span>
     <h1 id="hero-title">Turn your APIs into tools AI assistants can use</h1>
-    <p class="lead">Describe an HTTP API in a short YAML file, or write tools in TypeScript, and Kervan serves them as an <a href="/guides/what-is-mcp/">MCP</a> server that AI clients such as Claude Code and Cursor can call.</p>
+    <p class="lead">Describe an HTTP API in a short YAML file, or write tools in TypeScript, and Kervan serves them as an <a href="/guides/what-is-mcp/">MCP</a> server that your AI client, such as Claude Code, can call.</p>
     <div class="hero-start">
       {{- if site.Params.published }}
       {{ partial "code.html" (dict "code" (printf "npm create kervan@%s my-server" site.Params.npmTag) "lang" "sh" "label" "Create a project" "attrs" (dict "check" "published")) }}
