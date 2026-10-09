@@ -398,6 +398,101 @@ hr {
   font-size: 0.9rem;
 }
 
+/* The home page: the install command beside the documentation button, the one-glance flow (both
+   orientations in the markup, one shown), the example side by side, and three benefits. */
+.hero-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0.75rem;
+}
+
+.hero-start .code {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.flow {
+  margin: 2.25rem 0 0;
+}
+
+.flow svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.flow .flow-wide {
+  max-width: 960px;
+}
+
+.flow .flow-tall {
+  display: none;
+  max-width: 22rem;
+  margin: 0 auto;
+}
+
+@media (max-width: 52rem) {
+  .flow .flow-wide {
+    display: none;
+  }
+
+  .flow .flow-tall {
+    display: block;
+  }
+}
+
+.example-split .code {
+  margin-bottom: 0.6rem;
+}
+
+.benefits {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+}
+
+.benefits h3 {
+  margin: 0.5rem 0 0.3rem;
+  font-size: 1.05rem;
+}
+
+.benefits p {
+  margin: 0;
+  color: var(--k-fg-muted);
+}
+
+.benefit-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  fill: none;
+  stroke: var(--k-accent-text);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+a.studio-card {
+  display: block;
+  max-width: 36rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.studio-card:hover h3 {
+  text-decoration: underline;
+}
+
+a.studio-card:focus-visible {
+  outline: 2px solid var(--k-ring);
+  outline-offset: 2px;
+}
+
 .shot {
   /* <picture> is inline: as a block, its border wraps the image instead of drawing a stray line. */
   display: block;
@@ -486,49 +581,6 @@ hr {
 
 .panel {
   min-width: 0;
-}
-
-.panel-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.75rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--k-fg-muted);
-  margin: 0 0 0.4rem;
-}
-
-.panel-title span {
-  font-weight: 400;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--k-fg-subtle);
-}
-
-.tool-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 1rem;
-  display: grid;
-  gap: 0.6rem;
-}
-
-.tool-list li {
-  border: 1px solid var(--k-border);
-  border-radius: var(--radius);
-  padding: 0.65rem 0.85rem;
-  background: var(--k-surface);
-}
-
-.tool-list code {
-  font-weight: 600;
-}
-
-.tool-list p {
-  margin: 0.2rem 0 0;
-  font-size: 0.9rem;
-  color: var(--k-fg-muted);
 }
 
 .grid {
@@ -1380,112 +1432,6 @@ figcaption {
 .next-steps ul {
   margin: 0;
   padding-left: 1.1rem;
-}
-
-/* The landing page's showcase: two tabs made of radio buttons, without JavaScript (:has reads the
-   checked one). Without CSS both panels show, one after the other. */
-.tabs {
-  display: flex;
-  gap: 0.25rem;
-  border: 0;
-  border-bottom: 1px solid var(--k-border);
-  padding: 0;
-  margin: 0 0 1.25rem;
-}
-
-.tab-input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-}
-
-.tab {
-  padding: 0.55rem 1rem;
-  border: 1px solid transparent;
-  border-bottom: 0;
-  border-radius: var(--radius) var(--radius) 0 0;
-  font-weight: 600;
-  color: var(--k-fg-muted);
-  cursor: pointer;
-  margin-bottom: -1px;
-}
-
-.tab:hover {
-  color: var(--k-fg);
-}
-
-.tab-input:checked + .tab {
-  color: var(--k-fg);
-  background: var(--k-surface);
-  border-color: var(--k-border);
-  box-shadow: inset 0 3px 0 var(--k-accent);
-}
-
-.tab-input:focus-visible + .tab {
-  outline: 2px solid var(--k-ring);
-  outline-offset: 2px;
-}
-
-.showcase .panel-ts {
-  display: none;
-}
-
-.showcase:has(#show-ts:checked) .panel-ts {
-  display: block;
-}
-
-.showcase:has(#show-ts:checked) .panel-yaml {
-  display: none;
-}
-
-.full-file {
-  margin: 0 0 1rem;
-}
-
-.full-file > summary {
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.92rem;
-  margin-bottom: 0.75rem;
-}
-
-.plain-list {
-  margin: 0 0 1rem;
-  padding-left: 1.1rem;
-}
-
-.plain-list li + li {
-  margin-top: 0.35rem;
-}
-
-.tag {
-  display: inline-block;
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 0.05rem 0.5rem;
-  margin-right: 0.35rem;
-  border-radius: 999px;
-  background: var(--k-subtle);
-  border: 1px solid var(--k-border);
-  color: var(--k-fg);
-}
-
-/* The landing page's short Studio section: text beside one picture. */
-.studio-teaser {
-  display: grid;
-  gap: 1.5rem;
-  align-items: center;
-}
-
-@media (min-width: 60rem) {
-  .studio-teaser {
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-  }
-}
-
-.studio-teaser figure {
-  margin: 0;
 }
 
 /* The Studio product page: prose, then a wide gallery. */

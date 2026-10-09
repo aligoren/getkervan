@@ -1,0 +1,56 @@
+{{- /*
+  The home page's one-glance picture: your spec or code, Kervan, MCP tools, an AI client. Two
+  inline SVGs of the same flow: left to right on wide screens, top to bottom on narrow ones (CSS
+  shows one; the hidden one is display: none, so a screen reader meets only one). Colors come from
+  the theme tokens through the diagram classes (site.css, .dg-*); every step has a label and the
+  arrows show the order, so nothing depends on color.
+*/ -}}
+{{- $desc := "Your kervan.yaml spec or TypeScript code goes into Kervan, which checks and limits every call and serves the tools over MCP, on stdio or HTTP, to an AI client such as Claude Code or Cursor." -}}
+{{- $steps := slice
+  (dict "title" "Your spec or code" "sub" "kervan.yaml or TypeScript" "accent" false)
+  (dict "title" "Kervan" "sub" "checks and limits each call" "accent" true)
+  (dict "title" "MCP tools" "sub" "over stdio or HTTP" "accent" false)
+  (dict "title" "AI client" "sub" "such as Claude Code or Cursor" "accent" false)
+-}}
+<figure class="flow">
+<svg class="flow-wide" viewBox="0 0 960 120" role="img" aria-labelledby="flow-wide-title flow-wide-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="flow-wide-title">How Kervan works, in one line</title>
+  <desc id="flow-wide-desc">{{ $desc }}</desc>
+  <defs>
+    <marker id="flow-wide-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="dg-head" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+  <g class="dg-lines" marker-end="url(#flow-wide-arrow)">
+    <path d="M214 60 H250"/>
+    <path d="M459 60 H495"/>
+    <path d="M704 60 H740"/>
+  </g>
+  {{- range $i, $step := $steps }}
+  {{- $x := add 10 (mul $i 245) }}
+  <g class="dg-box{{ if $step.accent }} dg-accent{{ end }}"><rect x="{{ $x }}" y="18" width="204" height="84" rx="10"/></g>
+  <text class="dg-title" x="{{ add $x 102 }}" y="54" text-anchor="middle">{{ $step.title }}</text>
+  <text class="dg-sub" x="{{ add $x 102 }}" y="76" text-anchor="middle">{{ $step.sub }}</text>
+  {{- end }}
+</svg>
+<svg class="flow-tall" viewBox="0 0 320 440" role="img" aria-labelledby="flow-tall-title flow-tall-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="flow-tall-title">How Kervan works, step by step</title>
+  <desc id="flow-tall-desc">{{ $desc }}</desc>
+  <defs>
+    <marker id="flow-tall-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="dg-head" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+  <g class="dg-lines" marker-end="url(#flow-tall-arrow)">
+    <path d="M160 92 V116"/>
+    <path d="M160 202 V226"/>
+    <path d="M160 312 V336"/>
+  </g>
+  {{- range $i, $step := $steps }}
+  {{- $y := add 8 (mul $i 110) }}
+  <g class="dg-box{{ if $step.accent }} dg-accent{{ end }}"><rect x="30" y="{{ $y }}" width="260" height="84" rx="10"/></g>
+  <text class="dg-title" x="160" y="{{ add $y 36 }}" text-anchor="middle">{{ $step.title }}</text>
+  <text class="dg-sub" x="160" y="{{ add $y 58 }}" text-anchor="middle">{{ $step.sub }}</text>
+  {{- end }}
+</svg>
+</figure>

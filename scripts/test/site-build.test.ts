@@ -27,8 +27,6 @@ if (problem !== undefined && !required) console.warn(`Skipping the built-site te
 
 let dir = ""
 const params = siteParams(read("site/hugo.toml"))
-const exampleSpec = read("examples/spec/kervan.yaml")
-const exampleTs = read("examples/calculator/src/calculator.ts")
 
 beforeAll(() => {
   if (problem !== undefined && !required) return
@@ -55,16 +53,12 @@ afterAll(() => {
 })
 
 type Overrides = Record<string, string | null>
-type Options = { exampleSpec?: string; exampleTs?: string; published?: boolean }
+type Options = { published?: boolean }
 const check = (overrides: Overrides = {}, options: Options = {}) =>
-  checkBuild(
-    siteView(dir, overrides),
-    { ...params, ...(options.published === undefined ? {} : { published: options.published }) },
-    {
-      exampleSpec: options.exampleSpec ?? exampleSpec,
-      exampleTs: options.exampleTs ?? exampleTs,
-    },
-  )
+  checkBuild(siteView(dir, overrides), {
+    ...params,
+    ...(options.published === undefined ? {} : { published: options.published }),
+  })
 const page = (file: string) => readFileSync(path.join(dir, file), "utf8")
 /** The errors that `change` causes and the unchanged build does not have. */
 const newErrors = (overrides: Overrides, options: Options = {}) => {
@@ -510,7 +504,8 @@ run("each check:site rule catches its problem", () => {
       () => ({
         "index.html": inMain(
           home(),
-          '<img src="/screenshots/calls-light.webp" alt="x" width="1" height="1" loading="lazy"><img src="/screenshots/audit-dark.webp" alt="x" width="1" height="1" loading="lazy">',
+          // Three, whatever the page already shows (the home page shows none today).
+          '<img src="/screenshots/calls-light.webp" alt="x" width="1" height="1" loading="lazy"><img src="/screenshots/audit-dark.webp" alt="x" width="1" height="1" loading="lazy"><img src="/screenshots/editor-light.webp" alt="x" width="1" height="1" loading="lazy">',
         ),
       }),
       /Studio screenshots .*; at most 2/,
@@ -603,9 +598,14 @@ run("each check:site rule catches its problem", () => {
       /search\/extra\.json: shows a home folder path/,
     ],
     [
-      "a landing spec excerpt that is not the file's beginning",
-      () => ({ "index.html": home().replace("specVersion", "specVersions") }),
-      /the spec excerpt is not the beginning/,
+      "a home page example that is no longer replayed (the REPL block lost its check)",
+      () => ({ "index.html": home().replace(/data-check="?repl"?/, 'data-example="home-repl"') }),
+      /the example is not verified/,
+    ],
+    [
+      "a home page REPL transcript that names another spec",
+      () => ({ "index.html": home().replace(/data-spec="?kervan"?/, 'data-spec="other"') }),
+      /the example is not verified/,
     ],
     [
       "a Studio mention in the framework docs",
@@ -635,12 +635,6 @@ run("each check:site rule catches its problem", () => {
     )
   })
 
-  it("a landing page TypeScript example that differs from the repository's file", () => {
-    expect(newErrors({}, { exampleTs: exampleTs.replace("calculator", "calc") })).toEqual([
-      "/: the TypeScript shown differs from examples/calculator/src/calculator.ts.",
-    ])
-  })
-
   it("accepts the placeholder paths the docs use, and JSON escapes that only look like paths", () => {
     const placeholder = inMain(
       page("index.html"),
@@ -653,14 +647,6 @@ run("each check:site rule catches its problem", () => {
         "extra.json": JSON.stringify({ help: "Options x:\nfoo\nbar" }),
       }),
     ).toEqual([])
-  })
-
-  it("a landing page spec that differs from examples/spec/kervan.yaml", () => {
-    // The excerpt shown above the full file is checked against the file too.
-    expect(newErrors({}, { exampleSpec: exampleSpec.replace("open-meteo", "other") })).toEqual([
-      "/: the spec shown differs from examples/spec/kervan.yaml.",
-      "/: the spec excerpt is not the beginning of examples/spec/kervan.yaml.",
-    ])
   })
 
   it("an npm command while the packages are not published", () => {

@@ -1,0 +1,11 @@
+specVersion: 1
+name: weather
+version: 0.1.0
+tools:
+  - name: get_current_weather
+    description: Current temperature (°C) and wind speed (km/h) at a latitude and longitude.
+    input: { type: object, properties: { lat: { type: number }, lon: { type: number } }, required: [lat, lon] }
+    http:
+      url: https://api.open-meteo.com/v1/forecast
+      query: { latitude: "{{input.lat}}", longitude: "{{input.lon}}", current: "temperature_2m,wind_speed_10m" }
+    output: { select: "current" }

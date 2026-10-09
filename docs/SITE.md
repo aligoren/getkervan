@@ -31,9 +31,10 @@ Nothing that exists elsewhere in the repository is copied into `site/` by hand. 
 
 | Shown on the site | Comes from |
 | --- | --- |
-| The landing page's `kervan.yaml` | `examples/spec/kervan.yaml` (mounted; check:site compares the page with the file, the excerpt with its beginning) |
-| The landing page's TypeScript and "Tools in TypeScript" | `examples/calculator/src/calculator.ts`, a workspace example with its own test (mounted; the `code-file` shortcode shows it; check:site compares) |
-| The package diagram (landing page and "How Kervan works") | `site/layouts/_partials/diagram.html`, one inline SVG colored by the tokens |
+| The home page's example `kervan.yaml` and its tool list | `site/assets/examples/home.yaml`; the tool line under it is built from the file. `pnpm test` loads the spec and `site:verify --examples` replays `tools` in the real CLI (check:site requires both blocks) |
+| The home page's one-glance flow | `site/layouts/_partials/flow.html`: two inline SVGs of the same flow (wide and tall), colored by the tokens |
+| "Tools in TypeScript" | `examples/calculator/src/calculator.ts`, a workspace example with its own test (mounted; the `code-file` shortcode shows it) |
+| The package diagram ("How Kervan works") | `site/layouts/_partials/diagram.html`, one inline SVG colored by the tokens |
 | `tools/list`, `server/discover` and the two tool calls | `site/data/generated/example.json`, written by `pnpm site:generate` from a real `kervan run --http` |
 | The `kervan.yaml` reference | `packages/spec-runtime/schema/kervan.schema.json`, rendered at build time |
 | CLI reference | `site/data/generated/cli-help.json` (the real `--help` output) and `packages/cli/README.md` |
@@ -49,12 +50,14 @@ relative links at the source repository, and while `params.published` is false s
 
 ### The landing page and the framework book
 
-The landing page is about the framework; Studio is one short section. In order: the hero (no
-picture), "One server, two ways to write tools" (a YAML and a TypeScript tab, radio buttons read
-by `:has()`, so no JavaScript), "What every tool gets", "How it fits together" (the diagram),
-"Run it anywhere, connect any client", "Get started", "Security by design" (framework checks
-first, Studio's in one line), "Kervan Studio, optional" (one picture, a link to `/studio/`) and
-the documentation links. `/studio/` is Studio's own page, with the gallery.
+The home page says in one glance what Kervan does, and the details live in the docs. In order:
+the hero (one headline, one line, the install command to copy and the documentation button) with
+the one-glance flow under it (your spec or code, Kervan, MCP tools, an AI client; left to right on
+wide screens, top to bottom below 52rem), "This is all it takes" (a whole spec and the tool list
+`kervan dev` prints for it, side by side), three benefits with a small icon each, and one Studio
+card linking to `/studio/`, Studio's own page with the gallery. About 190 words of prose, down from
+about 970 in the version before; what it dropped is in the framework book ("How Kervan works",
+security, transports).
 
 The framework book's menu has five groups (`groups` in `content/docs/framework/_index.md`; each
 page names its `group`): Start, Concepts, Build with YAML, Build with TypeScript, Run and operate.
@@ -208,8 +211,8 @@ For the site: `sitemap.xml` lists exactly the canonical pages, with `lastmod` fr
 headers, HSTS of at least a year, and `noindex` for the `*.pages.dev` preview hosts and only for them;
 no canonical link on the 404 page; the performance budget; the framework
 book never mentions Studio except the one line pointing to its docs, and each of its pages has a
-"Where this fits" line; the landing page shows `examples/spec/kervan.yaml` and
-`examples/calculator/src/calculator.ts` unchanged, no Studio screenshot in its first screen (the
+"Where this fits" line; the home page's example is a spec block and a REPL transcript that runs
+it (so `site:verify --examples` checks the output), no Studio screenshot in its first screen (the
 hero) and at most two Studio screenshots in all.
 
 An npm install command in a code block while `params.published` is false is an error. Once it is
@@ -238,11 +241,8 @@ placeholder; a page has no `lastmod` (not committed yet); `security.txt` expires
 | One screenshot | 120 KiB |
 | One HTML page | 150 KiB |
 
-On this build (after the framework-first landing page) the home page's first load is about 115 KiB:
-HTML 47 KiB, CSS 20 KiB, the font 47 KiB and 1.3 KiB of scripts; the hero has no image. The only
-Studio picture on the page is lazy-loaded below the fold (about 65 KiB for the variant a visitor
-gets). In the browser `site:verify` measures about 115 KiB at load (before: 157 KiB counted, 415 KiB
-in the browser with the old gallery).
+After the simplified home page (no screenshot on it), `site:verify` measures about 89 KiB in the browser with the images it loads, down from about
+115 KiB with the earlier landing page (157 KiB before that, 415 KiB with the old gallery).
 
 ## Before the release, and on release day
 
@@ -267,7 +267,15 @@ Every claim on the landing page, and what backs it. When a claim changes, change
 | Claim | Backed by |
 | --- | --- |
 | MIT licensed | `LICENSE`; `license.test.ts` checks every package has it |
-| Pre-release, not on npm | `params.published = false`; the packages' "Not published yet" notes; `guard-publish.mjs` |
+| Version 0.1 is a release candidate on npm, under the `next` tag (the hero's note, the footer) | the five packages' `next` dist-tag; `check:site` asks the registry while `params.published` is true |
+| The hero: describe an HTTP API in YAML or write tools in TypeScript, and Kervan serves them as an MCP server | spec tools: `packages/spec-runtime` (the HTTP executor); code tools: `app.tool` in `packages/core`; serving: `packages/transport` and `kervan run`/`dev`; the home page's example is replayed in `site:verify --examples` |
+| AI clients such as Claude Code and Cursor can call it; "AI client" in the flow | any MCP client over stdio or Streamable HTTP; Claude Code is connected for real in `site:verify --examples --claude` (the connect guide); Cursor is named as an example of an MCP client and is not tested by this project |
+| The flow: Kervan checks and limits each call; the tools go out over stdio or HTTP | the "Both kinds of tool" and "Timeouts, size limits, rate limits" rows below; `serve`/`serveHttp`/`toFetchHandler` in `packages/transport` |
+| "This is all it takes": the spec and the tool a client sees | `site/assets/examples/home.yaml`, loaded by `pnpm test`; the `tools` line replayed against the real CLI by `site:verify --examples` |
+| Safe by default: spec tools reach public addresses only, keep secrets out of results, errors and logs, and every call has a timeout | the SSRF, secret redaction and timeouts rows below |
+| YAML or TypeScript, on the official MCP SDK; both get the same checks | the "official MCP SDK" and "Both kinds of tool" rows below |
+| Current MCP: the stateless 2026-07-28 revision, and 2025 clients from the same app | the "MCP 2026-07-28" row below |
+| Studio: a self-hosted web UI to manage servers, secrets, users and logs; the framework works without it | `apps/studio` (the Studio rows below); the framework packages do not depend on it (`apps/studio` is private; no package lists it as a dependency, and the CLI only forwards `kervan studio` to a Studio installed in the project) |
 | On the official MCP SDK, not a rewrite | `@modelcontextprotocol/server`, `/client`, `/hono` dependencies (`packages/*/package.json`) |
 | MCP 2026-07-28, stateless; `server/discover`; 2025 clients served too | `packages/transport`; both eras in `packages/transport/test` (`http`, `stdio`, `testing`); the landing page's `server/discover` output is a real answer |
 | Both kinds of tool: arguments validated before the handler, masked errors (only `ToolError` messages reach the client), a timeout on every call (30 s by default) and the client's cancellation, results checked against the output schema | `packages/core/src/tool.ts` (`invokeTool`), `app.ts` (`DEFAULT_TOOL_TIMEOUT_MS`), `errors.ts`; core's tests; the errors and testing pages' examples run in `site:verify --examples` |

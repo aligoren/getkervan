@@ -1,198 +1,74 @@
 {{ define "main" }}
-{{- $example := hugo.Data.generated.example -}}
-{{- $yaml := resources.Get "repo/examples/spec/kervan.yaml" -}}
-{{- if not $yaml }}{{ errorf "examples/spec/kervan.yaml is not mounted" }}{{ end -}}
-{{- $ts := resources.Get "repo/examples/calculator/src/calculator.ts" -}}
-{{- if not $ts }}{{ errorf "examples/calculator/src/calculator.ts is not mounted" }}{{ end -}}
-{{- /* The spec as the repository has it, minus the editor hint on its first line (a path that only means something in the repository). */ -}}
-{{- $spec := $yaml.Content | replaceRE "\r\n" "\n" | replaceRE "^# yaml-language-server:[^\n]*\n" "" | strings.TrimRight "\n" -}}
-{{- /* Shown first: the spec up to its second tool; the whole file is one click away. */ -}}
-{{- $toolParts := split $spec "\n  - name: " -}}
-{{- $excerpt := printf "%s\n  - name: %s" (index $toolParts 0) (index $toolParts 1) | strings.TrimRight "\n" -}}
-{{- $code := $ts.Content | replaceRE "\r\n" "\n" -}}
+{{- /* The example: a whole spec, and the tool list `kervan dev` prints for it. Both are checked by
+       `pnpm site:verify --examples`: the spec is loaded, and the REPL is replayed against the real
+       CLI (docs/SITE.md, "Code blocks in the documentation"). */ -}}
+{{- $file := resources.Get "examples/home.yaml" -}}
+{{- if not $file }}{{ errorf "site/assets/examples/home.yaml is missing" }}{{ end -}}
+{{- $spec := $file.Content | replaceRE "\r\n" "\n" | strings.TrimRight "\n" -}}
+{{- $tool := index ($spec | transform.Unmarshal).tools 0 -}}
+{{- $repl := printf "kervan> tools\n  %s  %s" $tool.name $tool.description -}}
+{{- $rc := and site.Params.published (ne site.Params.npmTag "latest") -}}
 <section class="hero" aria-labelledby="hero-title">
   <div class="wrap">
-    <span class="eyebrow">Open source &middot; MIT &middot; {{ if not site.Params.published }}pre-release{{ else if ne site.Params.npmTag "latest" }}release candidate{{ else }}version 0.1{{ end }}</span>
-    <h1 id="hero-title">MCP servers from a YAML spec, or from TypeScript</h1>
-    <p class="lead">Kervan is a framework for <a href="/guides/what-is-mcp/">Model Context Protocol</a> servers. Describe HTTP tools in a <code>kervan.yaml</code> file and serve them with one command, or write tools in TypeScript on the official MCP SDK. Both kinds of tool get validated arguments, masked errors and a timeout on every call; spec tools add SSRF protection, secret redaction and rate limits.</p>
-    <div class="actions">
+    <span class="eyebrow">Open source &middot; MIT &middot; {{ if not site.Params.published }}pre-release{{ else if $rc }}release candidate{{ else }}version 0.1{{ end }}</span>
+    <h1 id="hero-title">Turn your APIs into tools AI assistants can use</h1>
+    <p class="lead">Describe an HTTP API in a short YAML file, or write tools in TypeScript, and Kervan serves them as an <a href="/guides/what-is-mcp/">MCP</a> server that AI clients such as Claude Code and Cursor can call.</p>
+    <div class="hero-start">
+      {{- if site.Params.published }}
+      {{ partial "code.html" (dict "code" (printf "npm create kervan@%s my-server" site.Params.npmTag) "lang" "sh" "label" "Create a project" "attrs" (dict "check" "published")) }}
+      {{- else }}
       <a class="button button-primary" href="/docs/framework/quickstart/">Get started</a>
-      <a class="button" href="{{ site.Params.repoURL }}" rel="noopener noreferrer">View source</a>
+      {{- end }}
+      <a class="button" href="/docs/framework/">Documentation</a>
     </div>
-    {{- if not site.Params.published }}
-    <p class="note">Kervan is not on npm yet: the quickstart builds it from source. Version 0.1 is in preparation.</p>
-    {{- else if ne site.Params.npmTag "latest" }}
+    {{- if $rc }}
     <p class="note">Version 0.1 is a release candidate on npm, under the <code>{{ site.Params.npmTag }}</code> tag.</p>
+    {{- else if not site.Params.published }}
+    <p class="note">Kervan is not on npm yet: the quickstart builds it from source.</p>
     {{- end }}
+    {{ partial "flow.html" . }}
   </div>
 </section>
 
-<section class="band band-alt showcase-band" aria-labelledby="showcase-title">
+<section class="band band-alt" aria-labelledby="example-title">
   <div class="wrap">
-    <h2 id="showcase-title">One server, two ways to write tools</h2>
-    <p class="section-lead">Both examples are files in the repository, shown unchanged, and what they print or answer comes from running them{{ with $example.callsCapturedAt }} (the spec's tool calls reached the public Open-Meteo APIs on {{ time.Format "January 2, 2006" . }}){{ end }}.</p>
-    <div class="showcase">
-      <fieldset class="tabs">
-        <legend class="visually-hidden">Show the example written as</legend>
-        <input class="tab-input" type="radio" name="showcase" id="show-yaml" checked>
-        <label class="tab" for="show-yaml">A YAML spec</label>
-        <input class="tab-input" type="radio" name="showcase" id="show-ts">
-        <label class="tab" for="show-ts">TypeScript</label>
-      </fieldset>
-
-      <div class="tab-panel panel-yaml">
-        <h3 class="visually-hidden">A YAML spec</h3>
-        <div class="split">
-          <div>
-            <p class="panel-title">The spec <span>kervan run kervan.yaml</span></p>
-            {{ partial "code.html" (dict "code" $excerpt "lang" "yaml" "label" "examples/spec/kervan.yaml, the first tool" "wrap" true "attrs" (dict "example" "landing-spec-excerpt")) }}
-            <details class="full-file">
-              <summary>Show the full file ({{ len (split $spec "\n") }} lines, {{ len $example.toolsList.result.tools }} tools)</summary>
-              {{ partial "code.html" (dict "code" $spec "lang" "yaml" "label" "examples/spec/kervan.yaml" "wrap" true "attrs" (dict "example" "landing-spec")) }}
-            </details>
-          </div>
-          <div>
-            <p class="panel-title">The tools clients see <span>tools/list</span></p>
-            <ul class="tool-list">
-              {{- range $example.toolsList.result.tools }}
-              <li><code>{{ .name }}</code>{{ with .annotations }}{{ if .readOnlyHint }} &middot; read-only{{ end }}{{ end }}<p>{{ .description }}</p></li>
-              {{- end }}
-            </ul>
-            {{- with index $example.calls 1 }}
-            <p class="panel-title">A call and its result <span>tools/call</span></p>
-            {{ partial "code.html" (dict "code" (dict "name" .request.params.name "arguments" .request.params.arguments | jsonify (dict "indent" "  ")) "lang" "json" "label" "request") }}
-            {{ partial "code.html" (dict "code" (.result.structuredContent | jsonify (dict "indent" "  ")) "lang" "json" "label" "structuredContent") }}
-            {{- end }}
-            <p class="panel-title">Connect it to Claude Code <span>stdio</span></p>
-            {{ partial "connect-command.html" . }}
-          </div>
-        </div>
-        <p>Next: <a href="/guides/mcp-server-from-yaml/">build an MCP server from a YAML file, step by step</a>, or read the <a href="/docs/framework/spec-reference/">complete kervan.yaml reference</a>.</p>
+    <h2 id="example-title">This is all it takes</h2>
+    <div class="split example-split">
+      <div class="panel">
+        {{ partial "code.html" (dict "code" $spec "lang" "yaml" "label" "kervan.yaml" "wrap" true "attrs" (dict "check" "spec" "id" "kervan")) }}
       </div>
-
-      <div class="tab-panel panel-ts">
-        <h3 class="visually-hidden">TypeScript</h3>
-        <div class="split">
-          <div>
-            <p class="panel-title">The tool <span>createApp, app.tool</span></p>
-            {{ partial "code.html" (dict "code" $code "lang" "ts" "label" $example.calculator.file "wrap" true "attrs" (dict "example" "landing-ts")) }}
-          </div>
-          <div>
-            <p class="panel-title">Run it <span>Node.js 22.23.3+ or 24.21.0+</span></p>
-            {{ partial "code.html" (dict "code" (printf "node %s" $example.calculator.file) "lang" "sh" "label" "from a clone of the repository" "wrap" true "attrs" (dict "check" "run")) }}
-            {{ partial "code.html" (dict "code" $example.calculator.stdout "lang" "text" "label" "output") }}
-            <p class="panel-title">What it shows</p>
-            <ul class="plain-list">
-              <li>Input and output are Zod schemas; the client gets both as JSON Schema.</li>
-              <li><code>createTestClient</code> connects the official MCP client in memory, the way tests call tools.</li>
-              <li>A <code>ToolError</code> message reaches the model; any other error would be masked.</li>
-              <li>To serve the tool instead, <code>await serve(app)</code> from <code>@kervan/transport/node</code>.</li>
-            </ul>
-          </div>
-        </div>
-        <p>Next: <a href="/docs/framework/code/">tools in TypeScript</a>, and <a href="/docs/framework/yaml-or-typescript/">YAML or TypeScript: the same tool written both ways</a>.</p>
+      <div class="panel">
+        {{ partial "code.html" (dict "code" $repl "lang" "text" "label" (printf "%s dev kervan.yaml" (cond site.Params.published (printf "npx kervan@%s" site.Params.npmTag) "kervan")) "wrap" true "attrs" (dict "check" "repl" "spec" "kervan")) }}
+        <p class="note">The tool an AI client sees. Next: <a href="/docs/framework/quickstart/">the quickstart</a>.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="band" aria-labelledby="gets-title">
+<section class="band" aria-labelledby="why-title">
   <div class="wrap">
-    <h2 id="gets-title">What every tool gets</h2>
-    <p class="section-lead">A spec tool and a TypeScript tool run on the same core. Spec tools, which call HTTP APIs for you, get more.</p>
-    <div class="split">
-      <div class="card">
-        <h3>Every tool</h3>
-        <ul class="plain-list">
-          <li>Arguments validated against the input schema before any of your code runs.</li>
-          <li>Errors masked: only a <code>ToolError</code>'s message reaches the client; anything else is logged with a reference.</li>
-          <li>A timeout on every call (30 seconds unless you set another), and the client's cancellation.</li>
-          <li>Results checked against the output schema, when there is one.</li>
-        </ul>
-      </div>
-      <div class="card">
-        <h3>Spec tools also</h3>
-        <ul class="plain-list">
-          <li>SSRF protection: public addresses only, DNS resolved once and the connection pinned to the checked address.</li>
-          <li>Secret values redacted from results, errors and logs.</li>
-          <li>A rate limit per tool: 60 calls a minute and 10 at once, unless the spec sets others.</li>
-          <li><code>select</code> run in a separate process without network or environment.</li>
-        </ul>
-      </div>
-    </div>
-    <p>The details: <a href="/docs/framework/how-kervan-works/#what-every-tool-gets-and-what-spec-tools-add">what every tool gets, and what spec tools add</a>.</p>
-  </div>
-</section>
-
-<section class="band band-alt" aria-labelledby="fits-title">
-  <div class="wrap">
-    <h2 id="fits-title">How it fits together</h2>
-    <p class="section-lead">Three libraries, a command line and a project generator. <code>@kervan/core</code> knows nothing about YAML or transports, so both kinds of tool are the same once registered.</p>
-    {{ partial "diagram.html" "dg-home" }}
-    <p>Read <a href="/docs/framework/how-kervan-works/">how Kervan works: the packages and the path of a tool call</a>.</p>
-  </div>
-</section>
-
-<section class="band" aria-labelledby="run-title">
-  <div class="wrap">
-    <h2 id="run-title">Run it anywhere, connect any client</h2>
-    <ul class="grid">
-      <li class="card"><h3>stdio</h3><p>The client starts your server as a process; nothing listens on the network. <code>kervan run kervan.yaml</code>, or <code>serve(app)</code> in code.</p></li>
-      <li class="card"><h3>Stateless Streamable HTTP</h3><p>No sessions: every request carries its own context. <code>Host</code> and <code>Origin</code> are checked against <code>allowedHosts</code> and <code>allowedOrigins</code>.</p></li>
-      <li class="card"><h3>A fetch handler</h3><p>The same app as a standard Fetch API handler: <code>toFetchHandler(app)</code>. Tested on Node.</p></li>
-      <li class="card"><h3>MCP 2026-07-28, and 2025 clients</h3><p>The stateless revision with <code>server/discover</code>, and clients of the 2025 revisions from the same app. Over HTTP, 2025 clients get no change notifications (<a href="/docs/framework/protocol/#list_changed">why</a>).</p></li>
+    <h2 id="why-title" class="visually-hidden">Why Kervan</h2>
+    <ul class="benefits">
+      <li>
+        <svg class="benefit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m8.8 12 2.2 2.2 4.2-4.4"/></svg>
+        <h3>Safe by default</h3>
+        <p>Spec tools reach public addresses only, keep secrets out of results, errors and logs, and every call has a timeout.</p>
+      </li>
+      <li>
+        <svg class="benefit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 7 3 12l5 5"/><path d="m16 7 5 5-5 5"/><path d="m14 4-4 16"/></svg>
+        <h3>YAML or TypeScript</h3>
+        <p>Describe HTTP tools in YAML, or write them in TypeScript on the official MCP SDK; both get the same checks.</p>
+      </li>
+      <li>
+        <svg class="benefit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 8h13l-3-3"/><path d="M20 16H7l3 3"/></svg>
+        <h3>Current MCP</h3>
+        <p>Speaks the stateless MCP 2026-07-28 revision, and serves clients of the 2025 revisions from the same app.</p>
+      </li>
     </ul>
-    <p>Any MCP client can connect. With Claude Code, the example spec over stdio:</p>
-    {{ partial "connect-command.html" . }}
-    <p>More: <a href="/docs/framework/transports/">transports and authentication</a>, and <a href="/guides/connect-claude-code/">connecting a server to Claude Code</a>.</p>
-  </div>
-</section>
-
-<section class="band band-alt" aria-labelledby="start-title">
-  <div class="wrap">
-    <h2 id="start-title">Get started</h2>
-    {{ partial "install.html" . }}
-    <p>Then the <a href="/docs/framework/quickstart/">framework quickstart</a>: run the example spec and call its tools.</p>
-  </div>
-</section>
-
-<section class="band" aria-labelledby="security-title">
-  <div class="wrap">
-    <h2 id="security-title">Security by design</h2>
-    <p class="section-lead">Each of these is implemented and covered by tests. The checks were also mutation-tested: broken on purpose, one at a time, to see a test fail (<a href="/docs/framework/security/#how-the-checks-are-tested">how</a>).</p>
-    <ul class="grid">
-      <li class="card"><h3>SSRF protection</h3><p>Spec tools reach public addresses only. DNS is resolved once and the connection pinned to the checked address; redirects are refused unless allowed, then checked again; cloud metadata addresses are always refused.</p></li>
-      <li class="card"><h3>Secret redaction</h3><p>Secret values are removed from results, errors and logs, in every encoding Kervan knows (raw, URL, form, JSON), before <code>select</code> sees the response.</p></li>
-      <li class="card"><h3>Rate limits</h3><p>Each spec tool has a per-minute and a concurrency limit; <code>serveHttp</code> limits requests per minute.</p></li>
-      <li class="card"><h3>Sandboxed select</h3><p><code>select</code> expressions run in a separate process: empty environment, memory limit, the tool's timeout, no network, no file writes, no child processes.</p></li>
-      <li class="card"><h3>Host and Origin checks</h3><p>HTTP servers accept only <code>allowedHosts</code> and <code>allowedOrigins</code> (localhost by default) and refuse to listen beyond loopback without them.</p></li>
-      <li class="card"><h3>Limits by default</h3><p>Timeouts, response size limits and input size limits are on without configuration.</p></li>
-    </ul>
-    <p class="note"><span class="tag">Studio (optional)</span> adds users and roles, an encrypted secret vault, an audit log the database refuses to change, and CSRF and origin checks: see the <a href="/docs/studio/security/">Studio threat model</a>.</p>
-    <p>The details: the <a href="/docs/framework/security/">framework security model</a>. Report vulnerabilities privately to <a href="mailto:{{ site.Params.security }}">{{ site.Params.security }}</a> (<a href="/.well-known/security.txt">security.txt</a>).</p>
-  </div>
-</section>
-
-<section class="band band-alt" aria-labelledby="studio-title">
-  <div class="wrap studio-teaser">
-    <div>
-      <h2 id="studio-title">Kervan Studio, optional</h2>
-      <p>An optional self-hosted web UI to manage servers, secrets, users and logs. Nothing is locked in: every server exports as <code>kervan.yaml</code> and runs with <code>kervan run</code>. The framework works without it.</p>
-      <p><a class="button" href="/studio/">See Studio</a></p>
-    </div>
-    <figure>{{ partial "shot.html" (dict "name" "editor" "alt" "Kervan Studio's editor with the weather spec open: the kervan.yaml on the left and the playground on the right, the server published as version 2.") }}</figure>
-  </div>
-</section>
-
-<section class="band" aria-labelledby="docs-title">
-  <div class="wrap">
-    <h2 id="docs-title">Documentation</h2>
-    <ul class="grid">
-      <li class="card"><a class="card-link" href="/docs/framework/"><h3>Framework documentation</h3><p>Concepts, YAML and TypeScript tools, transports, the CLI, deployment and the security model.</p></a></li>
-      <li class="card"><a class="card-link" href="/docs/framework/spec-reference/"><h3>kervan.yaml reference</h3><p>Every field of the spec, generated from its JSON Schema.</p></a></li>
-      <li class="card"><a class="card-link" href="/guides/"><h3>Guides</h3><p>From what MCP is to exposing a REST API as tools and connecting Claude Code.</p></a></li>
-      <li class="card"><a class="card-link" href="/docs/studio/"><h3>Studio documentation</h3><p>For the optional web UI: install, users and roles, the secret vault, publishing and backups.</p></a></li>
-    </ul>
+    <a class="card card-link studio-card" href="/studio/">
+      <h3>Kervan Studio, optional</h3>
+      <p>A self-hosted web UI to manage servers, secrets, users and logs. The framework works without it.</p>
+    </a>
   </div>
 </section>
 {{ end }}

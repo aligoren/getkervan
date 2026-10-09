@@ -10,8 +10,8 @@
 //   data without ratings or prices, sitemap and robots.txt, no noindex, no orphan page, internal
 //   links that resolve, nothing loaded from other sites and nothing the CSP would block, images
 //   with alt text and a size, the performance budget, no npm command while the packages are
-//   unpublished, the framework docs free of "Studio" but for one line, and the landing page's spec
-//   equal to the repository's example.
+//   unpublished, the framework docs free of "Studio" but for one line, and the home page's example
+//   verified (a spec block and a REPL transcript that runs it).
 //
 // `--strict` (CI and release day) fails on warnings too.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
@@ -363,10 +363,7 @@ const NPM_COMMANDS =
   /\b(?:npm (?:create|init|install|i|exec)\s+(?:-[\w-]+\s+)*(?:@?kervan|create-kervan)|npx\s+(?:-[\w-]+\s+)*(?:kervan|create-kervan)|pnpm (?:add|dlx|create) (?:@?kervan|create-kervan)|yarn (?:add|create|dlx) (?:@?kervan|create-kervan))/i
 export const STUDIO_LINE = "Looking for the optional web UI? See Studio docs."
 
-/**
- * Checks the built site. `params` from hugo.toml; `exampleSpec` is examples/spec/kervan.yaml,
- * `exampleTs` examples/calculator/src/calculator.ts.
- */
+/** Checks the built site. `params` from hugo.toml; `options.now` is the time to check dates at. */
 export function checkBuild(view, params, options = {}) {
   const errors = []
   const warnings = []
@@ -888,32 +885,23 @@ export function checkBuild(view, params, options = {}) {
       )
   }
 
-  // The landing page shows the repository's examples unchanged: the whole spec (and, above it, its
-  // beginning) and the TypeScript example. Only the look may change (wrapping), never the text.
-  if (options.exampleSpec !== undefined && view.files.has("index.html")) {
-    const html = view.text("index.html")
-    const shownCode = (id) => {
-      const opening = new RegExp(`data-example="?${id}"?[\\s>]`).exec(html)
-      const pre = opening && /<pre[\s\S]*?<\/pre>/.exec(html.slice(opening.index))?.[0]
-      return pre ? decodeEntities(pre.replace(/<[^>]+>/g, "")).trimEnd() : undefined
-    }
-    const expectedSpec = options.exampleSpec
-      .replace(/\r\n/g, "\n")
-      .replace(/^# yaml-language-server:[^\n]*\n/, "")
-      .trimEnd()
-    const spec = shownCode("landing-spec")
-    if (spec === undefined) errors.push("/: the example spec block is missing.")
-    else if (spec !== expectedSpec)
-      errors.push("/: the spec shown differs from examples/spec/kervan.yaml.")
-    const excerpt = shownCode("landing-spec-excerpt")
-    if (excerpt === undefined || excerpt.length === 0 || !expectedSpec.startsWith(excerpt))
-      errors.push("/: the spec excerpt is not the beginning of examples/spec/kervan.yaml.")
-    if (options.exampleTs !== undefined) {
-      const ts = shownCode("landing-ts")
-      if (ts === undefined) errors.push("/: the TypeScript example block is missing.")
-      else if (ts !== options.exampleTs.replace(/\r\n/g, "\n").trimEnd())
-        errors.push("/: the TypeScript shown differs from examples/calculator/src/calculator.ts.")
-    }
+  // The home page's example is verified, not only shown: a spec block, and a REPL transcript that
+  // names it, which `site:verify --examples` replays against the real CLI (docs/SITE.md).
+  if (view.files.has("index.html")) {
+    const blocks = tags(view.text("index.html"), "div").filter((tag) =>
+      /(^|\s)code(\s|$)/.test(tag.attrs.class ?? ""),
+    )
+    const spec = blocks.find((tag) => tag.attrs["data-check"] === "spec" && tag.attrs["data-id"])
+    const repl =
+      spec &&
+      blocks.find(
+        (tag) =>
+          tag.attrs["data-check"] === "repl" && tag.attrs["data-spec"] === spec.attrs["data-id"],
+      )
+    if (!repl)
+      errors.push(
+        "/: the example is not verified: it needs a spec block and a REPL transcript that runs it.",
+      )
   }
 
   return { errors, warnings }
@@ -946,10 +934,7 @@ async function main() {
     warnings.push(...registry.warnings)
   }
   if (existsSync(path.join(dir, "index.html"))) {
-    const built = checkBuild(siteView(dir), params, {
-      exampleSpec: read("examples/spec/kervan.yaml"),
-      exampleTs: read("examples/calculator/src/calculator.ts"),
-    })
+    const built = checkBuild(siteView(dir), params)
     errors.push(...built.errors)
     warnings.push(...built.warnings)
   } else {
