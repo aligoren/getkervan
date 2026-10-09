@@ -1,6 +1,6 @@
 {
   "name": "@kervan/spec-runtime",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "Turn a kervan.yaml spec into MCP tools that call HTTP APIs: templates, JMESPath output selection, SSRF protection and secret redaction.",
   "keywords": [
     "mcp",

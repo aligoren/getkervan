@@ -1,6 +1,6 @@
 {
   "name": "@kervan/transport",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "stdio and stateless Streamable HTTP transports for Kervan MCP servers: a Node.js server, a standard fetch handler and an in-memory test client.",
   "keywords": [
     "mcp",

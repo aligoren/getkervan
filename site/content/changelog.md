@@ -6,6 +6,11 @@ lead: Release notes, newest first.
 excludeFromSearch: false
 ---
 
+## 0.1.0-rc.2, release candidate
+
+The first release that GitHub Actions publishes, through npm trusted publishing (with provenance),
+under the `next` tag. No code changes from `0.1.0-rc.1`.
+
 ## 0.1.0-rc.1, release candidate
 
 The first release, on npm under the `next` tag (`npm create kervan@next my-server`); `0.1.0`

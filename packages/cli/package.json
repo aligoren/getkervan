@@ -1,6 +1,6 @@
 {
   "name": "kervan",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "The kervan command line: create MCP server projects, develop with hot reload and an inspector, serve kervan.yaml specs.",
   "keywords": [
     "mcp",

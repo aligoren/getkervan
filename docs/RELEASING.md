@@ -12,8 +12,8 @@ first release showed is recorded in [rc.1: step by step](#rc1-step-by-step), as 
 ## Ready in the repository
 
 - **Package metadata.** The five published packages (`@kervan/core`, `@kervan/transport`,
-  `@kervan/spec-runtime`, `kervan`, `create-kervan`) share the version `0.1.0-rc.1`, and each has
-  `repository` (this repository, with its `directory`), `bugs`, `homepage`
+  `@kervan/spec-runtime`, `kervan`, `create-kervan`) share one version (`0.1.0-rc.2` now), and
+  each has `repository` (this repository, with its `directory`), `bugs`, `homepage`
   (`https://getkervan.dev`), `author` ("Kervan contributors", no email), `license` (MIT),
   `publishConfig` (`access: public`, `tag: next`) and a `files` allow list without sources, tests
   or source maps. The repository address is written once in the root `package.json`;

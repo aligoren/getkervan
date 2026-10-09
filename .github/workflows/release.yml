@@ -1,10 +1,9 @@
 # Publishes the packages to npm, by hand only, after an approval on the "release" environment.
-# Nothing here runs on its own, and it publishes nothing yet: see docs/RELEASING.md.
+# Nothing here runs on its own: see docs/RELEASING.md, "How a release runs".
 #
-# Publishing is refused by scripts/guard-publish.mjs (run below for every package) until both:
+# Publishing is refused by scripts/guard-publish.mjs (run below for every package) unless:
 # - the "release" environment has the variable KERVAN_ALLOW_PUBLISH set to 1, and
-# - the "Not published yet" notes are removed from the README files: until the first release,
-#   guard-publish refuses while any package README still says "Not published yet".
+# - no package README says "Not published yet".
 #
 # The packages are published with npm provenance through npm's trusted publishing (OIDC, no npm
 # token): the npm packages must list this repository and workflow as a trusted publisher, and each
@@ -63,7 +62,7 @@ jobs:
       # The tarballs' contents, then installed from them outside the workspace (scripts/pack-check.mjs).
       - run: pnpm test:pack
 
-      # A pre-release (0.1.0-rc.1) never becomes `latest`: that is what `npm install` gives everyone.
+      # A pre-release (such as 0.1.0-rc.2) never becomes `latest`: that is what `npm install` gives everyone.
       - name: Check the version against the dist-tag
         env:
           DIST_TAG: ${{ inputs.dist-tag }}
