@@ -1,6 +1,15 @@
 // How the docs example runner reads a documented command (scripts/site/run-examples.mjs): the
 // placeholders for a clone's location in the published text map to the real clone when it runs.
-import { lstatSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync } from "node:fs"
+import {
+  chmodSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
@@ -82,6 +91,96 @@ describe("the docs example runner", () => {
       ])
     },
   )
+
+  // The connect command names the reader's own spec file with a placeholder; the run needs a real
+  // file there, never the placeholder as a path.
+  it("replaces the spec file placeholder with a real file, and refuses to run without one", () => {
+    const spec = path.resolve("/tmp/run/kervan.yaml")
+    for (const placeholder of [
+      "/absolute/path/to/kervan.yaml",
+      `C:${B}path${B}to${B}kervan.yaml`,
+    ]) {
+      expect(
+        toProcess(`claude mcp add x -- npx kervan@next run ${placeholder}`, tree, { spec }),
+      ).toEqual({
+        env: {},
+        argv: ["claude", "mcp", "add", "x", "--", "npx", "kervan@next", "run", spec],
+      })
+      expect(() => toProcess(`npx kervan@next run ${placeholder}`, tree)).toThrow(
+        "no spec file for the placeholder",
+      )
+    }
+  })
+
+  // The connect guide with --claude, against a stand-in `claude` that records what it was given.
+  it("runs the connect guide with a real spec file where the page shows the placeholder", async () => {
+    const bin = mkdtempSync(path.join(tmpdir(), "kervan-fake-claude-"))
+    const log = path.join(bin, "calls.jsonl")
+    writeFileSync(
+      path.join(bin, "fake-claude.mjs"),
+      [
+        'import { appendFileSync, existsSync, readFileSync } from "node:fs"',
+        "const args = process.argv.slice(2)",
+        "const file = args.at(-1)",
+        "const spec = existsSync(file) ? readFileSync(file, 'utf8') : null",
+        "appendFileSync(process.env.FAKE_CLAUDE_LOG, JSON.stringify({ args, spec }) + '\\n')",
+        "if (args[1] === 'get') console.log('Status: ✓ Connected')",
+      ].join("\n"),
+    )
+    if (process.platform === "win32") {
+      writeFileSync(
+        path.join(bin, "claude.cmd"),
+        `@"${process.execPath}" "%~dp0fake-claude.mjs" %*\r\n`,
+      )
+    } else {
+      writeFileSync(
+        path.join(bin, "claude"),
+        `#!/bin/sh\nexec "${process.execPath}" "$(dirname "$0")/fake-claude.mjs" "$@"\n`,
+      )
+      chmodSync(path.join(bin, "claude"), 0o755)
+    }
+    const saved = { PATH: process.env.PATH, FAKE_CLAUDE_LOG: process.env.FAKE_CLAUDE_LOG }
+    process.env.PATH = `${bin}${path.delimiter}${process.env.PATH}`
+    process.env.FAKE_CLAUDE_LOG = log
+    try {
+      const page = "/guides/connect-claude-code/"
+      const results = await runExamples(
+        [
+          {
+            page,
+            check: "published",
+            raw: "claude mcp add open-meteo -- npx kervan@next run /absolute/path/to/kervan.yaml",
+            attrs: {},
+          },
+          { page, check: "claude", raw: "claude mcp get open-meteo", attrs: {} },
+          { page, check: "claude", raw: "claude mcp remove open-meteo", attrs: {} },
+        ],
+        { claude: true, published: true, log: () => {} },
+      )
+      expect(results).toEqual([expect.objectContaining({ status: "ok" })])
+      const calls = readFileSync(log, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line))
+      const add = calls.find((call) => call.args[1] === "add")
+      const file = add.args.at(-1)
+      expect(path.isAbsolute(file)).toBe(true)
+      expect(file).not.toContain("absolute")
+      expect(add.spec).toBe(
+        readFileSync(
+          path.join(import.meta.dirname, "..", "..", "examples", "spec", "kervan.yaml"),
+          "utf8",
+        ),
+      )
+      expect(calls.map((call) => call.args[1])).toEqual(["add", "get", "remove"])
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name]
+        else process.env[name] = value
+      }
+      rmSync(bin, { recursive: true, force: true })
+    }
+  }, 60_000)
 
   // A TypeScript example resolves @kervan/* like a project that depends on them. One link per
   // package, straight to its real folder: a link to the CLI's node_modules failed on GitHub's

@@ -3,6 +3,7 @@ export declare function words(line: string): string[]
 export declare function toProcess(
   line: string,
   tree?: string,
+  options?: { spec?: string },
 ): { env: Record<string, string>; argv: string[] }
 export declare function copyWorkingTree(dest: string): void
 export declare function linkCliDependencies(dir: string): void

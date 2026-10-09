@@ -86,11 +86,16 @@ export function words(line) {
   return out
 }
 
+/** The docs' placeholder for the reader's own spec file (POSIX and Windows forms). */
+const SPEC_PLACEHOLDER = /^(\/absolute\/path\/to\/kervan\.yaml|C:\\path\\to\\kervan\.yaml)$/i
+
 /**
  * A documented command as a process to start: leading NAME=value words become its environment,
  * `node` is this Node.js, `kervan` the CLI of this tree, and repository paths become absolute.
+ * The placeholder for the reader's spec file becomes `spec`, a real file; without one it is an
+ * error, never a path that does not exist.
  */
-export function toProcess(line, tree = root) {
+export function toProcess(line, tree = root, { spec } = {}) {
   const parts = words(line)
   const env = {}
   while (parts.length > 0 && /^[A-Z_][A-Z0-9_]*=/.test(parts[0])) {
@@ -106,12 +111,18 @@ export function toProcess(line, tree = root) {
       .replaceAll("\\", "/")
       .replace(/^(packages|apps|examples)\//, `${tree}/$1/`)
       .replaceAll("/", path.sep)
+  const specFile = (word) => {
+    if (!spec) throw new Error(`no spec file for the placeholder ${word} in: ${line}`)
+    return spec
+  }
   let argv = parts.map((word, index) =>
     index === 0
       ? word
-      : /^(\/absolute|C:\\path\\to\\|packages\/|apps\/|examples\/)/i.test(word)
-        ? absolute(word)
-        : word,
+      : SPEC_PLACEHOLDER.test(word)
+        ? specFile(word)
+        : /^(\/absolute|C:\\path\\to\\|packages\/|apps\/|examples\/)/i.test(word)
+          ? absolute(word)
+          : word,
   )
   if (argv[0] === "node") argv = [process.execPath, ...argv.slice(1)]
   else if (argv[0] === "kervan")
@@ -627,6 +638,9 @@ async function runInstall(block) {
 /** The Claude Code guide, in order, in a temporary project folder; servers removed at the end. */
 async function runClaudePage(pageBlocks) {
   const dir = tempDir("kervan-docs-claude-")
+  // The reader's spec file (the docs' placeholder path): the repository's example, copied here.
+  const spec = path.join(dir, "kervan.yaml")
+  copyFileSync(path.join(root, "examples", "spec", "kervan.yaml"), spec)
   let server
   try {
     for (const block of pageBlocks) {
@@ -638,7 +652,7 @@ async function runClaudePage(pageBlocks) {
         continue
       }
       for (const line of commandLines(codeOf(block))) {
-        const { env, argv } = toProcess(line)
+        const { env, argv } = toProcess(line, root, { spec })
         if (argv[0] !== "claude") continue
         // Recorded before it runs, so an interrupted add is removed too.
         if (argv[2] === "add") {
