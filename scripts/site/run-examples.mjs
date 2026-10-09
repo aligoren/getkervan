@@ -28,7 +28,7 @@ import http from "node:http"
 import { createServer } from "node:net"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import { codeOf } from "./docs-examples.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
@@ -186,13 +186,23 @@ function launch(argv, { cwd, env = {} }) {
   children.add(child)
   child.once("exit", () => children.delete(child))
   let output = ""
-  child.stdout.on("data", (chunk) => (output += chunk))
-  child.stderr.on("data", (chunk) => (output += chunk))
+  let stdout = ""
+  let stderr = ""
+  child.stdout.on("data", (chunk) => {
+    output += chunk
+    stdout += chunk
+  })
+  child.stderr.on("data", (chunk) => {
+    output += chunk
+    stderr += chunk
+  })
   const exited = new Promise((resolve) => child.once("exit", resolve))
   child.once("error", (error) => (output += `\n${error.message}`))
   return {
     child,
     output: () => output.replace(ANSI_COLOR, ""),
+    stdout: () => stdout.replace(ANSI_COLOR, ""),
+    stderr: () => stderr.replace(ANSI_COLOR, ""),
     async waitFor(text, ms = 30_000) {
       const end = Date.now() + ms
       while (Date.now() < end) {
@@ -328,12 +338,39 @@ function typecheck(dir, file) {
  */
 async function replay(block, [cli, entry], dir) {
   const port = await freePort()
-  const proc = launch(
-    [process.execPath, cli, "dev", entry, "--http", "--repl", "--port", String(port)],
-    { cwd: dir },
-  )
+  const argv = [process.execPath, cli, "dev", entry, "--http", "--repl", "--port", String(port)]
+  const started = Date.now()
+  const proc = launch(argv, { cwd: dir })
+  // On failure, everything needed to see why: kervan dev's own output (already redacted by it;
+  // redacted again here the same way, for secrets in this process's environment), its exit code,
+  // where and how it ran, and how long this waited.
+  const failure = async (message) => {
+    const { collectSecrets, createRedactor } = await import(
+      pathToFileURL(path.join(root, "packages/cli/dist/dev/redact.js")).href
+    )
+    const redact = createRedactor(collectSecrets(process.env))
+    return new Error(
+      redact(
+        [
+          message,
+          `--- command: ${argv.join(" ")}`,
+          `--- cwd: ${dir}`,
+          `--- exit code: ${proc.child.exitCode ?? "still running"}`,
+          `--- waited: ${Date.now() - started} ms`,
+          `--- stdout:\n${proc.stdout()}`,
+          `--- stderr:\n${proc.stderr()}`,
+        ].join("\n"),
+      ),
+    )
+  }
   try {
-    await proc.waitFor('Type "help"')
+    try {
+      await proc.waitFor('Type "help"')
+    } catch (error) {
+      throw await failure(
+        `kervan dev did not start its REPL (${entry}): ${error.message.split("\n")[0]}`,
+      )
+    }
     const transcript = codeOf(block).split("\n")
     for (let i = 0; i < transcript.length; i++) {
       if (!transcript[i].startsWith("kervan> ")) continue
@@ -345,7 +382,7 @@ async function replay(block, [cli, entry], dir) {
       const end = Date.now() + 20_000
       while (!expected.every((line) => proc.output().slice(from).includes(line))) {
         if (Date.now() > end)
-          throw new Error(
+          throw await failure(
             `"${transcript[i]}" did not print (${entry}):\n${expected.join("\n")}\n--- got:\n${proc.output().slice(from)}`,
           )
         await sleep(100)
